@@ -3,6 +3,7 @@ package front2
 import (
 	"embed"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -25,17 +26,19 @@ type Front2Config struct {
 	Indexs   string `json:"indexs"`
 	TmplPath string `json:"tmpl"`
 	TmplSuff string `json:"suff"`
+	ShowPath string `json:"show"`
 }
 
 func Init(efs embed.FS) {
 	cfg.Register(&C)
 
+	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
 	flag.StringVar(&C.Front2.DirParts, "dirs", "/zgg,/demo1/demo2", "root dir parts list")
 	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
 	flag.StringVar(&C.Front2.TmplSuff, "suff", ".html,.htm,.css,.map,.js", "replace tmpl file suffix")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
 	flag.StringVar(&C.Front2.Indexs, "indexs", "/zgg=index.htm", "index file name")
-	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
+	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www folder resources")
 
 	z.Register("10-www", func(srv z.IServer) z.Closed {
 		hfs := http.FS(efs)
@@ -47,6 +50,7 @@ func Init(efs embed.FS) {
 			Indexs:   map[string]string{},
 			Folder:   "/www",
 			HttpFS:   hfs,
+			ShowPath: C.Front2.ShowPath,
 		}
 		if C.Front2.DirParts != "" {
 			api.DirParts = strings.Split(C.Front2.DirParts, ",")
@@ -63,6 +67,9 @@ func Init(efs embed.FS) {
 			api.ServeFS = http.FileServer(hfs)
 		}
 		srv.AddRouter("", api.ServeFile)
+		if C.Front2.ShowPath != "" {
+			srv.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
+		}
 		return nil
 	})
 }
@@ -76,6 +83,7 @@ type IndexApi struct {
 	Folder   string            // 文件系统文件夹， 比如 /www, 必须是 / 开头
 	HttpFS   http.FileSystem   // 文件系统, http.FS(wwwFS)
 	ServeFS  http.Handler      // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
+	ShowPath string            // 显示 www 文件夹资源
 }
 
 func (aa *IndexApi) ServeFile(zrc *z.Ctx) bool {
@@ -205,4 +213,57 @@ func FixPath(rr *http.Request, paths []string, folder string) string {
 		}
 	}
 	return rp
+}
+
+// ----------------------------------------------------------------------------------
+
+func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
+	rw := zrc.Writer
+	rr := zrc.Request
+
+	// query参数，path: 文件路径
+	queryPath := rr.URL.Query().Get("path")
+	if queryPath == "" {
+		queryPath = aa.Folder
+	}
+	// 兑换为 http fs 系统的文件
+	httpFile, err := aa.HttpFS.Open(queryPath)
+	if err != nil {
+		// 文件读取发生异常
+		http.NotFound(rw, rr)
+		rw.Write([]byte(err.Error()))
+		return true
+	}
+	// 退出时候关闭文件
+	defer httpFile.Close()
+
+	// 确定文件状态
+	if httpStat, err := httpFile.Stat(); err != nil {
+		// 读取文件信息发生异常
+		http.NotFound(rw, rr)
+		rw.Write([]byte(err.Error()))
+	} else if !httpStat.IsDir() {
+		// 资源是一个文件，直接写出
+		http.ServeContent(rw, rr, httpStat.Name(), httpStat.ModTime(), httpFile)
+	} else if pathList, err := httpFile.Readdir(-1); err != nil {
+		// 读取文件列表出现异常
+		http.NotFound(rw, rr)
+		rw.Write([]byte(err.Error()))
+	} else {
+		list := ""
+		for _, path := range pathList {
+			name := path.Name()
+			if path.IsDir() {
+				name = "&lt;dir&gt; " + name
+			}
+			list += fmt.Sprintf("<li><a href=\"%s?path=%s/%s\">%s</a></li>\n", //
+				aa.ShowPath, queryPath, path.Name(), name)
+		}
+		// 整合列表到 html 中
+		html := "<!DOCTYPE html><html><head><title>resouces</title></head><body><ul>\n" + //
+			list + "</ul></body></html>"
+		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+		rw.Write([]byte(html))
+	}
+	return true
 }

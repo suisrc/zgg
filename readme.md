@@ -87,7 +87,53 @@ xxx -debug -local
 
 ```
 
-## 其他说明
+## 前端部署
+
+```
+--- main.go     # 项目入口
+ +- version     # 项目版本
+ +- appname     # 项目名
+ +- www         # 前端 dist 目录
+```
+
+执行打包命令  
+go mod init ${APP} && go mod tidy && CGO_ENABLED=0 go build -ldflags "-w -s" -o ./_out/$(APP) ./
+
+```go
+package main
+
+import (
+	"embed"
+	"strings"
+
+	"github.com/suisrc/zgg/app/front2"
+	"github.com/suisrc/zgg/z"
+	// "k8s.io/klog/v2"
+)
+
+func main() {
+	front2.Init(wwwFS)
+	z.Execute(appname, version, "(https://github.com/suisrc/k8skit) front2")
+}
+
+//go:embed vname
+var appbyte []byte
+
+//go:embed version
+var verbyte []byte
+
+//go:embed www/* www/**/*
+var wwwFS embed.FS
+
+var (
+	appname = strings.TrimSpace(string(appbyte))
+	version = strings.TrimSpace(string(verbyte))
+)
+```
+
+-f2show=/site/list123456  : 显示当前应用包装内的文件
+
+## 项目列表
 
 [k8skit](https://github.com/suisrc/k8skit.git) k8s工具包
 - kubesider: k8s 边车注入服务

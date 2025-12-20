@@ -26,7 +26,7 @@ helm:
 	helm -n default template deploy/chart > deploy/bundle.yml
 
 main:
-	go run main.go -c zgg.toml
+	go run main.go -c zgg.toml -f2show=/site/list123456
 # -tpl ./tmpl
 
 test:

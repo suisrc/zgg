@@ -43,3 +43,6 @@ GET {{BASE}}/zgg/1/2/3
 
 ### 
 GET {{BASE}}/demo/1/2/3
+
+### 
+GET {{BASE}}/site/list
