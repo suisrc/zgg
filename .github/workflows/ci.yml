@@ -21,8 +21,8 @@ jobs:
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo ${TAG_NAME%%-*} > z/version
-          cat z/version
+          echo ${TAG_NAME%%-*} > version
+          cat version
           docker build -t image --no-cache .
 
       #-${{ github.job }}
@@ -34,7 +34,7 @@ jobs:
 
           IMAGE_ID=$REGISTRY_URL/$IMAGE_NAME
           echo IMAGE_ID=$IMAGE_ID
-          VERSION=$IMAGE_VERSION  
+          VERSION=$IMAGE_VERSION
           echo VERSION=$VERSION
 
           docker tag image $IMAGE_ID:$VERSION

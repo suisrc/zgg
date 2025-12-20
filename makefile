@@ -54,4 +54,7 @@ test-copy:
 test-cert:
 	go test -v ze/crt/cert_test.go -run Test_cert
 
+push:
+	git push --set-upstream origin $b
+
 
