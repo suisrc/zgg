@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>重定向</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+      }
+      .circular {
+        height: 42px;
+        width: 42px;
+        -webkit-animation: loading-rotate 2s linear infinite;
+        animation: loading-rotate 2s linear infinite;
+      }
+      .circular .path {
+        -webkit-animation: loading-dash 1.5s ease-in-out infinite;
+        animation: loading-dash 1.5s ease-in-out infinite;
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: 0;
+        stroke-width: 2;
+        stroke: #409eff;
+        stroke-linecap: round;
+      }
+
+      @-webkit-keyframes loading-rotate {
+        100% {
+          -webkit-transform: rotate(360deg);
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes loading-rotate {
+        100% {
+          -webkit-transform: rotate(360deg);
+          transform: rotate(360deg);
+        }
+      }
+      @-webkit-keyframes loading-dash {
+        0% {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+        }
+        50% {
+          stroke-dasharray: 90, 150;
+          stroke-dashoffset: -40px;
+        }
+        100% {
+          stroke-dasharray: 90, 150;
+          stroke-dashoffset: -120px;
+        }
+      }
+      @keyframes loading-dash {
+        0% {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+        }
+        50% {
+          stroke-dasharray: 90, 150;
+          stroke-dashoffset: -40px;
+        }
+        100% {
+          stroke-dasharray: 90, 150;
+          stroke-dashoffset: -120px;
+        }
+      }
+
+      .top-message {
+        position: fixed;
+        top: 16px;
+        left: 0;
+        text-align: center;
+        width: 100%;
+      }
+
+      .loader-wrap {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 16px;
+        background: #fff;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+        pointer-events: all;
+
+        font-size: 14px;
+        color: #666;
+      }
+      .loader-wrap .circular {
+        width: 16px;
+        height: 16px;
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top-message">
+      <div class="loader-wrap">
+        <svg viewBox="25 25 50 50" class="circular">
+          <circle cx="50" cy="50" r="20" fill="none" class="path"></circle>
+        </svg>
+        正在重定向到首页，{{.errorMessage}}
+      </div>
+    </div>
+
+    <script>
+      let url = "{{.location}}";
+      let num = {{.interval}};
+      setTimeout(() => { window.open(url,'_self') }, num * 1000);
+    </script>
+  </body>
+</html>
