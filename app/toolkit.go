@@ -12,15 +12,16 @@ import (
 )
 
 // func init() {
-// 	z.Register("11-app.init", func(svc z.SvcKit, enr z.Enroll) z.Closed {
+// 	z.Register("11-app.init", func(srv z.IServer) z.Closed {
 // 		// 创建 k8sclient
-// 		client, err := CreateClient(svc.Srv().GetConfig().B().Local)
+// 		client, err := CreateClient(z.C.Server.Local)
 // 		if err != nil {
 // 			klog.Error("create k8s client error: ", err.Error())
-// 			svc.Srv().ServeStop() // 初始化失败，直接退出
+// 			srv.ServeStop() // 初始化失败，直接退出
 // 			return nil
 // 		}
-// 		svc.Set("k8sclient", client) // 注册 k8sclient
+// 		// z.RegSvc(srv.GetSvcKit(), client)
+// 		srv.GetSvcKit().Set("k8sclient", client) // 注册 k8sclient
 // 		return nil
 // 	})
 // }
