@@ -12,7 +12,8 @@ import (
 )
 
 // 程序入口
-func Execute() {
+func Execute(appname, version, appinfo string) {
+	AppName, Version, AppInfo = appname, version, appinfo
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("================ exit: panic,", err)
@@ -45,7 +46,7 @@ var (
 )
 
 func RunHttpServe() {
-	Printf("%s %s (https://github.com/suisrc/k8skit) starting...\n", Appname, Version)
+	PrintVersion()
 	LoadConfig()
 	// zgg server
 	zgg := &Zgg{}
@@ -57,7 +58,7 @@ func RunHttpServe() {
 }
 
 func PrintVersion() {
-	fmt.Printf("%s %s (https://github.com/suisrc/k8skit)\n", Appname, Version)
+	println(AppName, Version, AppInfo)
 }
 
 // func Exit(err error, code int) {

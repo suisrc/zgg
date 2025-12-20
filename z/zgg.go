@@ -46,6 +46,10 @@ var (
 	// Fatal   = klog.Fatal
 	// Fatalf  = klog.Fatalf
 
+	AppName = "zgg"
+	Version = "v0.0.0"
+	AppInfo = "(https://github.com/suisrc/zgg)"
+
 	C = new(struct {
 		Debug  bool
 		Server ServerConfig
@@ -251,7 +255,7 @@ func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		Printf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
 		rw.Header().Set("Serv-Handler", aa.Engine.Name())
 	}
-	rw.Header().Set("Serv-Version", AppVersion)
+	rw.Header().Set("Serv-Version", AppName+":"+Version)
 	aa.Engine.ServeHTTP(rw, rr)
 }
 

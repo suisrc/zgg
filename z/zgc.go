@@ -16,20 +16,9 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
-	"strings"
 	"sync"
 	"text/template"
 )
-
-//go:embed vname
-var Appname string
-
-//go:embed version
-var verbyte []byte
-var Version = strings.TrimSpace(string(verbyte))
-
-// application and version
-var AppVersion = strings.Join([]string{Appname, Version}, ":")
 
 // ----------------------------------------------------------------------------
 
@@ -101,7 +90,6 @@ func (ctx *Ctx) JSON(err error) bool {
 // 已 HTML 模板格式写出响应
 func (ctx *Ctx) HTML(tpl string, res any, hss int) bool {
 	ctx._abort = true
-	ctx.Writer.Header().Set("Api-Version", AppVersion)
 	if ctx.TraceID != "" {
 		ctx.Writer.Header().Set("X-Request-Id", ctx.TraceID)
 	}
@@ -114,7 +102,6 @@ func (ctx *Ctx) HTML(tpl string, res any, hss int) bool {
 // 已 TEXT 模板格式写出响应
 func (ctx *Ctx) TEXT(txt string, hss int) bool {
 	ctx._abort = true
-	ctx.Writer.Header().Set("Api-Version", AppVersion)
 	if ctx.TraceID != "" {
 		ctx.Writer.Header().Set("X-Request-Id", ctx.TraceID)
 	}
