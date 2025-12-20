@@ -14,10 +14,6 @@
             "args": [
                 "-local", 
                 "-debug",
-                "-xrt", "2",
-                "--token", "MQ8wDQYDVQQHEwZEYWxpYW4x",
-                "--injectAnnotation", "ksidecar/configmap",
-                "--injectDefaultKey", "sidecar.yml",
             ]
         }
     ]

@@ -14,12 +14,13 @@ import (
 // 程序入口
 func Execute(appname, version, appinfo string) {
 	AppName, Version, AppInfo = appname, version, appinfo
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println("================ exit: panic,", err)
-			os.Exit(1) // exit with panic
-		}
-	}()
+	// 发生错误需要截取到异常， 所以这里忽略 defer 方法
+	// defer func() {
+	// 	if err := recover(); err != nil {
+	// 		fmt.Println("================ exit: panic,", err)
+	// 		os.Exit(1) // exit with panic
+	// 	}
+	// }()
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
 		CMDR["web"]() // run  def http server
 		return        // wait for server stop

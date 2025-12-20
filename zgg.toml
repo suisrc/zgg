@@ -1,5 +1,5 @@
 # 配置文件
-printconfig=false
+printconfig=true
 
 debug=true
 
@@ -7,3 +7,8 @@ debug=true
 local = true
 port = 80
 # engine=rdx
+
+[front2]
+tmplsuff=".html,.htm,.css,.map,.js,.ts,.json"
+indexs="/zgg=index.htm,/demo=demo.html"
+dirs="/zgg,/demo"

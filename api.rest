@@ -33,3 +33,13 @@ Content-Type: application/json
 ### 
 GET {{BASE}}/token
 Content-Type: application/json
+
+
+### 
+GET {{BASE}}/1/2/3
+
+### 
+GET {{BASE}}/zgg/1/2/3
+
+### 
+GET {{BASE}}/demo/1/2/3

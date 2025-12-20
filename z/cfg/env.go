@@ -62,6 +62,9 @@ func (aa *TAG) Load(val any) error {
 func (aa *TAG) Decode(val any, tag string) error {
 	tags := ToTagVal(val, tag)
 	for _, tag := range tags {
+		if tag.Value.IsValid() {
+			continue
+		}
 		// 使用默认值进行初始化
 		vtag := tag.Field.Tag.Get("default")
 		if val, err := StrToBV(tag.Field.Type, vtag); err == nil {
