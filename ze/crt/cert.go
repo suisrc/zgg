@@ -112,20 +112,21 @@ func GetExpiredTime(str string, day int) (time.Time, error) {
 }
 
 // IsPemExpired 判定正式否使过期
-func IsPemExpired(pemStr string) (bool, error) {
+func IsPemExpired(pemStr string) (bool, time.Time, error) {
+	now_ := time.Now()
 	pemBlk, _ := pem.Decode([]byte(pemStr))
 	if pemBlk == nil {
-		return true, fmt.Errorf("invalid ca.crt, pem")
+		return true, now_, fmt.Errorf("invalid ca.crt, pem")
 	}
 	pemCrt, err := x509.ParseCertificate(pemBlk.Bytes)
 	if err != nil {
-		return true, fmt.Errorf("invalid ca.crt, bytes")
+		return true, now_, fmt.Errorf("invalid ca.crt, bytes")
 	}
 
-	if time.Now().After(pemCrt.NotAfter) {
-		return true, nil
+	if now_.After(pemCrt.NotAfter) {
+		return true, pemCrt.NotAfter, nil
 	}
-	return false, nil
+	return false, pemCrt.NotAfter, nil
 }
 
 // 构建的证书是虚假的，默认有效期99年
@@ -268,9 +269,6 @@ func CreateCE(certConfig *CertConfig, commonName, profileKey string, keySize int
 	}
 	//生成一对具有指定字位数的RSA密钥
 	pkey, _ := rsa.GenerateKey(rand.Reader, keySize)
-	if caKey != nil {
-		caKey = pkey
-	}
 
 	sermax := new(big.Int).Lsh(big.NewInt(1), 128) //把 1 左移 128 位，返回给 big.Int
 	serial, _ := rand.Int(rand.Reader, sermax)     //返回在 [0, max) 区间均匀随机分布的一个随机值
@@ -296,7 +294,7 @@ func CreateCE(certConfig *CertConfig, commonName, profileKey string, keySize int
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &pder, caCrt, &pkey.PublicKey, caKey)
 	if err != nil {
-		return SignResult{}, nil
+		return SignResult{}, err
 	}
 	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	keyBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(pkey)})

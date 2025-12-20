@@ -11,6 +11,13 @@ import (
 	"errors"
 )
 
+var (
+	C = struct {
+		Namespace string
+		Token     string
+	}{}
+)
+
 // func init() {
 // 	z.Register("11-app.init", func(srv z.IServer) z.Closed {
 // 		// 创建 k8sclient
@@ -21,6 +28,7 @@ import (
 // 			return nil
 // 		}
 // 		// z.RegSvc(srv.GetSvcKit(), client)
+// 		klog.Info("create k8s client success: local=", z.C.Server.Local)
 // 		srv.GetSvcKit().Set("k8sclient", client) // 注册 k8sclient
 // 		return nil
 // 	})
@@ -28,23 +36,19 @@ import (
 
 // -----------------------------------------------------------------------
 
-var (
-	namespace = ""
-)
-
 // 获取当前命名空间 k8s namespace
 func K8sNs() string {
-	if namespace != "" {
-		return namespace
+	if C.Namespace != "" {
+		return C.Namespace
 	}
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		z.Printf("unable to read namespace: %s, return 'default'", err.Error())
-		namespace = "default"
+		C.Namespace = "default"
 	} else {
-		namespace = string(ns)
+		C.Namespace = string(ns)
 	}
-	return namespace
+	return C.Namespace
 }
 
 // // CreateClient Create the server

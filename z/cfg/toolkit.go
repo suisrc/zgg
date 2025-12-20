@@ -628,12 +628,6 @@ func ToBasicValue(typ reflect.Type, val []string) (any, error) {
 		return strconv.ParseBool(str)
 	case reflect.Int:
 		return strconv.Atoi(str)
-	case reflect.Int8:
-		vvv, err := strconv.ParseInt(str, 10, 8)
-		return int8(vvv), err
-	case reflect.Int16:
-		vvv, err := strconv.ParseInt(str, 10, 16)
-		return int16(vvv), err
 	case reflect.Int32:
 		vvv, err := strconv.ParseInt(str, 10, 32)
 		return int32(vvv), err
@@ -643,12 +637,6 @@ func ToBasicValue(typ reflect.Type, val []string) (any, error) {
 	case reflect.Uint:
 		vvv, err := strconv.ParseUint(str, 10, 64)
 		return uint(vvv), err
-	case reflect.Uint8:
-		vvv, err := strconv.ParseUint(str, 10, 8)
-		return uint8(vvv), err
-	case reflect.Uint16:
-		vvv, err := strconv.ParseUint(str, 10, 16)
-		return uint16(vvv), err
 	case reflect.Uint32:
 		vvv, err := strconv.ParseUint(str, 10, 32)
 		return uint32(vvv), err
@@ -662,8 +650,14 @@ func ToBasicValue(typ reflect.Type, val []string) (any, error) {
 		vvv, err := strconv.ParseFloat(str, 64)
 		return vvv, err
 	case reflect.Slice:
-		vvv := reflect.MakeSlice(typ, len(val), len(val))
 		ccz := typ.Elem()
+		switch ccz.Kind() {
+		case reflect.String:
+			return val, nil
+		case reflect.Uint8:
+			return []byte(str), nil
+		}
+		vvv := reflect.MakeSlice(typ, 0, 0)
 		for _, vv := range val {
 			vva, err := ToBasicValue(ccz, []string{vv})
 			if err != nil {
@@ -671,10 +665,16 @@ func ToBasicValue(typ reflect.Type, val []string) (any, error) {
 			}
 			vvv = reflect.Append(vvv, reflect.ValueOf(vva))
 		}
-		return vvv, nil
+		return vvv.Interface(), nil
 	case reflect.Array:
-		vvv := reflect.New(typ).Elem()
 		ccz := typ.Elem()
+		switch ccz.Kind() {
+		case reflect.String:
+			return val, nil
+		case reflect.Uint8:
+			return []byte(str), nil
+		}
+		vvv := reflect.New(typ).Elem() // 创建数组
 		for vi, vv := range val {
 			vva, err := ToBasicValue(ccz, []string{vv})
 			if err != nil {
@@ -684,5 +684,5 @@ func ToBasicValue(typ reflect.Type, val []string) (any, error) {
 		}
 		return vvv.Interface(), nil
 	}
-	return nil, errors.New("type not supported")
+	return nil, errors.New("<" + typ.String() + "> type not supported")
 }

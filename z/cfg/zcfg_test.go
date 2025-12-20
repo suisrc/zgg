@@ -137,3 +137,37 @@ func Test_arr(t *testing.T) {
 	log.Println(arr)
 	// log.Println(arr[:-1])
 }
+
+// go test -v z/cfg/zcfg_test.go -run Test_ToBasicVal
+
+func Test_ToBasicVal(t *testing.T) {
+	str := []string{"123", "456"}
+	var val any
+	var err error
+	val, err = cfg.ToBasicValue(reflect.TypeOf(float32(0)), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(float64(0)), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(int(0)), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(int8(0)), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(int32(0)), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(int64(0)), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(""), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf([]byte("")), str)
+	log.Printf("=======%#v | %v\n", string(val.([]byte)), err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf(str), str)
+	log.Printf("=======%#v | %v\n", val, err)
+
+	val, err = cfg.ToBasicValue(reflect.TypeOf([]int{}), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf([]int32{}), str)
+	log.Printf("=======%#v | %v\n", val, err)
+	val, err = cfg.ToBasicValue(reflect.TypeOf([][]byte{}), str)
+	log.Printf("=======%#v | %v\n", string(val.([][]byte)[0]), err)
+
+}

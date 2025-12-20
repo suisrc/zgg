@@ -2,9 +2,10 @@ package main
 
 import (
 	_ "embed"
+	"flag"
 	"strings"
 
-	_ "github.com/suisrc/zgg/app"
+	"github.com/suisrc/zgg/app"
 	_ "github.com/suisrc/zgg/cmd"
 	"github.com/suisrc/zgg/z"
 	_ "github.com/suisrc/zgg/ze/rdx"
@@ -25,5 +26,6 @@ var (
  * 程序入口
  */
 func main() {
+	flag.StringVar(&app.C.Token, "token", "", "http server api token")
 	z.Execute(appname, version, "(https://github.com/suisrc/k8skit) main")
 }
