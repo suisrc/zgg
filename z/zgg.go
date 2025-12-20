@@ -265,6 +265,7 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 			Printf("[_handle_]: %36s    %v\n", "/", handle)
 		}
 		aa.Engine.Handle("", "", handle)
+		return
 	}
 	// 解析 method 和 action
 	method, action, found := key, "", false

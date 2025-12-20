@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/suisrc/zgg/z"
-
-	"errors"
 )
 
 var (
@@ -78,7 +76,7 @@ func PostJson(req *http.Request) error {
 		return fmt.Errorf("wrong http verb. got %s", req.Method)
 	}
 	if req.Body == nil {
-		return errors.New("empty body")
+		return fmt.Errorf("empty body")
 	}
 	contentType := req.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
