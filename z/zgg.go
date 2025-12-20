@@ -606,23 +606,17 @@ func (aa *MapRouter) Name() string {
 
 func (aa *MapRouter) Handle(method, action string, handle HandleFunc) {
 	if method == "" && action == "" {
-		aa.Handle_ = handle
-		return // pass
+		aa.Handle_ = handle // 默认函数
+	} else {
+		if method == "" {
+			method = "GET" // 默认使用 GET
+		}
+		aa.Handles[method+" /"+action] = handle
 	}
-	pattern := "/" + action
-	if method != "" {
-		pattern = method + " " + pattern
-	}
-	aa.Handles[pattern] = handle
 }
 
 func (aa *MapRouter) GetHandle(method, action string) (HandleFunc, bool) {
-	if method != "" {
-		if handle, exist := aa.Handles[method+" /"+action]; exist {
-			return handle, true
-		}
-	}
-	handle, exist := aa.Handles["/"+action]
+	handle, exist := aa.Handles[method+" /"+action]
 	return handle, exist
 }
 
@@ -633,16 +627,16 @@ func (aa *MapRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if ctx.Action == "healthz" {
 		// 健康健康高优先级， 直接出发检索
 		Healthz(ctx)
-	} else if ctx.Action == "" {
-		// 空的操作
-		res := &Result{ErrCode: "action-empty", Message: "未指定操作: empty"}
-		ctx.JSON(res)
 	} else if handle, exist := aa.GetHandle(rr.Method, ctx.Action); exist {
 		// 处理函数
 		handle(ctx)
 	} else if aa.Handle_ != nil {
 		// 默认函数
 		aa.Handle_(ctx)
+	} else if ctx.Action == "" {
+		// 空的操作
+		res := &Result{ErrCode: "action-empty", Message: "未指定操作: empty"}
+		ctx.JSON(res)
 	} else {
 		// 无效操作
 		res := &Result{ErrCode: "action-unknow", Message: "未指定操作: " + ctx.Action}
