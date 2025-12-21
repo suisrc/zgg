@@ -29,7 +29,17 @@ type Front2Config struct {
 	ShowPath string `json:"show"`
 }
 
+// @result=rootpath, success=true(直接返回，不做任何处理)
+type InterceptFunc func(api *IndexApi, zrc *z.Ctx) (string, bool)
+
+// 初始化方法， 处理 api 的而外配置接口
+type InitializFunc func(api *IndexApi, srv z.IServer)
+
 func Init(efs embed.FS) {
+	Init3(efs, nil)
+}
+
+func Init3(efs embed.FS, ifn InitializFunc) {
 	cfg.Register(&C)
 
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
@@ -70,6 +80,9 @@ func Init(efs embed.FS) {
 		if C.Front2.ShowPath != "" {
 			srv.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
 		}
+		if ifn != nil {
+			ifn(api, srv) // 初始化方法
+		}
 		return nil
 	})
 }
@@ -84,10 +97,21 @@ type IndexApi struct {
 	HttpFS   http.FileSystem   // 文件系统, http.FS(wwwFS)
 	ServeFS  http.Handler      // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
 	ShowPath string            // 显示 www 文件夹资源
+	IcFunc   InterceptFunc     // 拦截器方法
 }
 
 func (aa *IndexApi) ServeFile(zrc *z.Ctx) bool {
-	rp := FixPath(zrc.Request, aa.DirParts, aa.Folder)
+	var rp string
+	if aa.IcFunc != nil {
+		// 使用外部拦截器处理请求
+		var ok bool
+		if rp, ok = aa.IcFunc(aa, zrc); ok {
+			return true
+		}
+	} else {
+		// 使用内部默认方法修正路径
+		rp = FixPath(zrc.Request, aa.DirParts, aa.Folder)
+	}
 	if z.C.Debug {
 		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			zrc.Request.URL.Path, zrc.Request.URL.RawPath, rp)

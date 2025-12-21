@@ -97,7 +97,9 @@ xxx -debug -local
 ```
 
 执行打包命令  
-go mod init ${APP} && go mod tidy && CGO_ENABLED=0 go build -ldflags "-w -s" -o ./_out/$(APP) ./
+go mod init ${APP} && go mod tidy && CGO_ENABLED=0 go build -ldflags "-w -s" -o ./_out/$(APP) ./  
+
+由于 zgg 坚持零依赖原则，因此不处理自动CDN问题，但是 [front2](https://github.com/suisrc/k8skit/tree/front2) 可以实现前端静态资源自动CDN.  
 
 ```go
 package main
