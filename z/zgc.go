@@ -27,7 +27,7 @@ type HandleFunc func(rc *Ctx) bool
 type HA map[string]any
 
 // map str
-type HS map[string]string
+type HM map[string]string
 
 // get str
 type GetVal func(key string) string
@@ -201,7 +201,7 @@ type Result struct {
 
 	Ctx    *Ctx   `json:"-"`
 	Status int    `json:"-"`
-	Header HS     `json:"-"`
+	Header HM     `json:"-"`
 	TplKey string `json:"-"`
 }
 

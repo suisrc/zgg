@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/ze/pxy"
 )
 
 var (
@@ -20,58 +22,47 @@ var (
 )
 
 type Front2Config struct {
-	IsNative bool   `json:"native"`
-	DirParts string `json:"dirs"`
-	Index    string `json:"index"`
-	Indexs   string `json:"indexs"`
-	TmplPath string `json:"tmpl"`
-	TmplSuff string `json:"suff"`
-	ShowPath string `json:"show"`
+	IsNative bool              `json:"native"`
+	DirParts []string          `json:"dirs"`
+	Index    string            `json:"index"`
+	Indexs   map[string]string `json:"indexs"`
+	TmplPath string            `json:"tmpl"`
+	TmplSuff []string          `json:"suff"`
+	ShowPath string            `json:"show"`
+	Routing  map[string]string `json:"routing"`
 }
-
-// @result=rootpath, success=true(直接返回，不做任何处理)
-type InterceptFunc func(api *IndexApi, zrc *z.Ctx) (string, bool)
 
 // 初始化方法， 处理 api 的而外配置接口
 type InitializFunc func(api *IndexApi, srv z.IServer)
 
-func Init(efs embed.FS) {
-	Init3(efs, nil)
+func Init(www embed.FS) {
+	Init3(www, nil)
 }
 
-func Init3(efs embed.FS, ifn InitializFunc) {
+func Init3(www embed.FS, ifn InitializFunc) {
 	cfg.Register(&C)
 
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
-	flag.StringVar(&C.Front2.DirParts, "dirs", "/zgg,/demo1/demo2", "root dir parts list")
+	flag.Var(cfg.NewStrArr(&C.Front2.DirParts, []string{"/zgg", "/demo1/demo2"}), "dirs", "root dir parts list")
 	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
-	flag.StringVar(&C.Front2.TmplSuff, "suff", ".html,.htm,.css,.map,.js", "replace tmpl file suffix")
+	flag.Var(cfg.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
-	flag.StringVar(&C.Front2.Indexs, "indexs", "/zgg=index.htm", "index file name")
-	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www folder resources")
+	flag.Var(cfg.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
+	flag.StringVar(&C.Front2.ShowPath, "f2show", "/api/=http://127.0.0.1:8080/api2/", "show www resource uri")
+	flag.Var(cfg.NewStrMap(&C.Front2.Routing, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "routing", "router path replace")
 
-	z.Register("10-www", func(srv z.IServer) z.Closed {
-		hfs := http.FS(efs)
+	z.Register("00-front2", func(srv z.IServer) z.Closed {
+		hfs := http.FS(www)
 		api := &IndexApi{
-			DirParts: []string{},
+			DirParts: C.Front2.DirParts,
 			TmplPath: C.Front2.TmplPath,
-			TmplSuff: strings.Split(C.Front2.TmplSuff, ","),
+			TmplSuff: C.Front2.TmplSuff,
 			Index_:   C.Front2.Index,
-			Indexs:   map[string]string{},
+			Indexs:   C.Front2.Indexs,
 			Folder:   "/www",
 			HttpFS:   hfs,
 			ShowPath: C.Front2.ShowPath,
-		}
-		if C.Front2.DirParts != "" {
-			api.DirParts = strings.Split(C.Front2.DirParts, ",")
-		}
-		if C.Front2.Indexs != "" {
-			for v := range strings.SplitSeq(C.Front2.Indexs, ",") {
-				kv := strings.Split(v, "=")
-				if len(kv) == 2 {
-					api.Indexs[kv[0]] = kv[1]
-				}
-			}
+			Routing:  C.Front2.Routing,
 		}
 		if C.Front2.IsNative {
 			api.ServeFS = http.FileServer(hfs)
@@ -85,9 +76,11 @@ func Init3(efs embed.FS, ifn InitializFunc) {
 		}
 		return nil
 	})
+
 }
 
 type IndexApi struct {
+	ServeFS  http.Handler      // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
 	DirParts []string          // 访问根目录, 访问根目录， 删除根目录后才是文件目录
 	TmplPath string            // 模版根目录, ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
 	TmplSuff []string          // 替换文件后缀, .html .htm .css .map .js
@@ -95,31 +88,34 @@ type IndexApi struct {
 	Indexs   map[string]string // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
 	Folder   string            // 文件系统文件夹， 比如 /www, 必须是 / 开头
 	HttpFS   http.FileSystem   // 文件系统, http.FS(wwwFS)
-	ServeFS  http.Handler      // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
 	ShowPath string            // 显示 www 文件夹资源
-	IcFunc   InterceptFunc     // 拦截器方法
+	Routing  map[string]string // 路由表
 }
 
+// Serve File Server
 func (aa *IndexApi) ServeFile(zrc *z.Ctx) bool {
-	var rp string
-	if aa.IcFunc != nil {
-		// 使用外部拦截器处理请求
-		var ok bool
-		if rp, ok = aa.IcFunc(aa, zrc); ok {
-			return true
+	rw := zrc.Writer
+	rr := zrc.Request
+	for kk, vv := range aa.Routing {
+		if strings.HasPrefix(rr.URL.Path, kk) {
+			continue
 		}
-	} else {
-		// 使用内部默认方法修正路径
-		rp = FixPath(zrc.Request, aa.DirParts, aa.Folder)
+		z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
+		target, _ := url.Parse(vv) // 创建目标URL
+		proxy := pxy.NewSingleHostReverseProxy(target)
+		proxy.ServeHTTP(rw, rr) // next
+		return true
 	}
+
+	rp := FixPath(rr, aa.DirParts, aa.Folder)
 	if z.C.Debug {
 		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
-			zrc.Request.URL.Path, zrc.Request.URL.RawPath, rp)
+			rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
-		aa.ServeFS.ServeHTTP(zrc.Writer, zrc.Request)
+		aa.ServeFS.ServeHTTP(rw, rr)
 	} else {
-		aa.TryIndex(zrc.Writer, zrc.Request, rp)
+		aa.TryIndex(rw, rr, rp)
 	}
 	return true
 }
@@ -140,13 +136,13 @@ func (aa *IndexApi) isFixCtx(name string) bool {
 
 // 获取 index.html 文件名
 func (aa *IndexApi) getIndex(rp string) string {
-	index := aa.Index_
-	if ipage, ok := aa.Indexs[rp]; ok {
-		index = ipage
+	if index, ok := aa.Indexs[rp]; ok {
+		return index
 	}
-	return index
+	return aa.Index_
 }
 
+// try index
 func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string) {
 	redirect := false
 	filename := ""
@@ -220,6 +216,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 	}
 }
 
+// 修正路径
 func FixPath(rr *http.Request, paths []string, folder string) string {
 	rp := ""
 	for _, path := range paths {
@@ -241,6 +238,7 @@ func FixPath(rr *http.Request, paths []string, folder string) string {
 
 // ----------------------------------------------------------------------------------
 
+// 列表文件
 func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
 	rw := zrc.Writer
 	rr := zrc.Request
