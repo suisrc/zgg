@@ -5,7 +5,8 @@
 // HTTP reverse proxy handler
 
 // @see [ReverseProxy](https://pkg.go.dev/net/http/httputil#ReverseProxy)
-package pxy
+// @see net/http/httputil.ReverseProxy
+package gtw
 
 import (
 	"context"
@@ -50,8 +51,47 @@ type ProxyRequest struct {
 //		r.Out.Host = r.In.Host
 //	}
 func (r *ProxyRequest) SetURL(target *url.URL) {
-	rewriteRequestURL(r.Out, target)
+	RewriteRequestURL(r.Out, target)
 	r.Out.Host = ""
+}
+
+// NewSingleProxy returns a new [ReverseProxy] that routes
+// URLs to the scheme, host, and base path provided in target. If the
+// target's path is "/base" and the incoming request was for "/dir",
+// the target request will be for /base/dir.
+//
+// NewSingleProxy does not rewrite the Host header.
+//
+// To customize the ReverseProxy behavior beyond what
+// NewSingleProxy provides, use ReverseProxy directly
+// with a Rewrite function. The ProxyRequest SetURL method
+// may be used to route the outbound request. (Note that SetURL,
+// unlike NewSingleProxy, rewrites the Host header
+// of the outbound request by default.)
+//
+//	proxy := &ReverseProxy{
+//		Rewrite: func(r *ProxyRequest) {
+//			r.SetURL(target)
+//			r.Out.Host = r.In.Host // if desired
+//		},
+//	}
+func NewSingleProxy(target *url.URL) *ReverseProxy {
+	director := func(req *http.Request) {
+		RewriteRequestURL(req, target)
+	}
+	return &ReverseProxy{Director: director}
+}
+
+func RewriteRequestURL(req *http.Request, target *url.URL) {
+	targetQuery := target.RawQuery
+	req.URL.Scheme = target.Scheme
+	req.URL.Host = target.Host
+	req.URL.Path, req.URL.RawPath = joinURLPath(target, req.URL)
+	if targetQuery == "" || req.URL.RawQuery == "" {
+		req.URL.RawQuery = targetQuery + req.URL.RawQuery
+	} else {
+		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
+	}
 }
 
 // SetXForwarded sets the X-Forwarded-For, X-Forwarded-Host, and
@@ -235,45 +275,6 @@ func joinURLPath(a, b *url.URL) (path, rawpath string) {
 		return a.Path + "/" + b.Path, apath + "/" + bpath
 	}
 	return a.Path + b.Path, apath + bpath
-}
-
-// NewSingleHostReverseProxy returns a new [ReverseProxy] that routes
-// URLs to the scheme, host, and base path provided in target. If the
-// target's path is "/base" and the incoming request was for "/dir",
-// the target request will be for /base/dir.
-//
-// NewSingleHostReverseProxy does not rewrite the Host header.
-//
-// To customize the ReverseProxy behavior beyond what
-// NewSingleHostReverseProxy provides, use ReverseProxy directly
-// with a Rewrite function. The ProxyRequest SetURL method
-// may be used to route the outbound request. (Note that SetURL,
-// unlike NewSingleHostReverseProxy, rewrites the Host header
-// of the outbound request by default.)
-//
-//	proxy := &ReverseProxy{
-//		Rewrite: func(r *ProxyRequest) {
-//			r.SetURL(target)
-//			r.Out.Host = r.In.Host // if desired
-//		},
-//	}
-func NewSingleHostReverseProxy(target *url.URL) *ReverseProxy {
-	director := func(req *http.Request) {
-		rewriteRequestURL(req, target)
-	}
-	return &ReverseProxy{Director: director}
-}
-
-func rewriteRequestURL(req *http.Request, target *url.URL) {
-	targetQuery := target.RawQuery
-	req.URL.Scheme = target.Scheme
-	req.URL.Host = target.Host
-	req.URL.Path, req.URL.RawPath = joinURLPath(target, req.URL)
-	if targetQuery == "" || req.URL.RawQuery == "" {
-		req.URL.RawQuery = targetQuery + req.URL.RawQuery
-	} else {
-		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
-	}
 }
 
 func copyHeader(dst, src http.Header) {
@@ -843,6 +844,7 @@ func ishex(c byte) bool {
 }
 
 // --------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------
 
 // IsPrint returns whether s is ASCII and printable according to
 // https://tools.ietf.org/html/rfc20#section-4.2.
@@ -862,22 +864,20 @@ func EqualFold(s, t string) bool {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
-		if lower(s[i]) != lower(t[i]) {
+		if LowerByte(s[i]) != LowerByte(t[i]) {
 			return false
 		}
 	}
 	return true
 }
 
-// lower returns the ASCII lowercase version of b.
-func lower(b byte) byte {
+// Lower returns the ASCII lowercase version of b.
+func LowerByte(b byte) byte {
 	if 'A' <= b && b <= 'Z' {
 		return b + ('a' - 'A')
 	}
 	return b
 }
-
-// --------------------------------------------------------------------------------------
 
 func HeaderValuesContainsToken(values []string, token string) bool {
 	for _, v := range values {
@@ -892,19 +892,4 @@ func HeaderValuesContainsToken(values []string, token string) bool {
 		}
 	}
 	return false
-}
-
-// --------------------------------------------------------------------------------------
-
-func RewriteRequestDomain(req *http.Request, target *url.URL, domain string) {
-	targetQuery := target.RawQuery
-	req.URL.Scheme = target.Scheme
-	req.URL.Host = target.Host
-	req.URL.Path, req.URL.RawPath = joinURLPath(target, req.URL)
-	if targetQuery == "" || req.URL.RawQuery == "" {
-		req.URL.RawQuery = targetQuery + req.URL.RawQuery
-	} else {
-		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
-	}
-	req.Host = domain
 }

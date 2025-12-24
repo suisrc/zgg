@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/cfg"
-	"github.com/suisrc/zgg/ze/pxy"
+	"github.com/suisrc/zgg/ze/gtw"
 )
 
 var (
@@ -90,6 +90,26 @@ type IndexApi struct {
 	HttpFS   http.FileSystem   // 文件系统, http.FS(wwwFS)
 	ShowPath string            // 显示 www 文件夹资源
 	Routing  map[string]string // 路由表
+
+	Proxies map[string]http.Handler
+	PxyLock sync.RWMutex
+}
+
+func (aa *IndexApi) GetProxy(kk string) http.Handler {
+	aa.PxyLock.RLock()
+	defer aa.PxyLock.RUnlock()
+	return aa.Proxies[kk]
+}
+
+func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
+	aa.PxyLock.Lock()
+	defer aa.PxyLock.Unlock()
+	proxy, err := gtw.NewTargetProxy(vv) // 创建目标URL
+	if err != nil {
+		return nil, err
+	}
+	aa.Proxies[kk] = proxy
+	return proxy, nil
 }
 
 // Serve File Server
@@ -100,13 +120,18 @@ func (aa *IndexApi) ServeFile(zrc *z.Ctx) bool {
 		if strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
-		z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
-		target, _ := url.Parse(vv) // 创建目标URL
-		proxy := pxy.NewSingleHostReverseProxy(target)
-		proxy.ServeHTTP(rw, rr) // next
+		if z.C.Debug {
+			z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
+		}
+		if proxy := aa.GetProxy(kk); proxy != nil {
+			proxy.ServeHTTP(rw, rr) // next
+		} else if proxy, err := aa.NewProxy(kk, vv); err != nil {
+			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
+		} else {
+			proxy.ServeHTTP(rw, rr) // next
+		}
 		return true
 	}
-
 	rp := FixPath(rr, aa.DirParts, aa.Folder)
 	if z.C.Debug {
 		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
