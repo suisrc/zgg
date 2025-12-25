@@ -10,33 +10,6 @@ import (
 	"time"
 )
 
-func NewTargetProxy2(target_ string) (*ReverseProxy, error) {
-	target, err := url.Parse(target_)
-	if err != nil {
-		return nil, err
-	}
-	return &ReverseProxy{
-		Director: func(req *http.Request) {
-			RewriteRequestURL(req, target)
-		},
-		BufferPool: NewBufferPool(0, 0),
-	}, nil
-}
-
-func NewDomainProxy2(target_, domain string) (*ReverseProxy, error) {
-	target, err := url.Parse(target_)
-	if err != nil {
-		return nil, err
-	}
-	return &ReverseProxy{
-		Director: func(req *http.Request) {
-			RewriteRequestURL(req, target)
-			req.Host = domain
-		},
-		BufferPool: NewBufferPool(0, 0),
-	}, nil
-}
-
 func NewTargetProxy(target_ string) (*httputil.ReverseProxy, error) {
 	target, err := url.Parse(target_)
 	if err != nil {
@@ -74,6 +47,60 @@ func NewDomainProxy(target_, domain string) (*httputil.ReverseProxy, error) {
 	}, nil
 }
 
+func NewTargetProxy2(target_ string) (*ReverseProxy, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	return &ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL(req, target)
+		},
+		BufferPool: NewBufferPool(0, 0),
+	}, nil
+}
+
+func NewDomainProxy2(target_, domain string) (*ReverseProxy, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	return &ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL(req, target)
+			req.Host = domain
+		},
+		BufferPool: NewBufferPool(0, 0),
+	}, nil
+}
+
+func NewTargetProxy3(target_ string) (*GatewayProxy, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	return &GatewayProxy{ReverseProxy: ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL(req, target)
+		},
+		BufferPool: NewBufferPool(0, 0),
+	}}, nil
+}
+
+func NewDomainProxy3(target_, domain string) (*GatewayProxy, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	return &GatewayProxy{ReverseProxy: ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL(req, target)
+			req.Host = domain
+		},
+		BufferPool: NewBufferPool(0, 0),
+	}}, nil
+}
+
 // --------------------------------------------------------------------------------------
 
 var (
@@ -103,7 +130,7 @@ var (
 // maxCap: 允许归还的最大容量（如1MB）
 func NewBufferPool(defCap, maxCap int) BufferPool {
 	if defCap <= 0 {
-		defCap = 32 * 1024 // 默认4KB
+		defCap = 64 * 1024 // 默认64KB
 	}
 	if maxCap <= 0 {
 		maxCap = 1024 * 1024 // 默认1MB

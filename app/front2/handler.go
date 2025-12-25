@@ -92,18 +92,18 @@ type IndexApi struct {
 	Routing  map[string]string // 路由表
 
 	Proxies map[string]http.Handler
-	PxyLock sync.RWMutex
+	Proxlck sync.RWMutex
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
-	aa.PxyLock.RLock()
-	defer aa.PxyLock.RUnlock()
+	aa.Proxlck.RLock()
+	defer aa.Proxlck.RUnlock()
 	return aa.Proxies[kk]
 }
 
 func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
-	aa.PxyLock.Lock()
-	defer aa.PxyLock.Unlock()
+	aa.Proxlck.Lock()
+	defer aa.Proxlck.Unlock()
 	proxy, err := gtw.NewTargetProxy(vv) // 创建目标URL
 	if err != nil {
 		return nil, err
