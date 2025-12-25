@@ -16,6 +16,11 @@ import (
 	"time"
 )
 
+type IGateway interface {
+	ServeHTTP(rw http.ResponseWriter, req *http.Request)
+	GetErrorHandler() func(rw http.ResponseWriter, req *http.Request, err error)
+}
+
 type GatewayProxy struct {
 	ReverseProxy
 	RecordPool RecordPool // 请求追踪
@@ -84,7 +89,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	// ==== authentication ====>>>
-	if (p.Authorizer != nil) && !p.Authorizer.Authz(rw, outreq, record) {
+	if (p.Authorizer != nil) && !p.Authorizer.Authz(p, rw, outreq, record) {
 		return // failed
 	}
 	// ==== authentication ====<<<
@@ -92,7 +97,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if (p.Director != nil) == (p.Rewrite != nil) {
 		err := errors.New("ReverseProxy must have exactly one of Director or Rewrite set")
 		record.RespBody = []byte("###error gateway, " + err.Error())
-		p.getErrorHandler()(rw, req, err)
+		p.GetErrorHandler()(rw, req, err)
 		return
 	}
 
@@ -108,7 +113,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if !IsPrint(reqUpType) {
 		err := fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType)
 		record.RespBody = []byte("###error gateway, " + err.Error())
-		p.getErrorHandler()(rw, req, err)
+		p.GetErrorHandler()(rw, req, err)
 		return
 	}
 	removeHopByHopHeaders(outreq.Header)
@@ -183,7 +188,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				return nil
 			}
 			h := rw.Header()
-			copyHeader(h, http.Header(header))
+			CopyHeader(h, http.Header(header))
 			rw.WriteHeader(code)
 
 			// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
@@ -201,7 +206,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	transport := p.Transport
 	if transport == nil {
-		transport = http.DefaultTransport
+		transport = TransportGtw0
 	}
 	res, err := transport.RoundTrip(outreq)
 	roundTripMutex.Lock()
@@ -209,7 +214,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	roundTripMutex.Unlock()
 	if err != nil {
 		record.RespBody = []byte("###error gateway, " + err.Error())
-		p.getErrorHandler()(rw, outreq, err)
+		p.GetErrorHandler()(rw, outreq, err)
 		return
 	}
 	// ==== recordtrace ====>>>
@@ -232,7 +237,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	copyHeader(rw.Header(), res.Header)
+	CopyHeader(rw.Header(), res.Header)
 
 	// The "Trailer" header isn't included in the Transport's response,
 	// at least for *http.Transport. Build it up from Trailer.
@@ -248,14 +253,14 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(res.StatusCode)
 
 	// err = p.copyResponse(rw, res.Body, p.flushInterval(res))
-	err = p.copyResponse2(rw, res.Body, p.flushInterval(res), record)
+	err = p.CopyResponse2(rw, res.Body, p.flushInterval(res), record)
 	if err != nil {
 		defer res.Body.Close()
 		// Since we're streaming the response, if we run into an error all we can do
 		// is abort the request. Issue 23643: ReverseProxy should use ErrAbortHandler
 		// on read error while copying body.
 		if !shouldPanicOnCopyError(req) {
-			p.logf("suppressing panic for copyResponse error in test; copy error: %v", err)
+			p.Logf("suppressing panic for copyResponse error in test; copy error: %v", err)
 			return
 		}
 		panic(http.ErrAbortHandler)
@@ -270,7 +275,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(res.Trailer) == announcedTrailers {
-		copyHeader(rw.Header(), res.Trailer)
+		CopyHeader(rw.Header(), res.Trailer)
 		return
 	}
 
@@ -282,7 +287,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (p *GatewayProxy) copyResponse2(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration, record *RecordTrace) error {
+func (p *GatewayProxy) CopyResponse2(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration, record *RecordTrace) error {
 	var w io.Writer = dst
 
 	if flushInterval != 0 {

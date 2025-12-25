@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
 	"sync"
@@ -125,20 +126,26 @@ func (ctx *Ctx) JERR(err error, hss int) bool {
 
 // 创建上下文函数
 func NewCtx(svckit SvcKit, request *http.Request, writer http.ResponseWriter, router string) *Ctx {
-	action := request.URL.Query().Get("action")
-	if action == "" {
-		rpath := request.URL.Path
-		if len(rpath) > 0 {
-			rpath = rpath[1:] // 删除前缀 '/'
-		}
-		action = rpath
-	}
+	action := GetAction(request.URL)
 	ctx := &Ctx{SvcKit: svckit, Action: action, Caches: HA{}, Request: request, Writer: writer}
 	ctx._router = router
 	ctx.Ctx, ctx.Cancel = context.WithCancel(context.Background())
 	ctx.TraceID = GetTraceID(request)
 	ctx.ReqType = GetReqType(request)
 	return ctx
+}
+
+// 获取请求 action
+func GetAction(uu *url.URL) string {
+	action := uu.Query().Get("action")
+	if action == "" {
+		rpath := uu.Path
+		if len(rpath) > 0 {
+			rpath = rpath[1:] // 删除前缀 '/'
+		}
+		action = rpath
+	}
+	return action
 }
 
 // ----------------------------------------------------------------------------
@@ -169,7 +176,7 @@ func ReadData(rr *http.Request) (*RaData, error) {
 func GetTraceID(request *http.Request) string {
 	traceid := request.Header.Get("X-Request-Id")
 	if traceid == "" {
-		traceid = Str("r", 32) // 创建请求ID, 用于追踪
+		traceid = GenStr("r", 32) // 创建请求ID, 用于追踪
 		request.Header.Set("X-Request-Id", traceid)
 	}
 	return traceid

@@ -5,5 +5,5 @@ import (
 )
 
 type Authorizer interface {
-	Authz(rw http.ResponseWriter, req *http.Request, rec *RecordTrace) bool
+	Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt *RecordTrace) bool
 }

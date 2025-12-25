@@ -139,6 +139,8 @@ func (r *ProxyRequest) SetXForwarded() {
 // 1xx responses are forwarded to the client if the underlying
 // transport supports ClientTrace.Got1xxResponse.
 type ReverseProxy struct {
+	// the name of the proxy
+	ProxyName string
 	// Rewrite must be a function which modifies
 	// the request into a new request to be sent
 	// using Transport. Its response is then copied
@@ -277,7 +279,7 @@ func joinURLPath(a, b *url.URL) (path, rawpath string) {
 	return a.Path + b.Path, apath + bpath
 }
 
-func copyHeader(dst, src http.Header) {
+func CopyHeader(dst, src http.Header) {
 	for k, vv := range src {
 		for _, v := range vv {
 			dst.Add(k, v)
@@ -303,11 +305,11 @@ var hopHeaders = []string{
 }
 
 func (p *ReverseProxy) defaultErrorHandler(rw http.ResponseWriter, req *http.Request, err error) {
-	p.logf("http: proxy error: %v", err)
+	p.Logf("error: %v", err)
 	rw.WriteHeader(http.StatusBadGateway)
 }
 
-func (p *ReverseProxy) getErrorHandler() func(http.ResponseWriter, *http.Request, error) {
+func (p *ReverseProxy) GetErrorHandler() func(http.ResponseWriter, *http.Request, error) {
 	if p.ErrorHandler != nil {
 		return p.ErrorHandler
 	}
@@ -322,7 +324,7 @@ func (p *ReverseProxy) modifyResponse(rw http.ResponseWriter, res *http.Response
 	}
 	if err := p.ModifyResponse(res); err != nil {
 		res.Body.Close()
-		p.getErrorHandler()(rw, req, err)
+		p.GetErrorHandler()(rw, req, err)
 		return false
 	}
 	return true
@@ -378,7 +380,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if (p.Director != nil) == (p.Rewrite != nil) {
-		p.getErrorHandler()(rw, req, errors.New("ReverseProxy must have exactly one of Director or Rewrite set"))
+		p.GetErrorHandler()(rw, req, errors.New("ReverseProxy must have exactly one of Director or Rewrite set"))
 		return
 	}
 
@@ -392,7 +394,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	reqUpType := upgradeType(outreq.Header)
 	if !IsPrint(reqUpType) {
-		p.getErrorHandler()(rw, req, fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType))
 		return
 	}
 	removeHopByHopHeaders(outreq.Header)
@@ -467,7 +469,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				return nil
 			}
 			h := rw.Header()
-			copyHeader(h, http.Header(header))
+			CopyHeader(h, http.Header(header))
 			rw.WriteHeader(code)
 
 			// Clear headers, it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses
@@ -482,7 +484,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	roundTripDone = true
 	roundTripMutex.Unlock()
 	if err != nil {
-		p.getErrorHandler()(rw, outreq, err)
+		p.GetErrorHandler()(rw, outreq, err)
 		return
 	}
 
@@ -501,7 +503,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	copyHeader(rw.Header(), res.Header)
+	CopyHeader(rw.Header(), res.Header)
 
 	// The "Trailer" header isn't included in the Transport's response,
 	// at least for *http.Transport. Build it up from Trailer.
@@ -516,14 +518,14 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	rw.WriteHeader(res.StatusCode)
 
-	err = p.copyResponse(rw, res.Body, p.flushInterval(res))
+	err = p.CopyResponse(rw, res.Body, p.flushInterval(res))
 	if err != nil {
 		defer res.Body.Close()
 		// Since we're streaming the response, if we run into an error all we can do
 		// is abort the request. Issue 23643: ReverseProxy should use ErrAbortHandler
 		// on read error while copying body.
 		if !shouldPanicOnCopyError(req) {
-			p.logf("suppressing panic for copyResponse error in test; copy error: %v", err)
+			p.Logf("suppressing panic for copyResponse error in test; copy error: %v", err)
 			return
 		}
 		panic(http.ErrAbortHandler)
@@ -538,7 +540,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(res.Trailer) == announcedTrailers {
-		copyHeader(rw.Header(), res.Trailer)
+		CopyHeader(rw.Header(), res.Trailer)
 		return
 	}
 
@@ -609,7 +611,7 @@ func (p *ReverseProxy) flushInterval(res *http.Response) time.Duration {
 	return p.FlushInterval
 }
 
-func (p *ReverseProxy) copyResponse(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration) error {
+func (p *ReverseProxy) CopyResponse(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration) error {
 	var w io.Writer = dst
 
 	if flushInterval != 0 {
@@ -646,7 +648,7 @@ func (p *ReverseProxy) copyBuffer(dst io.Writer, src io.Reader, buf []byte) (int
 	for {
 		nr, rerr := src.Read(buf)
 		if rerr != nil && rerr != io.EOF && rerr != context.Canceled {
-			p.logf("httputil: ReverseProxy read error during body copy: %v", rerr)
+			p.Logf("copy buffer, read error during body copy: %v", rerr)
 		}
 		if nr > 0 {
 			nw, werr := dst.Write(buf[:nr])
@@ -669,7 +671,12 @@ func (p *ReverseProxy) copyBuffer(dst io.Writer, src io.Reader, buf []byte) (int
 	}
 }
 
-func (p *ReverseProxy) logf(format string, args ...any) {
+func (p *ReverseProxy) Logf(format string, args ...any) {
+	if p.ProxyName != "" {
+		format = "[" + p.ProxyName + "] " + format
+	} else {
+		format = "[reverse proxy] " + format
+	}
 	if p.ErrorLog != nil {
 		p.ErrorLog.Printf(format, args...)
 	} else {
@@ -737,23 +744,23 @@ func (p *ReverseProxy) handleUpgradeResponse(rw http.ResponseWriter, req *http.R
 	reqUpType := upgradeType(req.Header)
 	resUpType := upgradeType(res.Header)
 	if !IsPrint(resUpType) { // We know reqUpType is ASCII, it's checked by the caller.
-		p.getErrorHandler()(rw, req, fmt.Errorf("backend tried to switch to invalid protocol %q", resUpType))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("backend tried to switch to invalid protocol %q", resUpType))
 	}
 	if !EqualFold(reqUpType, resUpType) {
-		p.getErrorHandler()(rw, req, fmt.Errorf("backend tried to switch protocol %q when %q was requested", resUpType, reqUpType))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("backend tried to switch protocol %q when %q was requested", resUpType, reqUpType))
 		return
 	}
 
 	backConn, ok := res.Body.(io.ReadWriteCloser)
 	if !ok {
-		p.getErrorHandler()(rw, req, fmt.Errorf("internal error: 101 switching protocols response with non-writable body"))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("internal error: 101 switching protocols response with non-writable body"))
 		return
 	}
 
 	rc := http.NewResponseController(rw)
 	conn, brw, hijackErr := rc.Hijack()
 	if errors.Is(hijackErr, http.ErrNotSupported) {
-		p.getErrorHandler()(rw, req, fmt.Errorf("can't switch protocols using non-Hijacker ResponseWriter type %T", rw))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("can't switch protocols using non-Hijacker ResponseWriter type %T", rw))
 		return
 	}
 
@@ -770,21 +777,21 @@ func (p *ReverseProxy) handleUpgradeResponse(rw http.ResponseWriter, req *http.R
 	defer close(backConnCloseCh)
 
 	if hijackErr != nil {
-		p.getErrorHandler()(rw, req, fmt.Errorf("hijack failed on protocol switch: %v", hijackErr))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("hijack failed on protocol switch: %v", hijackErr))
 		return
 	}
 	defer conn.Close()
 
-	copyHeader(rw.Header(), res.Header)
+	CopyHeader(rw.Header(), res.Header)
 
 	res.Header = rw.Header()
 	res.Body = nil // so res.Write only writes the headers; we have res.Body in backConn above
 	if err := res.Write(brw); err != nil {
-		p.getErrorHandler()(rw, req, fmt.Errorf("response write: %v", err))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("response write: %v", err))
 		return
 	}
 	if err := brw.Flush(); err != nil {
-		p.getErrorHandler()(rw, req, fmt.Errorf("response flush: %v", err))
+		p.GetErrorHandler()(rw, req, fmt.Errorf("response flush: %v", err))
 		return
 	}
 	errc := make(chan error, 1)
@@ -864,6 +871,18 @@ func EqualFold(s, t string) bool {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
+		if LowerByte(s[i]) != LowerByte(t[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func HasPrefixFold(s, t string) bool {
+	if len(s) < len(t) {
+		return false
+	}
+	for i := 0; i < len(t); i++ {
 		if LowerByte(s[i]) != LowerByte(t[i]) {
 			return false
 		}

@@ -27,17 +27,26 @@ func NewAuthorize0(sites []string) Authorize0 {
 	}
 }
 
-func (aa *Authorize0) Authz(rw http.ResponseWriter, req *http.Request, rec *RecordTrace) bool {
+func (aa *Authorize0) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt *RecordTrace) bool {
+	if rt != nil {
+		// 添加 trace id
+		if rt.TraceID == "" {
+			rt.TraceID, _ = GenUUIDv4()
+			rr.Header.Set("X-Request-Id", rt.TraceID)
+		}
+		// 获取 remote ip
+		rt.RemoteIP = GetRemoteIP(rr)
+	}
 	if aa.ClientKey == "" {
 		return true
 	}
-	if req.Header == nil {
-		req.Header = make(http.Header)
+	if rr.Header == nil {
+		rr.Header = make(http.Header)
 	}
-	if cid, err := req.Cookie(aa.ClientKey); err == nil {
+	if cid, err := rr.Cookie(aa.ClientKey); err == nil {
 		// client id 存在
-		if rec != nil {
-			rec.ClientID = cid.Value
+		if rt != nil {
+			rt.ClientID = cid.Value
 		}
 		// 如果时间小于1/8，续签
 		if idx := strings.LastIndexByte(cid.Value, '.'); idx <= 0 || idx == len(cid.Value)-1 {
@@ -46,7 +55,7 @@ func (aa *Authorize0) Authz(rw http.ResponseWriter, req *http.Request, rec *Reco
 			// 续签
 			siteHost := ""
 			for _, host := range aa.SiteHosts {
-				if strings.HasSuffix(req.Host, host) {
+				if strings.HasSuffix(rr.Host, host) {
 					siteHost = host
 					break
 				}
@@ -73,7 +82,7 @@ func (aa *Authorize0) Authz(rw http.ResponseWriter, req *http.Request, rec *Reco
 	clientID := fmt.Sprintf("%s.1.00.%s.%d", aa.ClientKey, GenStr("", 16), time.Now().Unix())
 	siteHost := ""
 	for _, host := range aa.SiteHosts {
-		if strings.HasSuffix(req.Host, host) {
+		if strings.HasSuffix(rr.Host, host) {
 			siteHost = host
 			break
 		}
@@ -92,9 +101,9 @@ func (aa *Authorize0) Authz(rw http.ResponseWriter, req *http.Request, rec *Reco
 		HttpOnly: false,
 	}
 	http.SetCookie(rw, cookie)
-	req.AddCookie(cookie)
-	if rec != nil {
-		rec.ClientID = clientID
+	rr.AddCookie(cookie)
+	if rt != nil {
+		rt.ClientID = clientID
 	}
 
 	return true

@@ -2,11 +2,7 @@ package gtw
 
 import (
 	"bytes"
-	crand "crypto/rand"
-	"fmt"
 	"io"
-	mrand "math/rand"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -24,7 +20,7 @@ type RecordTrace struct {
 
 	TraceID   string // trace id
 	ClientID  string // client id
-	ClientIP  string // client ip
+	RemoteIP  string // remote ip
 	Referer   string // page info
 	UserAgent string // user agent
 
@@ -43,6 +39,8 @@ type RecordTrace struct {
 	RespSize   int64       // response body size
 	StatusCode int         // status code
 	_abort     bool        // 是否终止
+
+	Expand map[string]any // 扩展字段
 }
 
 // 记录原始请求内容
@@ -52,16 +50,6 @@ func (t *RecordTrace) LogRequest(req *http.Request) {
 	}
 	// trace id
 	t.TraceID = req.Header.Get("X-Request-Id")
-	if t.TraceID == "" {
-		t.TraceID, _ = GenUUIDv4()
-		req.Header.Set("X-Request-Id", t.TraceID)
-	}
-	// // 客户端ID, 交给 authorizer 处理
-	// if cid, err := req.Cookie("_zc"); err == nil {
-	// 	t.ClientID = cid.Value
-	// }
-	// 获取 client ip
-	t.ClientIP = GetClientIP(req)
 	t.UserAgent = req.UserAgent()
 	t.Referer = req.Referer()
 
@@ -77,6 +65,7 @@ func (t *RecordTrace) LogRequest(req *http.Request) {
 	ct := t.ReqHeader.Get("Content-Type")
 	if !strings.HasPrefix(ct, "application/json") &&
 		!strings.HasPrefix(ct, "application/xml") {
+		t.RespBody = []byte("###request content type: " + ct)
 		return // ignore
 	}
 	// 请求 body 大于 1MB， 不记录
@@ -100,7 +89,7 @@ func (t *RecordTrace) LogResponse(res *http.Response) {
 	t.RespHeader = res.Header
 	t.StatusCode = res.StatusCode
 	if res.StatusCode == http.StatusSwitchingProtocols {
-		t.RespBody = []byte("###responses body is websocket, skip")
+		t.RespBody = []byte("###response body is websocket, skip")
 		t._track() // 提前记录 websocket 请求内容
 	}
 }
@@ -113,6 +102,7 @@ func (t *RecordTrace) LogRespBody(bsz int64, err error, buf []byte) {
 	ct := t.ReqHeader.Get("Content-Type")
 	if !strings.HasPrefix(ct, "application/json") &&
 		!strings.HasPrefix(ct, "application/xml") {
+		t.RespBody = []byte("###response content type: " + ct)
 		return // ignore
 	}
 	t.RespSize = bsz
@@ -125,7 +115,7 @@ func (t *RecordTrace) LogRespBody(bsz int64, err error, buf []byte) {
 	} else {
 		// 缓存区的内容，可以通过 ReverseProxy.BufferPool.defCap 调整缓存区大小，
 		// 默认 64K， 取自 Linux 系统 UDP 缓存区大小。
-		t.RespBody = []byte("###responses body too large, skip")
+		t.RespBody = []byte("###response body too large, skip")
 	}
 }
 
@@ -209,47 +199,3 @@ func (p *RecordPool0) Put(rt *RecordTrace) {
 }
 
 // ----------------------------------------------------------------------------
-
-func GenUUIDv4() (string, error) {
-	// 1. 生成16个随机字节
-	uuid := make([]byte, 16)
-	if _, err := crand.Read(uuid); err != nil {
-		return "", err // 随机数生成失败
-	}
-
-	// 2. 设置UUID版本和变体
-	uuid[6] = (uuid[6] & 0x0F) | 0x40 // 第13位：0100（V4）
-	uuid[8] = (uuid[8] & 0x3F) | 0x80 // 第17位：10xx（变体规范）
-
-	// 3. 格式化为UUID字符串（8-4-4-4-12）
-	return fmt.Sprintf("%x-%x-%x-%x-%x",
-		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16]), nil
-}
-
-func GenStr(bb string, ll int) string {
-	str := []byte("0123456789abcdef")
-	buf := make([]byte, ll-len(bb))
-	for i := range buf {
-		buf[i] = str[mrand.Intn(len(str))]
-	}
-	return bb + string(buf)
-}
-
-func GetClientIP(req *http.Request) string {
-	if ip := req.Header.Get("X-Forwarded-For"); ip != "" {
-		ip = strings.TrimSpace(strings.Split(ip, ",")[0])
-		if ip == "" {
-			ip = strings.TrimSpace(req.Header.Get("X-Real-Ip"))
-		}
-		if ip != "" {
-			return ip
-		}
-	}
-	if ip := req.Header.Get("X-Appengine-Remote-Addr"); ip != "" {
-		return ip
-	}
-	if ip, _, err := net.SplitHostPort(strings.TrimSpace(req.RemoteAddr)); err == nil {
-		return ip
-	}
-	return ""
-}

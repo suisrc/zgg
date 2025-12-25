@@ -10,6 +10,7 @@ package z
 import (
 	"cmp"
 	"context"
+	crand "crypto/rand"
 	_ "embed"
 	"errors"
 	"flag"
@@ -17,7 +18,8 @@ import (
 	"io"
 	"log"
 	"maps"
-	"math/rand"
+	mrand "math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -521,17 +523,6 @@ func (aa *TplKit0) Preload(dir string) error {
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
-// 随机生成字符串， 0~f, 首字母不是 bb
-// @param bb 首字母
-func Str(bb string, ll int) string {
-	str := []byte("0123456789abcdef")
-	buf := make([]byte, ll-len(bb))
-	for i := range buf {
-		buf[i] = str[rand.Intn(len(str))]
-	}
-	return bb + string(buf)
-}
-
 // 创建指针
 func Ptr[T any](v T) *T {
 	return &v
@@ -546,6 +537,53 @@ type Ref[K cmp.Ordered, T any] struct {
 // map to struct
 func Mts[T any](target T, source map[string][]string, tagkey string) (T, error) {
 	return cfg.Map2ToStruct(target, source, tagkey)
+}
+
+// 随机生成字符串， 0~f, 首字母不是 bb
+// @param bb 首字母
+func GenStr(bb string, ll int) string {
+	str := []byte("0123456789abcdef")
+	buf := make([]byte, ll-len(bb))
+	for i := range buf {
+		buf[i] = str[mrand.Intn(len(str))]
+	}
+	return bb + string(buf)
+}
+
+// 生成UUIDv4
+func GenUUIDv4() (string, error) {
+	// 1. 生成16个随机字节
+	uuid := make([]byte, 16)
+	if _, err := crand.Read(uuid); err != nil {
+		return "", err // 随机数生成失败
+	}
+
+	// 2. 设置UUID版本和变体
+	uuid[6] = (uuid[6] & 0x0F) | 0x40 // 第13位：0100（V4）
+	uuid[8] = (uuid[8] & 0x3F) | 0x80 // 第17位：10xx（变体规范）
+
+	// 3. 格式化为UUID字符串（8-4-4-4-12）
+	return fmt.Sprintf("%x-%x-%x-%x-%x",
+		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16]), nil
+}
+
+func GetRemoteIP(req *http.Request) string {
+	if ip := req.Header.Get("X-Forwarded-For"); ip != "" {
+		ip = strings.TrimSpace(strings.Split(ip, ",")[0])
+		if ip == "" {
+			ip = strings.TrimSpace(req.Header.Get("X-Real-Ip"))
+		}
+		if ip != "" {
+			return ip
+		}
+	}
+	if ip := req.Header.Get("X-Appengine-Remote-Addr"); ip != "" {
+		return ip
+	}
+	if ip, _, err := net.SplitHostPort(strings.TrimSpace(req.RemoteAddr)); err == nil {
+		return ip
+	}
+	return ""
 }
 
 // 健康检查接口
@@ -681,6 +719,58 @@ func (aa *MuxRouter) Handle(method, action string, handle HandleFunc) {
 
 func (aa *MuxRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	aa.Router.ServeHTTP(rw, rr)
+}
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+
+type BufferPool interface {
+	Get() []byte
+	Put([]byte)
+}
+
+// NewBufferPool 初始化缓冲池
+// defCap: 新缓冲区的默认容量（如4KB）
+// maxCap: 允许归还的最大容量（如1MB）
+func NewBufferPool(defCap, maxCap int) BufferPool {
+	if defCap <= 0 {
+		defCap = 64 * 1024 // 默认64KB
+	}
+	if maxCap <= 0 {
+		maxCap = 1024 * 1024 // 默认1MB
+	}
+	return &BufferPool0{
+		defCap: defCap,
+		maxCap: maxCap,
+		pool: &sync.Pool{
+			New: func() any {
+				// 创建默认容量的空字节切片（len=0，cap=defaultCap）
+				return make([]byte, 0, defCap)
+			},
+		},
+	}
+}
+
+// BufferPool0 字节缓冲池：基于sync.Pool实现
+type BufferPool0 struct {
+	pool   *sync.Pool
+	maxCap int // 允许归还的最大缓冲区容量（避免超大缓冲区占用内存）
+	defCap int // 新创建缓冲区的默认容量
+}
+
+// Get 获取缓冲区：从池取出或创建新缓冲区
+func (p *BufferPool0) Get() []byte {
+	return p.pool.Get().([]byte)
+}
+
+// Put 归还缓冲区：重置后放回池（若容量超过maxCap则丢弃）
+func (p *BufferPool0) Put(buf []byte) {
+	// 1. 检查缓冲区容量是否超过限制
+	if cap(buf) > p.maxCap {
+		return
+	}
+	// 2. 重置缓冲区：保留容量，清空内容（len=0）
+	p.pool.Put(buf[:0])
 }
 
 // -----------------------------------------------------------------------------------
