@@ -68,3 +68,31 @@ GET {{BASE}}/api1/test
 // -----------------------------------------------
 // kwdog2
 
+### 其他服务
+GET {{BASE}}/api/iam/v1/a/odic/user_info
+Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
+Referer: https://xxx.xxx.com/
+Content-Type: application/json
+Authorization: Bearer kst.9B8A147880FE5434E281C58CDF2EC43E00000002WL90PxBIoL0y2iJ7OkFmbBxBT_xufjshdyz1l4.1000001.p6m.t5_f54b93064451
+
+
+### 后端服务
+GET {{BASE}}/api/pas/v1/enums/app/status
+Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
+Referer: https://xxx.xxx.com/
+Content-Type: application/json
+Authorization: Bearer kst.9B8A147880FE5434E281C58CDF2EC43E00000002WL90PxBIoL0y2iJ7OkFmbBxBT_xufjshdyz1l4.1000001.p6m.t5_f54b93064451
+
+
+
+### 
+POST {{BASE}}/api/test?flow=abc
+Host: kwdog.com
+Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
+Referer: https://xxx.xxx.com/
+Content-Type: application/json
+Authorization: Bearer kst.9B8A147880FE5434E281C58CDF2EC43E00000002WL90PxBIoL0y2iJ7OkFmbBxBT_xufjshdyz1l4.1000001.p6m.t5_f54b93064451
+
+{
+    "name": "kwdog"
+}

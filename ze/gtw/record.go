@@ -54,6 +54,7 @@ type Record0 struct {
 	OutReqHeader http.Header // request header
 	UpstreamAddr string      // upstream address
 	SrvAuthzAddr string      // serve authz address
+	UpstreamTime int64       // upstream time
 
 	RespHeader http.Header // response header
 	RespBody   []byte      // response body

@@ -18,8 +18,7 @@ func NewRecordStdout() gtw.RecordPool {
 func RecordToStdout(rt gtw.RecordTrace) {
 	rc := &Record{}
 	rc.ByRecord0(rt.(*gtw.Record0))
-	bs, _ := rc.MarshalJSON()
-	z.Println(string(bs))
+	z.Println("[_record_]", rc.ToFormatStr())
 }
 
 // 日志转存到文件, 简单参考，不要用于生产

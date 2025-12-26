@@ -27,6 +27,11 @@ func (t *Record0) LogRequest(req *http.Request) {
 	t.ReqURL = req.URL.String()
 	t.ReqHeader = req.Header.Clone()
 
+	for _, v := range req.Cookies() {
+		t.Cookie[v.Name] = v
+	}
+	t.RemoteAddr = req.RemoteAddr
+
 	if req.Method == http.MethodGet || req.Body == nil || //
 		req.ContentLength == 0 || req.Header == nil {
 		return // Issue 16036: nil Body for http.Transport retries
@@ -44,11 +49,6 @@ func (t *Record0) LogRequest(req *http.Request) {
 	// 输入的请求参数，必须记录， 输出的结果，根据结果大小，选择记录， 默认64KB
 	t.ReqBody, _ = io.ReadAll(req.Body)
 	req.Body = io.NopCloser(bytes.NewReader(t.ReqBody))
-
-	for _, v := range req.Cookies() {
-		t.Cookie[v.Name] = v
-	}
-	t.RemoteAddr = req.RemoteAddr
 }
 
 // 记录代理请求内容
@@ -60,7 +60,7 @@ func (t *Record0) LogOutRequest(outreq *http.Request) {
 
 // 记录请求结果
 func (t *Record0) LogResponse(res *http.Response) {
-	t.ServeTime = time.Now().UnixMilli() - t.StartTime // 毫秒
+	t.UpstreamTime = time.Now().UnixMilli() - t.StartTime // 毫秒
 	t.RespHeader = res.Header.Clone()
 	t.StatusCode = res.StatusCode
 	if res.StatusCode == http.StatusSwitchingProtocols {
@@ -76,7 +76,7 @@ func (t *Record0) LogRespBody(bsz int64, err error, buf []byte) {
 	if t.RespHeader == nil || bsz == 0 {
 		return // ignore
 	}
-	ct := t.ReqHeader.Get("Content-Type")
+	ct := t.RespHeader.Get("Content-Type")
 	if !strings.HasPrefix(ct, "application/json") &&
 		!strings.HasPrefix(ct, "application/xml") {
 		t.RespBody = []byte("###response content type: " + ct)
@@ -87,7 +87,8 @@ func (t *Record0) LogRespBody(bsz int64, err error, buf []byte) {
 	} else if bsz <= 0 {
 		// body is empty
 	} else if int(bsz) < cap(buf) {
-		t.RespBody = bytes.Clone(buf[:bsz]) // 拷贝
+		t.RespBody = make([]byte, bsz)
+		copy(t.RespBody, buf[:bsz])
 	} else {
 		// 缓存区的内容，可以通过 ReverseProxy.BufferPool.defCap 调整缓存区大小，
 		// 默认 64K， 取自 Linux 系统 UDP 缓存区大小。
@@ -104,6 +105,7 @@ func (rt *Record0) _track() {
 	if rt._abort {
 		return // ignore
 	}
+	rt.ServeTime = time.Now().UnixMilli() - rt.StartTime
 	rt._abort = true
 	if rt.Save != nil {
 		rt.Save(rt)

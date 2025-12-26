@@ -53,7 +53,7 @@ func Init3(ifn InitializFunc) {
 			GatewayMap: make(map[string]http.Handler),
 		}
 		api.RecordPool = gte.NewRecordStdout()
-		api.BufferPool = gtw.NewBufferPool(0, 0)
+		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
 		api.GtwDefault, err = gtw.NewTargetGateway(api.ServAddr, api.BufferPool)
 		if err != nil {
 			z.Printf("register kwdow2 error, %v", err.Error())

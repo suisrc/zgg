@@ -642,7 +642,7 @@ func (p *ReverseProxy) CopyResponse(dst http.ResponseWriter, src io.Reader, flus
 // of bytes written.
 func (p *ReverseProxy) copyBuffer(dst io.Writer, src io.Reader, buf []byte) (int64, error) {
 	if len(buf) == 0 {
-		buf = make([]byte, 64*1024)
+		buf = make([]byte, 32*1024)
 	}
 	var written int64
 	for {

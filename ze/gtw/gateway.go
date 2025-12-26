@@ -204,15 +204,17 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			clear(h)
 			return nil
 		},
+		ConnectStart: func(network, addr string) {
+			if record != nil {
+				record.SetUpstream(addr) // record upstream address
+			}
+		},
 	}
 	outreq = outreq.WithContext(httptrace.WithClientTrace(outreq.Context(), trace))
 
 	// ==== recordtrace ====>>>
 	if record != nil {
 		record.LogOutRequest(outreq)
-		trace.ConnectDone = func(network, addr string, err error) {
-			record.SetUpstream(addr) // record upstream address
-		}
 	}
 	// ==== recordtrace ====<<<
 
@@ -318,15 +320,61 @@ func (p *GatewayProxy) CopyResponse2(dst http.ResponseWriter, src io.Reader, flu
 	}
 
 	var buf []byte
+	var bak []byte
 	if p.BufferPool != nil {
 		buf = p.BufferPool.Get()
 		defer p.BufferPool.Put(buf)
+		// ==== recordtrace ====>>>
+		if record != nil {
+			bak = p.BufferPool.Get()
+			defer p.BufferPool.Put(bak)
+		}
+		// ==== recordtrace ====<<<
 	}
-	bsz, err := p.copyBuffer(w, src, buf)
+	bsz, err := p.CopyBuffer2(w, src, buf, bak)
 	// ==== recordtrace ====>>>
 	if record != nil {
-		record.LogRespBody(bsz, err, buf)
+		record.LogRespBody(bsz, err, bak)
 	}
 	// ==== recordtrace ====<<<
 	return err
+}
+
+func (p *GatewayProxy) CopyBuffer2(dst io.Writer, src io.Reader, buf []byte, bak []byte) (int64, error) {
+	if len(buf) == 0 {
+		buf = make([]byte, 32*1024)
+	}
+	baklen := int64(cap(bak)) // 缓存的长度
+	var written int64
+	for {
+		nr, rerr := src.Read(buf)
+		if rerr != nil && rerr != io.EOF && rerr != context.Canceled {
+			p.Logf("copy buffer, read error during body copy: %v", rerr)
+		}
+		if nr > 0 {
+			nw, werr := dst.Write(buf[:nr])
+			if nw > 0 {
+				current := int(written)
+				written += int64(nw)
+				if written <= baklen {
+					// bak = append(bak, buf[:nw]...)
+					copy(bak[current:written], buf[:nw])
+				} else {
+					bak = bak[:0] // 无法存储，清理缓存
+				}
+			}
+			if werr != nil {
+				return written, werr
+			}
+			if nr != nw {
+				return written, io.ErrShortWrite
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				rerr = nil
+			}
+			return written, rerr
+		}
+	}
 }

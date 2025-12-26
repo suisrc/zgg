@@ -21,7 +21,8 @@ rootpath=["/zgg","/demo"]
 
 [kwdog2]
 rootpath=""
-authz="http://end-iam-kin-app.uat-fmes.svc/authx"
+authz="http://end-iam-kin-svc.uat-fmes.svc/authx"
+servaddr="http://end-iam-pas-svc.uat-fmes.svc"
 
 [kwdog2.routers]
-"/api/iam/"="http://end-iam-kin-app.uat-fmes.svc"
+"/api/iam/"="http://end-iam-kin-svc.uat-fmes.svc"

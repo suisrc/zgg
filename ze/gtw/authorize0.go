@@ -21,7 +21,7 @@ type Authorize0 struct {
 // 不适用指针，是方便其他依赖注入
 func NewAuthorize0(sites []string) Authorize0 {
 	return Authorize0{
-		ClientKey: "_zc",
+		ClientKey: "_xc",
 		SiteHosts: sites,
 		ClientAge: 2 * 365 * 24 * 3600, // 默认2年
 	}

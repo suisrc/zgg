@@ -23,15 +23,16 @@ type Record struct {
 	UserAgent string
 	Referer   string
 
-	Scheme     string // http scheme
-	Host       string // http host
-	Path       string // http path
-	Method     string // http method
-	Status     int    // http status
-	StartTime  string // start time
-	ReqTime    int    // serve time
-	Action     string // http action
-	RemoteAddr string // remote addr
+	Scheme     string  // http scheme
+	Host       string  // http host
+	Path       string  // http path
+	Method     string  // http method
+	Status     int     // http status
+	StartTime  string  // start time
+	Action     string  // http action
+	RemoteAddr string  // remote addr
+	ReqTime    float64 // serve time
+	Upstime    float64 // upstream time
 
 	FlowId      string
 	TokenId     string
@@ -49,6 +50,7 @@ type Record struct {
 	ServiceName string
 	ServiceAddr string
 	ServiceAuth string
+	GatewayName string
 
 	Responder string
 	Requester string
@@ -59,23 +61,33 @@ type Record struct {
 
 	ReqBody  string
 	RespBody string
+	RespSize int64
 	Result2  string
 }
 
 func (r Record) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, true)
+	return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, false)
 }
 
-func (rc Record) ToFormtStr() string {
+func (rc *Record) ToStr() string {
+	return cfg.ToStr2(&rc)
+}
+
+func (rc *Record) ToFormatStr() string {
 	return cfg.ToStr2(&rc)
 }
 
 // Convert by RecordTrace
-func (rc Record) ByRecord0(rt_ gtw.RecordTrace) {
+func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	rt, _ := rt_.(*gtw.Record0)
 	if rt == nil {
 		return // 跳过
 	}
+	rc.ServiceName = rt.ReqHost
+	rc.ServiceAddr = rt.UpstreamAddr
+	rc.ServiceAuth = rt.SrvAuthzAddr
+	rc.GatewayName = GetLanDomain()
+
 	rc.TraceId = rt.TraceID
 	rc.RemoteIp = rt.RemoteIP
 	rc.UserAgent = rt.UserAgent
@@ -88,8 +100,10 @@ func (rc Record) ByRecord0(rt_ gtw.RecordTrace) {
 	rc.Method = rt.Method
 	rc.Status = rt.StatusCode
 	rc.StartTime = time.UnixMilli(rt.StartTime).Format("2006-01-02T15:04:05.000")
-	rc.ReqTime = int(rt.ServeTime)
+	rc.ReqTime = float64(rt.ServeTime) / 1000
+	rc.Upstime = float64(rt.UpstreamTime) / 1000
 	rc.RemoteAddr = rt.RemoteAddr
+
 	// -------------------------------------------------------------------
 	if uri, err := url.Parse(rt.ReqURL); err == nil {
 		qry := uri.Query()
@@ -126,18 +140,14 @@ func (rc Record) ByRecord0(rt_ gtw.RecordTrace) {
 		}
 	}
 
-	rc.ServiceName = rt.ReqHost
-	rc.ServiceAddr = rt.UpstreamAddr
-	rc.ServiceAuth = rt.SrvAuthzAddr
-
 	rc.Responder = rc.ServiceAddr
 	rc.Requester = rc.RemoteAddr
 	if strings.HasPrefix(rc.Requester, "127.0.0.1") {
 		// 解析本地IP, 一般是边车服务导致的, 需要提供当前节点
-		rc.Requester = GetLocAreaIp()
+		rc.Requester = GetLanDomain() + "/" + GetLocAreaIp()
 	}
 	if strings.HasPrefix(rc.Responder, "127.0.0.1") {
-		rc.Responder = GetLocAreaIp()
+		rc.Responder = GetLanDomain() + "/" + GetLocAreaIp()
 	}
 	if strings.HasSuffix(rc.ServiceName, ".svc") || strings.HasSuffix(rc.ServiceName, ".local") {
 		// zzz.xxx.svc.cluster.local -> aaa.zzz.xxx.svc.cluster.local
@@ -149,7 +159,7 @@ func (rc Record) ByRecord0(rt_ gtw.RecordTrace) {
 	// -------------------------------------------------------------------
 	// 请求
 	if rt.OutReqHeader != nil {
-		for kk, vv := range rt.ReqHeader {
+		for kk, vv := range rt.OutReqHeader {
 			if gtw.EqualFold(kk, "Authorization") || //
 				gtw.EqualFold(kk, "Cookie") || //
 				gtw.HasPrefixFold(kk, "X-Request-Sky-") {
@@ -178,7 +188,7 @@ func (rc Record) ByRecord0(rt_ gtw.RecordTrace) {
 	if rt.RespHeader != nil {
 		for kk, vv := range rt.RespHeader {
 			for _, v := range vv {
-				rc.ReqHeaders += kk + ": " + v + "\n"
+				rc.RespHeaders += kk + ": " + v + "\n"
 			}
 			if gtw.EqualFold(kk, "X-Service-Name") && len(vv) > 0 {
 				rc.Responder = vv[0]
@@ -188,6 +198,7 @@ func (rc Record) ByRecord0(rt_ gtw.RecordTrace) {
 	if len(rt.RespBody) > 0 {
 		rc.RespBody = string(rt.RespBody)
 	}
+	rc.RespSize = rt.RespSize
 	// -------------------------------------------------------------------
 	rc.Result2 = "success"
 	if rc.Status >= 400 {
@@ -242,8 +253,9 @@ func GetLocAreaIp() string {
 			if strings.HasPrefix(line, "#") {
 				continue
 			}
-			ips := strings.SplitN(line, " ", 2)
-			if len(ips) != 2 {
+			ips := strings.Fields(line)
+			// println("=============", cfg.ToStr(ips), len(ips))
+			if len(ips) < 2 {
 				continue
 			}
 			// 判断是否为 IPv4 地址

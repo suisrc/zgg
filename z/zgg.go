@@ -734,7 +734,7 @@ type BufferPool interface {
 // maxCap: 允许归还的最大容量（如1MB）
 func NewBufferPool(defCap, maxCap int) BufferPool {
 	if defCap <= 0 {
-		defCap = 64 * 1024 // 默认64KB
+		defCap = 32 * 1024 // 默认64KB
 	}
 	if maxCap <= 0 {
 		maxCap = 1024 * 1024 // 默认1MB
