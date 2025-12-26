@@ -23,13 +23,14 @@ var (
 
 type Front2Config struct {
 	IsNative bool              `json:"native"`
-	DirParts []string          `json:"dirs"`
+	RootPath []string          `json:"rootpath"`
 	Index    string            `json:"index"`
 	Indexs   map[string]string `json:"indexs"`
 	TmplPath string            `json:"tmpl"`
 	TmplSuff []string          `json:"suff"`
-	ShowPath string            `json:"show"`
-	Routing  map[string]string `json:"routing"`
+	ShowPath string            `json:"f2show"`
+	Routers  map[string]string `json:"routers"`
+	Folder   string            `json:"folder"`
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -43,31 +44,33 @@ func Init3(www embed.FS, ifn InitializFunc) {
 	cfg.Register(&C)
 
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
-	flag.Var(cfg.NewStrArr(&C.Front2.DirParts, []string{"/zgg", "/demo1/demo2"}), "dirs", "root dir parts list")
+	flag.Var(cfg.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
 	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
 	flag.Var(cfg.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
 	flag.Var(cfg.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
-	flag.StringVar(&C.Front2.ShowPath, "f2show", "/api/=http://127.0.0.1:8080/api2/", "show www resource uri")
-	flag.Var(cfg.NewStrMap(&C.Front2.Routing, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "routing", "router path replace")
+	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
+	flag.Var(cfg.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
+	flag.StringVar(&C.Front2.Folder, "f2folder", "/www", "static folder")
 
 	z.Register("00-front2", func(srv z.IServer) z.Closed {
 		hfs := http.FS(www)
 		api := &IndexApi{
-			DirParts: C.Front2.DirParts,
+			RootPath: C.Front2.RootPath,
 			TmplPath: C.Front2.TmplPath,
 			TmplSuff: C.Front2.TmplSuff,
 			Index_:   C.Front2.Index,
 			Indexs:   C.Front2.Indexs,
-			Folder:   "/www",
-			HttpFS:   hfs,
+			Folder:   C.Front2.Folder,
 			ShowPath: C.Front2.ShowPath,
-			Routing:  C.Front2.Routing,
+			Routers:  C.Front2.Routers,
+			HttpFS:   hfs,
+			ProxyMap: make(map[string]http.Handler),
 		}
 		if C.Front2.IsNative {
 			api.ServeFS = http.FileServer(hfs)
 		}
-		srv.AddRouter("", api.ServeFile)
+		srv.AddRouter("", api.ServeHTTP)
 		if C.Front2.ShowPath != "" {
 			srv.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
 		}
@@ -80,44 +83,44 @@ func Init3(www embed.FS, ifn InitializFunc) {
 }
 
 type IndexApi struct {
-	ServeFS  http.Handler      // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
-	DirParts []string          // 访问根目录, 访问根目录， 删除根目录后才是文件目录
+	RootPath []string          // 访问根目录, 访问根目录， 删除根目录后才是文件目录
 	TmplPath string            // 模版根目录, ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
 	TmplSuff []string          // 替换文件后缀, .html .htm .css .map .js
 	Index_   string            // 默认首页文件名, index.html
 	Indexs   map[string]string // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
 	Folder   string            // 文件系统文件夹， 比如 /www, 必须是 / 开头
-	HttpFS   http.FileSystem   // 文件系统, http.FS(wwwFS)
 	ShowPath string            // 显示 www 文件夹资源
-	Routing  map[string]string // 路由表
+	Routers  map[string]string // 路由表
 
-	Proxies map[string]http.Handler
-	Proxlck sync.RWMutex
+	ServeFS  http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
+	HttpFS   http.FileSystem // 文件系统, http.FS(wwwFS)
+	ProxyMap map[string]http.Handler
+	ProxyLck sync.RWMutex
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
-	aa.Proxlck.RLock()
-	defer aa.Proxlck.RUnlock()
-	return aa.Proxies[kk]
+	aa.ProxyLck.RLock()
+	defer aa.ProxyLck.RUnlock()
+	return aa.ProxyMap[kk]
 }
 
 func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
-	aa.Proxlck.Lock()
-	defer aa.Proxlck.Unlock()
+	aa.ProxyLck.Lock()
+	defer aa.ProxyLck.Unlock()
 	proxy, err := gtw.NewTargetProxy(vv) // 创建目标URL
 	if err != nil {
 		return nil, err
 	}
-	aa.Proxies[kk] = proxy
+	aa.ProxyMap[kk] = proxy
 	return proxy, nil
 }
 
-// Serve File Server
-func (aa *IndexApi) ServeFile(zrc *z.Ctx) bool {
+// ServeHTTP
+func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) bool {
 	rw := zrc.Writer
 	rr := zrc.Request
-	for kk, vv := range aa.Routing {
-		if strings.HasPrefix(rr.URL.Path, kk) {
+	for kk, vv := range aa.Routers {
+		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
 		if z.C.Debug {
@@ -132,7 +135,8 @@ func (aa *IndexApi) ServeFile(zrc *z.Ctx) bool {
 		}
 		return true
 	}
-	rp := FixPath(rr, aa.DirParts, aa.Folder)
+	// --------------------------------------------------------------
+	rp := FixPath(rr, aa.RootPath, aa.Folder)
 	if z.C.Debug {
 		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			rr.URL.Path, rr.URL.RawPath, rp)

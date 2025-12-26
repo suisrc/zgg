@@ -675,7 +675,7 @@ func (p *ReverseProxy) Logf(format string, args ...any) {
 	if p.ProxyName != "" {
 		format = "[" + p.ProxyName + "] " + format
 	} else {
-		format = "[reverse proxy] " + format
+		format = "[reverse-proxy] " + format
 	}
 	if p.ErrorLog != nil {
 		p.ErrorLog.Printf(format, args...)
@@ -871,7 +871,7 @@ func EqualFold(s, t string) bool {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
-		if LowerByte(s[i]) != LowerByte(t[i]) {
+		if ToLowerB(s[i]) != ToLowerB(t[i]) {
 			return false
 		}
 	}
@@ -883,7 +883,7 @@ func HasPrefixFold(s, t string) bool {
 		return false
 	}
 	for i := 0; i < len(t); i++ {
-		if LowerByte(s[i]) != LowerByte(t[i]) {
+		if ToLowerB(s[i]) != ToLowerB(t[i]) {
 			return false
 		}
 	}
@@ -891,7 +891,7 @@ func HasPrefixFold(s, t string) bool {
 }
 
 // Lower returns the ASCII lowercase version of b.
-func LowerByte(b byte) byte {
+func ToLowerB(b byte) byte {
 	if 'A' <= b && b <= 'Z' {
 		return b + ('a' - 'A')
 	}

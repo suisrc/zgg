@@ -10,9 +10,9 @@ import (
 )
 
 var (
+	namespace_ = ""
+
 	C = struct {
-		Namespace string
-		Token     string
 	}{}
 )
 
@@ -36,17 +36,17 @@ var (
 
 // 获取当前命名空间 k8s namespace
 func K8sNs() string {
-	if C.Namespace != "" {
-		return C.Namespace
+	if namespace_ != "" {
+		return namespace_
 	}
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		z.Printf("unable to read namespace: %s, return 'default'", err.Error())
-		C.Namespace = "default"
+		namespace_ = "default"
 	} else {
-		C.Namespace = string(ns)
+		namespace_ = string(ns)
 	}
-	return C.Namespace
+	return namespace_
 }
 
 // // CreateClient Create the server

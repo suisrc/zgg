@@ -2,6 +2,7 @@ package gtw
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -12,10 +13,13 @@ import (
 )
 
 var (
+	ErrNil = errors.New("<nil>") // 处理业务过程中，用于跳过错误
+
 	GenStr        = z.GenStr
 	GenUUIDv4     = z.GenUUIDv4
 	GetRemoteIP   = z.GetRemoteIP
 	NewBufferPool = z.NewBufferPool
+	GetAction     = z.GetAction
 )
 
 func NewTargetProxy(target_ string) (*httputil.ReverseProxy, error) {
@@ -125,7 +129,7 @@ func NewDomainProxy2(target_, domain string) (*ReverseProxy, error) {
 	}, nil
 }
 
-func NewTargetProxy3(target_ string) (*GatewayProxy, error) {
+func NewTargetGateway(target_ string, pool BufferPool) (*GatewayProxy, error) {
 	target, err := url.Parse(target_)
 	if err != nil {
 		return nil, err
@@ -134,11 +138,11 @@ func NewTargetProxy3(target_ string) (*GatewayProxy, error) {
 		Director: func(req *http.Request) {
 			RewriteRequestURL(req, target)
 		},
-		BufferPool: NewBufferPool(0, 0),
+		BufferPool: pool,
 	}}, nil
 }
 
-func NewDomainProxy3(target_, domain string) (*GatewayProxy, error) {
+func NewDomainGateway(target_, domain string, pool BufferPool) (*GatewayProxy, error) {
 	target, err := url.Parse(target_)
 	if err != nil {
 		return nil, err
@@ -148,6 +152,6 @@ func NewDomainProxy3(target_, domain string) (*GatewayProxy, error) {
 			RewriteRequestURL(req, target)
 			req.Host = domain
 		},
-		BufferPool: NewBufferPool(0, 0),
+		BufferPool: pool,
 	}}, nil
 }

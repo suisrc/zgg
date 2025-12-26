@@ -171,3 +171,38 @@ func Test_ToBasicVal(t *testing.T) {
 	log.Printf("=======%#v | %v\n", string(val.([][]byte)[0]), err)
 
 }
+
+type Record struct {
+	NameKey string
+	AgeKey  int
+
+	DataKey RecordData
+	DataKe2 *RecordData
+}
+
+func (r Record) MarshalJSON() ([]byte, error) {
+	return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, false)
+}
+
+type RecordData struct {
+	NameKey string
+	AgeKey  int
+}
+
+func (r RecordData) MarshalJSON() ([]byte, error) {
+	return cfg.ToJsonBts(&r, "json", cfg.Camel2Case, true)
+}
+
+// go test -v z/cfg/zcfg_test.go -run Test_ToJson
+
+func Test_ToJson(t *testing.T) {
+	record := Record{
+		NameKey: "x",
+		AgeKey:  12,
+		DataKey: RecordData{
+			NameKey: "",
+			AgeKey:  13,
+		},
+	}
+	log.Println(cfg.ToStr2(record))
+}

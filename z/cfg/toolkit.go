@@ -6,6 +6,7 @@
 package cfg
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // ToStr ...
@@ -469,7 +471,24 @@ func MapToStruct[T any](target T, source map[string]any, tagkey string) (result 
 					}
 				}
 			}
+		} else if vty.Kind() == reflect.Map && fty.Kind() == reflect.Map && //
+			fty.Elem().Kind() == reflect.String {
+			// map[string]any -> map[string]string
+			if vva, ok := val.(map[string]any); ok {
+				if tag.Value.IsNil() {
+					tag.Value.Set(reflect.MakeMap(fty))
+				}
+				for kk, vv := range vva {
+					if vc, ok := vv.(string); ok && len(vc) > 0 {
+						vkk := reflect.ValueOf(kk)
+						vvv := reflect.ValueOf(vc)
+						tag.Value.SetMapIndex(vkk, vvv)
+					}
+					// println("=============", kk, ToStr(vv))
+				}
+			}
 		}
+
 	}
 	return
 }
@@ -685,4 +704,121 @@ func ToBasicValue(typ reflect.Type, val []string) (any, error) {
 		return vvv.Interface(), nil
 	}
 	return nil, errors.New("<" + typ.String() + "> type not supported")
+}
+
+// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+
+func EqualFold(s, t string) bool {
+	if len(s) != len(t) {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if ToLowerB(s[i]) != ToLowerB(t[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func HasPrefixFold(s, t string) bool {
+	if len(s) < len(t) {
+		return false
+	}
+	for i := 0; i < len(t); i++ {
+		if ToLowerB(s[i]) != ToLowerB(t[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func ToLowerB(b byte) byte {
+	if 'A' <= b && b <= 'Z' {
+		return b + ('a' - 'A')
+	}
+	return b
+}
+
+// 首字母大写转小写
+func LowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	// r, size := utf8.DecodeRuneInString(s)
+	// return string(unicode.ToLower(r)) + s[size:]
+	return string(unicode.ToLower(rune(s[0]))) + s[1:]
+}
+
+// 驼峰转下划线
+func Camel2Case(s string) string {
+	if s == "" {
+		return s
+	}
+	buf := bytes.NewBuffer([]byte{})
+	for i, r := range s {
+		if i == 0 {
+			buf.WriteRune(unicode.ToLower(r))
+			continue
+		}
+		if unicode.IsUpper(r) {
+			buf.WriteRune('_')
+			buf.WriteRune(unicode.ToLower(r))
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
+}
+
+func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[string]any, error) {
+	if tag == "" {
+		tag = "json"
+	}
+	rst := map[string]any{}
+	vType := reflect.TypeOf(val)
+	value := reflect.ValueOf(val)
+	if vType.Kind() == reflect.Pointer {
+		vType = vType.Elem()
+		value = value.Elem()
+	}
+	for i := 0; i < vType.NumField(); i++ {
+		if non && value.Field(i).IsZero() {
+			continue
+		}
+		vField := vType.Field(i)
+		vTag := vField.Tag.Get(tag)
+		if vTag == "-" {
+			continue
+		}
+		vName := vField.Name
+		if vTag == "" && kfn != nil {
+			vName = kfn(vName)
+		} else if vTag != "" {
+			if idx := strings.IndexRune(vTag, ','); idx > 0 {
+				vName = vTag[:idx]
+			} else {
+				vName = vTag
+			}
+		}
+		rst[vName] = value.Field(i).Interface()
+	}
+	return rst, nil
+}
+
+//	func (r Data) MarshalJSON() ([]byte, error) {
+//		return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, false)
+//	}
+//
+// - @param val 结构体
+// - @param tag 标签
+// - @param kfn 键名转换函数
+// - @param non 是否忽略零值
+func ToJsonBts(val any, tag string, kfn func(string) string, non bool) ([]byte, error) {
+	rst, err := ToJsonMap(val, tag, kfn, non)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(rst)
 }

@@ -1,4 +1,4 @@
-package app
+package zhello
 
 // 这是一个测试类， 需要屏蔽 init 函数
 
@@ -7,10 +7,10 @@ import (
 )
 
 func init() {
-	Init0()
+	Init3()
 }
 
-func Init0() {
+func Init3() {
 	z.Register("01-hello", func(srv z.IServer) z.Closed {
 		api := z.Inject(srv.GetSvcKit(), &HelloApi{})
 		srv.AddRouter("hello", api.hello)
@@ -21,7 +21,7 @@ func Init0() {
 	z.Register("zz-world", func(srv z.IServer) z.Closed {
 		api := srv.GetSvcKit().Get("HelloApi").(*HelloApi)
 		z.GET("world", api.world, srv)
-		z.GET("token", z.TokenAuth(z.Ptr(""), api.token), srv)
+		z.GET("token", z.TokenAuth(z.Ptr("123"), api.token), srv)
 		return nil
 	})
 }

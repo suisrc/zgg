@@ -18,6 +18,8 @@ import (
 
 type IGateway interface {
 	ServeHTTP(rw http.ResponseWriter, req *http.Request)
+	GetProxyName() string
+	Logf(format string, args ...any)
 	GetErrorHandler() func(rw http.ResponseWriter, req *http.Request, err error)
 }
 
@@ -27,7 +29,14 @@ type GatewayProxy struct {
 	Authorizer Authorizer // 权限认证
 }
 
-func (p *GatewayProxy) NewRecord() *RecordTrace {
+func (p *GatewayProxy) GetProxyName() string {
+	if p.ProxyName == "" {
+		return "gateway-proxy"
+	}
+	return p.ProxyName
+}
+
+func (p *GatewayProxy) NewRecord() RecordTrace {
 	if p.RecordPool == nil {
 		return nil
 	}
@@ -96,7 +105,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if (p.Director != nil) == (p.Rewrite != nil) {
 		err := errors.New("ReverseProxy must have exactly one of Director or Rewrite set")
-		record.RespBody = []byte("###error gateway, " + err.Error())
+		record.SetRespBody("###error gateway, " + err.Error())
 		p.GetErrorHandler()(rw, req, err)
 		return
 	}
@@ -112,7 +121,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	reqUpType := upgradeType(outreq.Header)
 	if !IsPrint(reqUpType) {
 		err := fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType)
-		record.RespBody = []byte("###error gateway, " + err.Error())
+		record.SetRespBody("###error gateway, " + err.Error())
 		p.GetErrorHandler()(rw, req, err)
 		return
 	}
@@ -201,6 +210,9 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// ==== recordtrace ====>>>
 	if record != nil {
 		record.LogOutRequest(outreq)
+		trace.ConnectDone = func(network, addr string, err error) {
+			record.SetUpstream(addr) // record upstream address
+		}
 	}
 	// ==== recordtrace ====<<<
 
@@ -213,7 +225,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	roundTripDone = true
 	roundTripMutex.Unlock()
 	if err != nil {
-		record.RespBody = []byte("###error gateway, " + err.Error())
+		record.SetRespBody("###error gateway, " + err.Error())
 		p.GetErrorHandler()(rw, outreq, err)
 		return
 	}
@@ -287,7 +299,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (p *GatewayProxy) CopyResponse2(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration, record *RecordTrace) error {
+func (p *GatewayProxy) CopyResponse2(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration, record RecordTrace) error {
 	var w io.Writer = dst
 
 	if flushInterval != 0 {

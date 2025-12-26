@@ -81,6 +81,9 @@ func (aa *TOML) Parse(bts []byte) error {
 			continue // 忽略无效行
 		}
 		key := strings.TrimSpace(parts[0])
+		if len(key) > 2 && key[0] == '"' && key[len(key)-1] == '"' {
+			key = key[1 : len(key)-1]
+		}
 		val := strings.TrimSpace(parts[1])
 
 		// 将键值对存入对应嵌套结构

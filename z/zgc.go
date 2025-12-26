@@ -136,6 +136,8 @@ func NewCtx(svckit SvcKit, request *http.Request, writer http.ResponseWriter, ro
 }
 
 // 获取请求 action
+// 1. 优先使用 query.action
+// 2. 其次使用 path[1:] 作为 action, 注意，如果需要补全path， 需要增加 /
 func GetAction(uu *url.URL) string {
 	action := uu.Query().Get("action")
 	if action == "" {
@@ -270,6 +272,8 @@ func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
 	}
 	if rs.ErrShow > 0 {
 		ha["showType"] = rs.ErrShow
+	} else {
+		ha["showType"] = 1 // default
 	}
 	if rs.TraceID != "" {
 		ha["traceId"] = rs.TraceID

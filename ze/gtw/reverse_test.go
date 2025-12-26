@@ -26,7 +26,7 @@ func Test_lower(t *testing.T) {
 	str := "123ABCabcDEF"
 	buf := bytes.NewBuffer([]byte{})
 	for _, r := range str {
-		buf.WriteByte(gtw.LowerByte(byte(r)))
+		buf.WriteByte(gtw.ToLowerB(byte(r)))
 	}
 	t.Log(buf.String())
 

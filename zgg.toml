@@ -5,10 +5,23 @@ debug=true
 
 [server]
 local = true
-port = 80
+port = 81
 # engine=rdx
+xrt="2"
 
 [front2]
-tmplsuff=".html,.htm,.css,.map,.js,.ts,.json"
-indexs="/zgg=index.htm,/demo=demo.html"
-dirs="/zgg,/demo"
+f2show="/site/list123456"
+suff=[".html",".htm",".css",".map",".js",".ts",".json"]
+rootpath=["/zgg","/demo"]
+# indexs="/zgg=index.htm,/demo=demo.html"
+
+[front2.indexs]
+"/zgg"="index.htm"
+"/demo"="demo.html"
+
+[kwdog2]
+rootpath=""
+authz="http://end-iam-kin-app.uat-fmes.svc/authx"
+
+[kwdog2.routers]
+"/api/iam/"="http://end-iam-kin-app.uat-fmes.svc"

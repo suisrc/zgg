@@ -1,4 +1,4 @@
-@BASE=http://127.0.0.1:80
+@BASE=http://127.0.0.1:81
 
 ### 
 GET {{BASE}}/healthz
@@ -18,6 +18,9 @@ X-Request-Rt: 3
 GET {{BASE}}/?action=healthz
 Content-Type: application/json
 
+// -----------------------------------------------
+// hello
+
 ### 
 GET {{BASE}}/?action=hello
 Content-Type: application/json
@@ -33,7 +36,15 @@ Content-Type: application/json
 ### 
 GET {{BASE}}/token
 Content-Type: application/json
+Authorization: Token 123
 
+### 
+GET {{BASE}}/token
+Content-Type: application/json
+Authorization: Token 1234
+
+// -----------------------------------------------
+// front2
 
 ### 
 GET {{BASE}}/1/2/3
@@ -45,4 +56,15 @@ GET {{BASE}}/zgg/1/2/3
 GET {{BASE}}/demo/1/2/3
 
 ### 
-GET {{BASE}}/site/list
+GET {{BASE}}/demo/1/2/3.txt
+
+### 
+GET {{BASE}}/site/list123456
+
+### 
+GET {{BASE}}/api1/test
+
+
+// -----------------------------------------------
+// kwdog2
+
