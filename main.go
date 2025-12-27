@@ -33,6 +33,6 @@ var (
  */
 func main() {
 	// front2.Init(wwwFS) // 由于需要 wwwFS参数，必须人工初始化
-	kwdog2.Init() // 初始化， 没有参数可以自动初始化
+	kwdog2.Init() // 反向代理 没有参数可以自动初始化
 	z.Execute(appname, version, "(https://github.com/suisrc/k8skit) main")
 }

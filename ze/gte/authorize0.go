@@ -9,7 +9,7 @@ import (
 )
 
 // 只记录日志， 不进行鉴权
-func NewLoggerAuthz(sites []string) *gtw.Authorize0 {
+func NewLoggerOnly(sites []string) *gtw.Authorize0 {
 	gw := gtw.NewAuthorize0(sites)
 	return &gw
 }
