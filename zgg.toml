@@ -6,6 +6,7 @@ debug=true
 [server]
 local = true
 port = 81
+# addr = "0.0.0.0"
 # engine=rdx
 xrt="2"
 

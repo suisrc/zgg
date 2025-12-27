@@ -101,7 +101,7 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		}
 	}
 	// 处理结果
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= 300 || resp.Header.Get("X-Request-Sky-Authorize") == "" {
 		// 验证失败，返回结果
 		body, _ := io.ReadAll(resp.Body)
 		// 记录返回日志
@@ -124,6 +124,7 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		rw.Write(body)
 		return false
 	}
+
 	// 验证成功，继续后续访问, Set-Cookie 传递给 rw
 	if sc, ok := rw.Header()["Set-Cookie"]; ok {
 		for _, v := range sc {

@@ -21,3 +21,4 @@ dist
 _out
 *.log
 www
+__zgg.toml

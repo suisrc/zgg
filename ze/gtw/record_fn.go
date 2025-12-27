@@ -21,7 +21,7 @@ func (t *Record0) LogRequest(req *http.Request) {
 	t.UserAgent = req.UserAgent()
 	t.Referer = req.Referer()
 
-	t.Scheme = req.URL.Scheme
+	t.Scheme = req.Header.Get("X-Scheme")
 	t.Method = req.Method
 	t.ReqHost = req.Host
 	t.ReqURL = req.URL.String()

@@ -65,7 +65,9 @@ func (aa *Authorize0) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Reques
 	if cid != nil {
 		// 如果时间小于1/8，续签
 		if idx := strings.LastIndexByte(cid.Value, '.'); idx <= 0 || idx == len(cid.Value)-1 {
+			return true // 不同的版本，不创建，不续签
 		} else if ctc, err := strconv.Atoi(cid.Value[idx+1:]); err != nil {
+			return true // 不同的版本，不创建，不续签
 		} else if time.Now().Unix()-int64(ctc) > int64(aa.ClientAge-aa.ClientAge/8) {
 			cookie := &http.Cookie{
 				Name:     aa.ClientKey,

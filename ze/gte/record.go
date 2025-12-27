@@ -83,9 +83,6 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	if rt == nil {
 		return // 跳过
 	}
-	rc.ServiceName = rt.ReqHost
-	rc.ServiceAddr = rt.UpstreamAddr
-	rc.ServiceAuth = rt.SrvAuthzAddr
 	rc.GatewayName = GetLanDomain()
 
 	rc.TraceId = rt.TraceID
@@ -140,22 +137,28 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 		}
 	}
 
-	rc.Responder = rc.ServiceAddr
+	rc.ServiceName = rt.ReqHost
+	rc.ServiceAddr = rt.UpstreamAddr
+	rc.ServiceAuth = rt.SrvAuthzAddr
+
 	rc.Requester = rc.RemoteAddr
 	if strings.HasPrefix(rc.Requester, "127.0.0.1") {
-		// 解析本地IP, 一般是边车服务导致的, 需要提供当前节点
-		rc.Requester = GetLanDomain() + "/" + GetLocAreaIp()
+		// 请求者是自己？本地调试或者正向代理， 标志当前节点名称即可
+		rc.Requester = GetLanDomain() + "/" + rc.Requester
 	}
+	rc.Responder = rc.ServiceAddr
 	if strings.HasPrefix(rc.Responder, "127.0.0.1") {
-		rc.Responder = GetLanDomain() + "/" + GetLocAreaIp()
-	}
-	if strings.HasSuffix(rc.ServiceName, ".svc") || strings.HasSuffix(rc.ServiceName, ".local") {
-		// zzz.xxx.svc.cluster.local -> aaa.zzz.xxx.svc.cluster.local
-		lan := GetLanDomain()
-		if lan != "localhost" {
-			rc.ServiceName = strings.Join([]string{lan, rc.ServiceName}, ".")
+		// 接受者是自己， kwdog 鉴权系统拦截，需要标记服务名为节点
+		_, port, _ := net.SplitHostPort(rc.ServiceAddr)
+		rc.ServiceAddr = GetLocAreaIp()
+		if port != "" {
+			rc.ServiceAddr = rc.ServiceAddr + ":" + port
 		}
+		rc.Responder = rc.GatewayName + "/" + rc.ServiceAddr
+		rc.ServiceName = rc.GatewayName
 	}
+	// 清除多余后缀，注意， statefulset 是 全面，pod 和 deployment 非全名
+	rc.ServiceName = strings.TrimSuffix(rc.ServiceName, ".cluster.local")
 	// -------------------------------------------------------------------
 	// 请求
 	if rt.OutReqHeader != nil {
@@ -265,6 +268,10 @@ func GetLocAreaIp() string {
 			} else {
 				loc_areaip = strings.TrimSpace(ips[0])
 				lan_domain = strings.TrimSpace(ips[1])
+				if !strings.ContainsRune(lan_domain, '.') {
+					// 特殊情况，比如 pod 或者 deployment情况
+					lan_domain += ".pod." + GetNamespace() + ".svc"
+				}
 				break
 			}
 		}
@@ -293,7 +300,7 @@ func GetNamespace() string {
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		z.Printf("unable to read namespace: %s, return 'default'", err.Error())
-		namespace_ = "default"
+		namespace_ = "-"
 	} else {
 		namespace_ = string(ns)
 	}
