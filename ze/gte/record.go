@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"net"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/cfg"
 	"github.com/suisrc/zgg/ze/gtw"
 )
@@ -83,7 +81,7 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	if rt == nil {
 		return // 跳过
 	}
-	rc.GatewayName = GetLanDomain()
+	rc.GatewayName = gtw.GetServeName()
 
 	rc.TraceId = rt.TraceID
 	rc.RemoteIp = rt.RemoteIP
@@ -144,21 +142,21 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	rc.Requester = rc.RemoteAddr
 	if strings.HasPrefix(rc.Requester, "127.0.0.1") {
 		// 请求者是自己？本地调试或者正向代理， 标志当前节点名称即可
-		rc.Requester = GetLanDomain() + "/" + rc.Requester
+		rc.Requester = rc.GatewayName + "/" + rc.Requester
 	}
 	rc.Responder = rc.ServiceAddr
 	if strings.HasPrefix(rc.Responder, "127.0.0.1") {
 		// 接受者是自己， kwdog 鉴权系统拦截，需要标记服务名为节点
 		_, port, _ := net.SplitHostPort(rc.ServiceAddr)
-		rc.ServiceAddr = GetLocAreaIp()
+		rc.ServiceAddr = gtw.GetLocAreaIp()
 		if port != "" {
 			rc.ServiceAddr = rc.ServiceAddr + ":" + port
 		}
-		rc.Responder = rc.GatewayName + "/" + rc.ServiceAddr
+		rc.Responder = rc.GatewayName + "/" + rc.Responder
 		rc.ServiceName = rc.GatewayName
 	}
 	// 清除多余后缀，注意， statefulset 是 全面，pod 和 deployment 非全名
-	rc.ServiceName = strings.TrimSuffix(rc.ServiceName, ".cluster.local")
+	// rc.ServiceName = strings.TrimSuffix(rc.ServiceName, ".cluster.local")
 	// -------------------------------------------------------------------
 	// 请求
 	if rt.OutReqHeader != nil {
@@ -233,76 +231,4 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 		}
 	}
 
-}
-
-// -------------------------------------------------------------------
-var (
-	loc_areaip = ""
-	lan_domain = ""
-	namespace_ = ""
-)
-
-// 获取局域网地址
-func GetLocAreaIp() string {
-	if loc_areaip != "" {
-		return loc_areaip
-	}
-	// 通过 /etc/hosts 获取局域网地址
-	bts, err := os.ReadFile("/etc/hosts")
-	if err != nil {
-		z.Printf("unable to read /etc/hosts: %s", err.Error())
-	} else {
-		for line := range strings.SplitSeq(string(bts), "\n") {
-			if strings.HasPrefix(line, "#") {
-				continue
-			}
-			ips := strings.Fields(line)
-			// println("=============", cfg.ToStr(ips), len(ips))
-			if len(ips) < 2 {
-				continue
-			}
-			// 判断是否为 IPv4 地址
-			if ip := net.ParseIP(strings.TrimSpace(ips[0])); ip == nil {
-			} else if v4 := ip.To4(); v4 == nil {
-			} else if v4.IsLoopback() {
-			} else {
-				loc_areaip = strings.TrimSpace(ips[0])
-				lan_domain = strings.TrimSpace(ips[1])
-				if !strings.ContainsRune(lan_domain, '.') {
-					// 特殊情况，比如 pod 或者 deployment情况
-					lan_domain += ".pod." + GetNamespace() + ".svc"
-				}
-				break
-			}
-		}
-	}
-	if loc_areaip == "" {
-		loc_areaip = "127.0.0.1" // 无法解析
-		lan_domain = "localhost"
-	}
-
-	return loc_areaip
-}
-
-// 获取局域网域名
-func GetLanDomain() string {
-	if lan_domain != "" {
-		return lan_domain
-	}
-	GetLocAreaIp()
-	return lan_domain
-}
-
-func GetNamespace() string {
-	if namespace_ != "" {
-		return namespace_
-	}
-	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		z.Printf("unable to read namespace: %s, return 'default'", err.Error())
-		namespace_ = "-"
-	} else {
-		namespace_ = string(ns)
-	}
-	return namespace_
 }
