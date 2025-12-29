@@ -25,6 +25,8 @@ type Kwdog2Config struct {
 	Routers  map[string]string `json:"routers"`  // 其他路由
 	Routerl  bool              `json:"routerl"`  // 是否记录日志
 	Sites    []string          `json:"sites"`    // 站点列表， 用于标记 _xc
+	Syslog   string            `json:"syslog"`   // 日志发送地址
+	Ttylog   bool              `json:"ttylog"`   // 是否打印日志
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -42,7 +44,9 @@ func Init3(ifn InitializFunc) {
 	flag.StringVar(&C.Kwdog2.AuthAddr, "k2aa", "", "认证服务地址， 默认只支持 f1kin 服务")
 	flag.Var(cfg.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
 	flag.BoolVar(&C.Kwdog2.Routerl, "k2rlog", false, "认证服务地址， 默认只支持 f1kin 服务")
-	flag.Var(cfg.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "kwdog flag domain site")
+	flag.Var(cfg.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
+	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
+	flag.BoolVar(&C.Kwdog2.Ttylog, "k2ttylog", false, "是否打印日志")
 
 	z.Register("01-kwdog2", func(srv z.IServer) z.Closed {
 		var err error
@@ -55,7 +59,7 @@ func Init3(ifn InitializFunc) {
 			Sites:      C.Kwdog2.Sites,
 			GatewayMap: make(map[string]gtw.IGateway),
 		}
-		api.RecordPool = gte.NewRecordStdout()
+		api.RecordPool = gte.NewRecordSyslog(C.Kwdog2.Syslog, "udp", 0, C.Kwdog2.Ttylog)
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
 		api.GtwDefault, err = gtw.NewTargetGateway(api.ServAddr, api.BufferPool)
 		if err != nil {

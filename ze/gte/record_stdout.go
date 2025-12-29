@@ -11,28 +11,29 @@ import (
 
 // 日志转存到控制台上
 
-func NewRecordStdout() gtw.RecordPool {
-	return gtw.NewRecordPool(RecordToStdout)
+func NewRecordPrint() gtw.RecordPool {
+	return gtw.NewRecordPool(RecordPrint)
 }
 
-func RecordToStdout(rt gtw.RecordTrace) {
+func RecordPrint(rt gtw.RecordTrace) {
 	rc := &Record{}
 	rc.ByRecord0(rt.(*gtw.Record0))
 	z.Println("[_record_]", rc.ToFormatStr())
 }
 
+// -----------------------------------
 // 日志转存到文件, 简单参考，不要用于生产
 
-func NewRecordStdoutAndFile(file string) gtw.RecordPool {
-	return gtw.NewRecordPool((&recordSimpleFile{file: file}).Init().log)
+func NewRecordSimpleFile(file string) gtw.RecordPool {
+	return gtw.NewRecordPool((&rSimpleFile{file: file}).Init().log)
 }
 
-type recordSimpleFile struct {
+type rSimpleFile struct {
 	lock sync.Mutex
 	file string
 }
 
-func (r *recordSimpleFile) Init() *recordSimpleFile {
+func (r *rSimpleFile) Init() *rSimpleFile {
 	// file 的文件夹是否存在，不存在， 创建文件夹
 	_, err := os.Stat(r.file)
 	if os.IsNotExist(err) {
@@ -41,11 +42,10 @@ func (r *recordSimpleFile) Init() *recordSimpleFile {
 	return r
 }
 
-func (r *recordSimpleFile) log(rt gtw.RecordTrace) {
+func (r *rSimpleFile) log(rt gtw.RecordTrace) {
 	rc := &Record{}
 	rc.ByRecord0(rt.(*gtw.Record0))
 	bs, _ := rc.MarshalJSON()
-	// z.Println(string(bs))
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	// 追加写入文件

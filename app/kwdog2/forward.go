@@ -15,7 +15,7 @@ func Init2() {
 
 	z.Register("01-kwdog2", func(srv z.IServer) z.Closed {
 		api := &ForwardApi{}
-		arp := gte.NewRecordStdout()
+		arp := gte.NewRecordPrint()
 		abp := gtw.NewBufferPool(32*1024, 0)
 		api.GtwDefault = &gtw.GatewayProxy{ReverseProxy: gtw.ReverseProxy{BufferPool: abp}}
 		api.GtwDefault.Director = func(r *http.Request) {}

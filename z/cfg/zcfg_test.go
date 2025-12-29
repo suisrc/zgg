@@ -181,7 +181,7 @@ type Record struct {
 }
 
 func (r Record) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, false)
+	return cfg.ToJsonBytes(&r, "json", cfg.LowerFirst, false)
 }
 
 type RecordData struct {
@@ -190,7 +190,7 @@ type RecordData struct {
 }
 
 func (r RecordData) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBts(&r, "json", cfg.Camel2Case, true)
+	return cfg.ToJsonBytes(&r, "json", cfg.Camel2Case, true)
 }
 
 // go test -v z/cfg/zcfg_test.go -run Test_ToJson

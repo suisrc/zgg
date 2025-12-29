@@ -1,9 +1,9 @@
 package front2
 
 import (
-	"embed"
 	"flag"
 	"io"
+	"io/fs"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -21,47 +21,47 @@ var (
 )
 
 type Front2Config struct {
+	Folder   string            `json:"folder"`
+	ShowPath string            `json:"f2show"`
 	IsNative bool              `json:"native"`
 	RootPath []string          `json:"rootpath"`
 	Index    string            `json:"index"`
 	Indexs   map[string]string `json:"indexs"`
 	TmplPath string            `json:"tmpl"`
 	TmplSuff []string          `json:"suff"`
-	ShowPath string            `json:"f2show"`
 	Routers  map[string]string `json:"routers"`
-	Folder   string            `json:"folder"`
 }
 
 // 初始化方法， 处理 api 的而外配置接口
 type InitializFunc func(api *IndexApi, srv z.IServer)
 
-func Init(www embed.FS) {
+func Init(www fs.FS) {
 	Init3(www, nil)
 }
 
-func Init3(www embed.FS, ifn InitializFunc) {
+func Init3(www fs.FS, ifn InitializFunc) {
 	cfg.Register(&C)
 
+	flag.StringVar(&C.Front2.Folder, "f2folder", "/www", "static folder")
+	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
 	flag.Var(cfg.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
 	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
 	flag.Var(cfg.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
 	flag.Var(cfg.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
-	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.Var(cfg.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
-	flag.StringVar(&C.Front2.Folder, "f2folder", "/www", "static folder")
 
 	z.Register("00-front2", func(srv z.IServer) z.Closed {
 		hfs := http.FS(www)
 		api := &IndexApi{
+			Folder:   C.Front2.Folder,
+			ShowPath: C.Front2.ShowPath,
 			RootPath: C.Front2.RootPath,
 			TmplPath: C.Front2.TmplPath,
 			TmplSuff: C.Front2.TmplSuff,
 			Index_:   C.Front2.Index,
 			Indexs:   C.Front2.Indexs,
-			Folder:   C.Front2.Folder,
-			ShowPath: C.Front2.ShowPath,
 			Routers:  C.Front2.Routers,
 			HttpFS:   hfs,
 			ProxyMap: make(map[string]http.Handler),
@@ -82,13 +82,13 @@ func Init3(www embed.FS, ifn InitializFunc) {
 }
 
 type IndexApi struct {
+	Folder   string            // 文件系统文件夹， 比如 /www, 必须是 / 开头
+	ShowPath string            // 显示 www 文件夹资源
 	RootPath []string          // 访问根目录, 访问根目录， 删除根目录后才是文件目录
 	TmplPath string            // 模版根目录, ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
 	TmplSuff []string          // 替换文件后缀, .html .htm .css .map .js
 	Index_   string            // 默认首页文件名, index.html
 	Indexs   map[string]string // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
-	Folder   string            // 文件系统文件夹， 比如 /www, 必须是 / 开头
-	ShowPath string            // 显示 www 文件夹资源
 	Routers  map[string]string // 路由表
 
 	ServeFS  http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补

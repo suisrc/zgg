@@ -24,6 +24,14 @@ rootpath=["/zgg","/demo"]
 rootpath=""
 authz="http://end-iam-kin-svc.uat-fmes.svc/authx"
 servaddr="http://end-iam-pas-svc.uat-fmes.svc"
+ttylog=true
+syslog="klog.default.svc:5141"
 
 [kwdog2.routers]
 "/api/iam/"="http://end-iam-kin-svc.uat-fmes.svc"
+
+[fluent]
+token="xxx123456789"
+store="./www"
+route="/api/zgg/logs"
+use_origin=true

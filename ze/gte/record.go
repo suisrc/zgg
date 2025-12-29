@@ -58,13 +58,13 @@ type Record struct {
 	RespHeaders string
 
 	ReqBody  string
-	RespBody string
+	RespBody any
 	RespSize int64
 	Result2  string
 }
 
 func (r Record) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, false)
+	return cfg.ToJsonBytes(&r, "json", cfg.LowerFirst, false)
 }
 
 func (rc *Record) ToStr() string {
@@ -197,7 +197,16 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 		}
 	}
 	if len(rt.RespBody) > 0 {
-		rc.RespBody = string(rt.RespBody)
+		if rt.RespBody[0] == '{' {
+			// json 响应体，解析内容， 如果解析失败，跳过，这里需要消耗大量资源
+			map_ := map[string]any{}
+			if err := json.Unmarshal(rt.RespBody, &map_); err == nil {
+				rc.RespBody = map_
+			}
+		}
+		if rc.RespBody == nil {
+			rc.RespBody = string(rt.RespBody)
+		}
 	}
 	rc.RespSize = rt.RespSize
 	// -------------------------------------------------------------------
@@ -206,27 +215,25 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 		rc.Result2 = "abnormal"
 	} else if rc.Status >= 300 {
 		rc.Result2 = "redirect"
-	} else if len(rt.RespBody) > 0 && rt.RespBody[0] == '{' {
-		// 响应体是 json, 尝试解析，确定响应结果
-		data := map[string]any{}
-		if err := json.Unmarshal(rt.RespBody, &data); err == nil {
-			// 解析 json 响应体
-			if succ, _ := data["success"]; succ != nil && !succ.(bool) {
-				if showType, _ := data["showType"]; showType != nil {
-					if showType.(int) == 9 {
-						rc.Result2 = "redirect"
-					} else {
-						rc.Result2 = "abnormal"
-					}
-				} else if errshow, _ := data["errshow"]; errshow != nil {
-					if errshow.(int) == 9 {
-						rc.Result2 = "redirect"
-					} else {
-						rc.Result2 = "abnormal"
-					}
+	} else if rc.RespBody == nil {
+		// 响应体为空
+	} else if data, ok := rc.RespBody.(map[string]any); ok {
+		// 解析 json 响应体
+		if succ, _ := data["success"]; succ != nil && !succ.(bool) {
+			if showType, _ := data["showType"]; showType != nil {
+				if showType.(int) == 9 {
+					rc.Result2 = "redirect"
 				} else {
 					rc.Result2 = "abnormal"
 				}
+			} else if errshow, _ := data["errshow"]; errshow != nil {
+				if errshow.(int) == 9 {
+					rc.Result2 = "redirect"
+				} else {
+					rc.Result2 = "abnormal"
+				}
+			} else {
+				rc.Result2 = "abnormal"
 			}
 		}
 	}

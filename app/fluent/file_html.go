@@ -1,4 +1,4 @@
-package front2
+package fluent
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 
 var (
 	html_top = `
-<html><head><title>SiteFile</title></head>
+<html><head><title>LOGS</title></head>
 <body>
-<h1>Site File List /</h1><hr><pre>
+<h1>Logs File List /</h1><hr><pre>
 
 `
 	thml_end = `
@@ -21,17 +21,18 @@ var (
 )
 
 // 列表文件
-func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
+func (aa *FluentApi) lst(zrc *z.Ctx) bool {
 	rw := zrc.Writer
 	rr := zrc.Request
 
 	// query参数，path: 文件路径
 	queryPath := rr.URL.Query().Get("path")
-	if queryPath == "" {
-		queryPath = aa.Folder
-	}
-	if !strings.HasPrefix(queryPath, aa.Folder) {
-		queryPath = aa.Folder
+	if strings.Contains(queryPath, "..") {
+		rw.WriteHeader(http.StatusForbidden)
+		rw.Write([]byte("Forbidden"))
+		return true
+	} else if queryPath == "" {
+		queryPath = "/"
 	}
 	// 兑换为 http fs 系统的文件
 	httpFile, err := aa.HttpFS.Open(queryPath)
@@ -41,10 +42,8 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
 		rw.Write([]byte(err.Error()))
 		return true
 	}
-	// 退出时候关闭文件
-	defer httpFile.Close()
-
-	// 确定文件状态
+	defer httpFile.Close() // 退出时候关闭文件
+	// 确定文件状态 ========================================================
 	if httpStat, err := httpFile.Stat(); err != nil {
 		// 读取文件信息发生异常
 		http.NotFound(rw, rr)
@@ -60,17 +59,20 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
 		var html_body strings.Builder
 		// <a href="../">../</a>
 		parentPath := filepath.Dir(queryPath)
-		if !strings.HasPrefix(parentPath, aa.Folder) {
-			parentPath = aa.Folder
+		if parentPath == "/" {
+			parentPath = ""
 		}
-		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.ShowPath, parentPath)
+		if queryPath == "/" {
+			queryPath = ""
+		}
+		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.RoutePath, parentPath)
 		for _, path := range pathList {
 			name := path.Name()
 			if path.IsDir() {
 				name = name + "/"
 			}
 			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.ShowPath, queryPath, path.Name(), name)
+				aa.RoutePath, queryPath, path.Name(), name)
 		}
 		// 整合列表到 html 中
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")

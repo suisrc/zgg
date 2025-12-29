@@ -96,3 +96,24 @@ Authorization: Bearer kst.9B8A147880FE5434E281C58CDF2EC43E00000002WL90PxBIoL0y2i
 {
     "name": "kwdog"
 }
+
+// -----------------------------------------------
+// fluent
+### 
+POST {{BASE}}/api/zgg/logs
+Content-Type: application/json
+Authorization: Token xxx123456789
+X-Request-Tag: test.dev
+
+[{
+    "_time": "2025-12-28T10:06:39.425043028Z",
+    "_ktag": "stderr",
+    "message": "[2025-12-28 10:06:39 +0000] [8] [INFO] Booting worker with pid: 8\u1234",
+    "__pod_name": "httpbin-69bf8fdb78-rcs4h",
+    "__namespace_name": "default",
+    "__node_name": "dev-master",
+    "__pod_ip": "10.42.0.122",
+    "__container_name": "httpbin-logtty\u123a",
+    "__container_image": "docker.io/kong/httpbin:0.2.3",
+    "__app_name": "httpbin"
+}]

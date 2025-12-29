@@ -808,14 +808,16 @@ func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[stri
 }
 
 //	func (r Data) MarshalJSON() ([]byte, error) {
-//		return cfg.ToJsonBts(&r, "json", cfg.LowerFirst, false)
+//		return cfg.ToJsonBytes(&r, "json", cfg.LowerFirst, false)
 //	}
+//
+// 修改字段名
 //
 // - @param val 结构体
 // - @param tag 标签
 // - @param kfn 键名转换函数
 // - @param non 是否忽略零值
-func ToJsonBts(val any, tag string, kfn func(string) string, non bool) ([]byte, error) {
+func ToJsonBytes(val any, tag string, kfn func(string) string, non bool) ([]byte, error) {
 	rst, err := ToJsonMap(val, tag, kfn, non)
 	if err != nil {
 		return nil, err
