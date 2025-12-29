@@ -139,3 +139,6 @@ var (
 
 [k8skit](https://github.com/suisrc/k8skit.git) k8s工具包
 - kubesider: k8s 边车注入服务
+- front2: 前端静态资源组件
+- kwdog2: 容器边车监控服务
+- fluent: 日志收集服务
