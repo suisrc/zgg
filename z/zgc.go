@@ -459,32 +459,3 @@ type Engine interface {
 }
 
 type EngineBuilder func(SvcKit) Engine
-
-// ------------------------------------------------------------------------
-// ------------------------------------------------------------------------
-
-// request token auth
-func TokenAuth(token *string, handle HandleFunc) HandleFunc {
-	// 需要验证令牌
-	return func(ctx *Ctx) bool {
-		if token == nil || *token == "" {
-			return handle(ctx) // auth pass
-		} else if ktn := ctx.Request.Header.Get("Authorization"); ktn == "Token "+*token {
-			return handle(ctx) // auth succ
-		}
-		return ctx.JSON(&Result{ErrCode: "invalid-token", Message: "无效的令牌"})
-	}
-}
-
-// merge multi func to one func
-func MergeFunc(handles ...HandleFunc) HandleFunc {
-	return func(ctx *Ctx) bool {
-		for _, hh := range handles {
-			if hh(ctx) {
-				ctx.Abort()
-				return true
-			}
-		}
-		return false
-	}
-}
