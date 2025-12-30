@@ -2,8 +2,10 @@ package front2
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/suisrc/zgg/z"
@@ -57,18 +59,36 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
 		http.NotFound(rw, rr)
 		rw.Write([]byte(err.Error()))
 	} else {
+		dirPaths := []fs.FileInfo{} // 文件夹
+		filPaths := []fs.FileInfo{} // 文件
+		for _, path := range pathList {
+			if path.IsDir() {
+				dirPaths = append(dirPaths, path)
+			} else {
+				filPaths = append(filPaths, path)
+			}
+		}
+		sort.Slice(dirPaths, func(i, j int) bool {
+			return dirPaths[i].Name() < dirPaths[j].Name()
+		})
+		sort.Slice(filPaths, func(i, j int) bool {
+			return filPaths[i].Name() < filPaths[j].Name()
+		})
+		// ----------------------------------------------------
 		var html_body strings.Builder
-		// <a href="../">../</a>
 		parentPath := filepath.Dir(queryPath)
 		if !strings.HasPrefix(parentPath, aa.Folder) {
 			parentPath = aa.Folder
 		}
+		// ----------------------------------------------------
 		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.ShowPath, parentPath)
-		for _, path := range pathList {
+		for _, path := range dirPaths {
+			name := path.Name() + "/"
+			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
+				aa.ShowPath, queryPath, path.Name(), name)
+		}
+		for _, path := range filPaths {
 			name := path.Name()
-			if path.IsDir() {
-				name = name + "/"
-			}
 			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
 				aa.ShowPath, queryPath, path.Name(), name)
 		}

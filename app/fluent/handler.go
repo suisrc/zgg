@@ -49,19 +49,19 @@ func Init() {
 			return nil
 		}
 
+		rp := C.Fluent.RoutePath
+		if rp[0] == '/' {
+			rp = rp[1:]
+		}
 		api := &FluentApi{
 			Token:     C.Fluent.Token,
 			StorePath: C.Fluent.StorePath,
-			RoutePath: C.Fluent.RoutePath,
+			RoutePath: "/" + rp,
 		}
 		api.AbsPath, _ = filepath.Abs(C.Fluent.StorePath)
 		z.Printf("[logstore]: store-path -> %s", api.AbsPath)
 		api.HttpFS = http.FS(os.DirFS(api.AbsPath))
 
-		rp := C.Fluent.RoutePath
-		if rp[0] == '/' {
-			rp = rp[1:]
-		}
 		srv.AddRouter("GET "+rp, api.lst)
 		if C.Fluent.Token != "" { // 增加访问令牌
 			srv.AddRouter("POST "+rp, z.TokenAuth(&api.Token, api.add))
