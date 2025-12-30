@@ -224,7 +224,7 @@ func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	if key == "" {
 		if IsDebug() {
-			Printf("[_handle_]: %36s    %v\n", "/", handle)
+			Printf("[_handle_]: %36s    %p\n", "/", handle)
 		}
 		aa.Engine.Handle("", "", handle)
 		return
@@ -252,7 +252,7 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	}
 
 	if IsDebug() { // log for debug
-		Printf("[_handle_]: %36s    %v\n", method+" /"+action, handle)
+		Printf("[_handle_]: %36s    %p\n", method+" /"+action, handle)
 	}
 	aa.Engine.Handle(method, action, handle)
 }

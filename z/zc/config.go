@@ -6,21 +6,23 @@
 package zc
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 )
 
 func init() {
-	cs = append(cs, C)
+	Register(C)
 }
 
 var (
 	// C 全局配置(需要先执行MustLoad，否则拿不到配置)
 	C = new(Config)
 	// cs 配置对象集合
-	cs = []any{}
+	cs = map[string]any{}
 )
 
 // Config 配置参数
@@ -32,13 +34,21 @@ type Config struct {
 // --------------------------------------------------------------------------------
 
 func Register(c any) {
-	cs = append(cs, c)
+	ctype := reflect.TypeOf(c)
+	if ctype.Kind() != reflect.Pointer {
+		panic("z/zc: Register c(arg) must be pointer")
+	}
+	cs[fmt.Sprintf("%v.%p", ctype.Elem(), c)] = c
 }
 
 // PrintConfig 打印配置
 func PrintConfig() {
 	if C.Print {
-		os.Stdout.WriteString(ToStr2(cs) + "\n")
+		for name, conf := range cs {
+			println("--------" + name)
+			println(ToStr2(conf))
+		}
+		println("----------------------------------------------")
 	}
 }
 
@@ -68,7 +78,7 @@ func MustLoad(fpaths ...string) {
 			if data, err := os.ReadFile(fpath); err == nil {
 				loaders = append(loaders, NewTOML(data))
 			} else {
-				log.Println("z/cfg: read file error, ", err.Error())
+				log.Println("z/zc: read file error, ", err.Error())
 			}
 		}
 		loaders = append(loaders, NewENV(CFG_ENV))
