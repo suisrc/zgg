@@ -1,10 +1,7 @@
 package app
 
 import (
-	"fmt"
-	"net/http"
 	"os"
-	"strings"
 
 	"github.com/suisrc/zgg/z"
 )
@@ -35,7 +32,7 @@ var (
 // -----------------------------------------------------------------------
 
 // 获取当前命名空间 k8s namespace
-func K8sNs() string {
+func K8sNS() string {
 	if namespace_ != "" {
 		return namespace_
 	}
@@ -68,19 +65,3 @@ func K8sNs() string {
 // 	klog.Info("using in cluster kubeconfig.")
 // 	return rest.InClusterConfig()
 // }
-
-// -----------------------------------------------------------------------
-
-func PostJson(req *http.Request) error {
-	if req.Method != http.MethodPost {
-		return fmt.Errorf("wrong http verb. got %s", req.Method)
-	}
-	if req.Body == nil {
-		return fmt.Errorf("empty body")
-	}
-	contentType := req.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "application/json") {
-		return fmt.Errorf("wrong content type. expected 'application/json', got: '%s'", contentType)
-	}
-	return nil
-}
