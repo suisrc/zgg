@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gte"
 	"github.com/suisrc/zgg/ze/gtw"
 )
@@ -37,14 +37,14 @@ func Init() {
 }
 
 func Init3(ifn InitializFunc) {
-	cfg.Register(&C)
+	zc.Register(&C)
 
 	flag.StringVar(&C.Kwdog2.RootPath, "k2rp", "", "根路径， 默认监控所有接口")
 	flag.StringVar(&C.Kwdog2.ServAddr, "k2sa", "http://127.0.0.1:80", "后端服务地址")
 	flag.StringVar(&C.Kwdog2.AuthAddr, "k2aa", "", "认证服务地址， 默认只支持 f1kin 服务")
-	flag.Var(cfg.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
+	flag.Var(zc.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
 	flag.BoolVar(&C.Kwdog2.Routerl, "k2rlog", false, "认证服务地址， 默认只支持 f1kin 服务")
-	flag.Var(cfg.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
+	flag.Var(zc.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
 	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
 	flag.BoolVar(&C.Kwdog2.Ttylog, "k2ttylog", false, "是否打印日志")
 
@@ -132,17 +132,17 @@ func (aa *KwdogApi) ServeHTTP(zrc *z.Ctx) bool {
 			continue
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
-			if z.C.Debug {
+			if zc.C.Debug {
 				z.Printf("[_routing]: [%s] %s -> %s\n", proxy.GetProxyName(), zrc.Action, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else if proxy, err := aa.NewProxy(kk, vv); err != nil {
-			if z.C.Debug {
+			if zc.C.Debug {
 				z.Printf("[_routing]: [%s] %s -> %s, %v\n", kk, zrc.Action, vv, err)
 			}
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		} else {
-			if z.C.Debug {
+			if zc.C.Debug {
 				z.Printf("[_routing]: [%s] %s -> %s\n", proxy.GetProxyName(), zrc.Action, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
@@ -150,7 +150,7 @@ func (aa *KwdogApi) ServeHTTP(zrc *z.Ctx) bool {
 		return true
 	}
 	// --------------------------------------------------------------
-	if z.C.Debug {
+	if zc.C.Debug {
 		z.Printf("[_routing]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, zrc.Action, aa.ServAddr)
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)

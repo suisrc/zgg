@@ -1,4 +1,4 @@
-package cfg_test
+package zc_test
 
 import (
 	"log"
@@ -6,18 +6,18 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 )
 
-// ZGG_S_A_B_D_0_A=12 go test -v z/cfg/zcfg_test.go -run Test_config
-// ZGG_S_C_A_E_2_N=12 go test -v z/cfg/zcfg_test.go -run Test_config
-// ZGG_DEBUG=1 go test -v z/cfg/zcfg_test.go -run Test_config
+// ZGG_S_A_B_D_0_A=12 go test -v z/zc/zc_test.go -run Test_config
+// ZGG_S_C_A_E_2_N=12 go test -v z/zc/zc_test.go -run Test_config
+// ZGG_DEBUG=1 go test -v z/zc/zc_test.go -run Test_config
 
 func Test_config(t *testing.T) {
-	cfg.Register(&Data{})
+	zc.Register(&Data{})
 	log.Println("===========================loading")
-	cfg.MustLoad("zcfg_test.toml")
-	cfg.PrintConfig()
+	zc.MustLoad("zc_test.toml")
+	zc.PrintConfig()
 	log.Println("===========================loading")
 }
 
@@ -50,82 +50,82 @@ type Data struct {
 	} `json:"s"`
 }
 
-// go test -v z/cfg/zcfg_test.go -run Test_toml
+// go test -v z/zc/zc_test.go -run Test_toml
 
 func Test_toml(t *testing.T) {
-	text, _ := os.ReadFile("zcfg_test.toml")
-	data := cfg.NewTOML(text).Map()
-	log.Println(cfg.ToStr2(data))
+	text, _ := os.ReadFile("zc_test.toml")
+	data := zc.NewTOML(text).Map()
+	log.Println(zc.ToStr2(data))
 }
 
-// go test -v z/cfg/zcfg_test.go -run Test_toml2
+// go test -v z/zc/zc_test.go -run Test_toml2
 
 func Test_toml2(t *testing.T) {
 	data := &Data{}
-	text, _ := os.ReadFile("zcfg_test.toml")
-	cfg.NewTOML(text).Decode(data, "json")
-	log.Println(cfg.ToStr2(data))
+	text, _ := os.ReadFile("zc_test.toml")
+	zc.NewTOML(text).Decode(data, "json")
+	log.Println(zc.ToStr2(data))
 	// log.Println("===========================")
-	// smap := cfg.ToMap(data, "json", true)
-	// log.Println(cfg.ToStr2(smap))
+	// smap := zc.ToMap(data, "json", true)
+	// log.Println(zc.ToStr2(smap))
 }
 
-// go test -v z/cfg/zcfg_test.go -run Test_tags
+// go test -v z/zc/zc_test.go -run Test_tags
 
 func Test_tags(t *testing.T) {
 	data := &Data{}
-	text, _ := os.ReadFile("zcfg_test.toml")
-	cfg.NewTOML(text).Decode(data, "json")
-	// tags, _, _ := cfg.ToTagMap(data, "json", true, nil)
-	tags := cfg.ToTagVal(data, "json")
+	text, _ := os.ReadFile("zc_test.toml")
+	zc.NewTOML(text).Decode(data, "json")
+	// tags, _, _ := zc.ToTagMap(data, "json", true, nil)
+	tags := zc.ToTagVal(data, "json")
 	log.Println("===========================")
-	log.Println(cfg.ToStr2(tags))
+	log.Println(zc.ToStr2(tags))
 	log.Println("===========================")
 	tags[len(tags)-1].Value.Set(reflect.ValueOf(12))
 	tags[0].Value.Set(reflect.ValueOf(true))
-	log.Println(cfg.ToStr2(data))
+	log.Println(zc.ToStr2(data))
 }
 
-// go test -v z/cfg/zcfg_test.go -run Test_StrToArr
+// go test -v z/zc/zc_test.go -run Test_StrToArr
 
 func Test_StrToArr(t *testing.T) {
 	str := `["a","b"]`
-	arr := cfg.ToStrArr(str)
+	arr := zc.ToStrArr(str)
 	log.Println(arr)
 
 	str = `[1, 2]`
-	arr = cfg.ToStrArr(str)
+	arr = zc.ToStrArr(str)
 	log.Println(arr)
 
 	str = `[a, b]`
-	arr = cfg.ToStrArr(str)
+	arr = zc.ToStrArr(str)
 	log.Println(arr)
 
 	str = `['a', 'b']`
-	arr = cfg.ToStrArr(str)
+	arr = zc.ToStrArr(str)
 	log.Println(arr)
 
 	str = `123.123`
-	aaa := cfg.ToStrOrArr(str)
+	aaa := zc.ToStrOrArr(str)
 	log.Println(aaa)
 
 	str = `"123.123"`
-	aaa = cfg.ToStrOrArr(str)
+	aaa = zc.ToStrOrArr(str)
 	log.Println(aaa)
 	log.Println("======================")
 	str = `["x", 1, true, 'y', "a'b", 'c"d', "e\\f"]`
-	arr = cfg.ToStrArr(str)
+	arr = zc.ToStrArr(str)
 	for _, v := range arr {
 		log.Println(v)
 	}
 	log.Println("======================")
 	str = `["x", 1, true, 'y', "a'b", 'c"d', "e\\f"]`
-	aaa = cfg.ToStrOrArr(str)
+	aaa = zc.ToStrOrArr(str)
 	log.Println(aaa)
 
 	log.Println("======================")
 	str = `["x", "a'b", "e\\f"]`
-	aaa = cfg.ToStrOrArr(str)
+	aaa = zc.ToStrOrArr(str)
 	log.Println(aaa)
 
 	log.Println("======================")
@@ -138,36 +138,36 @@ func Test_arr(t *testing.T) {
 	// log.Println(arr[:-1])
 }
 
-// go test -v z/cfg/zcfg_test.go -run Test_ToBasicVal
+// go test -v z/zc/zc_test.go -run Test_ToBasicVal
 
 func Test_ToBasicVal(t *testing.T) {
 	str := []string{"123", "456"}
 	var val any
 	var err error
-	val, err = cfg.ToBasicValue(reflect.TypeOf(float32(0)), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(float32(0)), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(float64(0)), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(float64(0)), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(int(0)), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(int(0)), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(int8(0)), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(int8(0)), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(int32(0)), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(int32(0)), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(int64(0)), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(int64(0)), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(""), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(""), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf([]byte("")), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf([]byte("")), str)
 	log.Printf("=======%#v | %v\n", string(val.([]byte)), err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf(str), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf(str), str)
 	log.Printf("=======%#v | %v\n", val, err)
 
-	val, err = cfg.ToBasicValue(reflect.TypeOf([]int{}), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf([]int{}), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf([]int32{}), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf([]int32{}), str)
 	log.Printf("=======%#v | %v\n", val, err)
-	val, err = cfg.ToBasicValue(reflect.TypeOf([][]byte{}), str)
+	val, err = zc.ToBasicValue(reflect.TypeOf([][]byte{}), str)
 	log.Printf("=======%#v | %v\n", string(val.([][]byte)[0]), err)
 
 }
@@ -181,7 +181,7 @@ type Record struct {
 }
 
 func (r Record) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBytes(&r, "json", cfg.LowerFirst, false)
+	return zc.ToJsonBytes(&r, "json", zc.LowerFirst, false)
 }
 
 type RecordData struct {
@@ -190,10 +190,10 @@ type RecordData struct {
 }
 
 func (r RecordData) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBytes(&r, "json", cfg.Camel2Case, true)
+	return zc.ToJsonBytes(&r, "json", zc.Camel2Case, true)
 }
 
-// go test -v z/cfg/zcfg_test.go -run Test_ToJson
+// go test -v z/zc/zc_test.go -run Test_ToJson
 
 func Test_ToJson(t *testing.T) {
 	record := Record{
@@ -204,5 +204,5 @@ func Test_ToJson(t *testing.T) {
 			AgeKey:  13,
 		},
 	}
-	log.Println(cfg.ToStr2(record))
+	log.Println(zc.ToStr2(record))
 }

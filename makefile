@@ -28,6 +28,8 @@ helm:
 main:
 	go run main.go -c __zgg.toml
 # -tpl ./tmpl
+tenv:
+	ZGG_SERVER_PORT=81 go run main.go -local -debug -print
 
 test:
 	_out/$(APP) version

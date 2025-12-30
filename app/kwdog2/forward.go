@@ -36,7 +36,7 @@ type ForwardApi struct {
 func (aa *ForwardApi) ServeHTTP(zrc *z.Ctx) bool {
 	rw := zrc.Writer
 	rr := zrc.Request
-	if z.C.Debug {
+	if z.IsDebug() {
 		z.Printf("[_routing]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)

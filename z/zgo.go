@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	crand "crypto/rand"
+	"flag"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -14,8 +15,45 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 )
+
+func IsDebug() bool {
+	return zc.C.Debug
+}
+
+func init() {
+	// 注册配置函数
+	zc.Register(C)
+}
+
+func LoadConfig() {
+	var cfs string
+	flag.StringVar(&cfs, "c", "", "config file path")
+	flag.BoolVar(&(zc.C.Debug), "debug", false, "debug mode")
+	flag.BoolVar(&(zc.C.Print), "print", false, "print mode")
+	flag.BoolVar(&(C.Server.Local), "local", false, "http server local mode")
+	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
+	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
+	flag.StringVar(&(C.Server.CrtFile), "crt", "", "http server cer file")
+	flag.StringVar(&(C.Server.KeyFile), "key", "", "http server key file")
+	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
+	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
+	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
+	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
+	flag.Parse()
+
+	if cfs != "" {
+		Printf("load config files:  %s\n", cfs)
+		zc.MustLoad(strings.Split(cfs, ",")...)
+	} else {
+		zc.MustLoad() // 加载默认配置，包括系统环境变量
+	}
+
+	zc.PrintConfig()
+}
+
+// -----------------------------------------------------------------------------------
 
 // 健康检查接口
 func Healthz(ctx *Ctx) bool {
@@ -35,7 +73,7 @@ type Ref[K cmp.Ordered, T any] struct {
 
 // map to struct
 func Mts[T any](target T, source map[string][]string, tagkey string) (T, error) {
-	return cfg.Map2ToStruct(target, source, tagkey)
+	return zc.Map2ToStruct(target, source, tagkey)
 }
 
 // 随机生成字符串， 0~f, 首字母不是 bb

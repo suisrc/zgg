@@ -3,13 +3,13 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
-package cfg_test
+package zc_test
 
 import (
 	"flag"
 	"testing"
 
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 )
 
 type VV struct {
@@ -20,7 +20,7 @@ type VV struct {
 	V5 map[string]string
 }
 
-// go test -v z/cfg/flag_test.go -run Test_flag
+// go test -v z/zc/flag_test.go -run Test_flag
 
 func Test_flag(t *testing.T) {
 
@@ -30,9 +30,9 @@ func Test_flag(t *testing.T) {
 	ff := &flag.FlagSet{}
 
 	ff.StringVar(&config.V1, "v1", "", "config v1")
-	ff.Var(cfg.NewStrArr(&config.V4, []string{"1", "2"}), "v4", "config v4")
-	ff.Var(cfg.NewStrMap(&config.V5, map[string]string{"k1": "v2", "k2": "v3"}), "v5", "config v5")
+	ff.Var(zc.NewStrArr(&config.V4, []string{"1", "2"}), "v4", "config v4")
+	ff.Var(zc.NewStrMap(&config.V5, map[string]string{"k1": "v2", "k2": "v3"}), "v5", "config v5")
 
 	ff.Parse([]string{"-v1", "123", "-v4", "3,4,5,6", "-v5", "k3=v4,k4=v5,k5,k6="})
-	t.Log("==", cfg.ToStr(config))
+	t.Log("==", zc.ToStr(config))
 }

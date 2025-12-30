@@ -11,7 +11,6 @@ import (
 	"context"
 	_ "embed"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -27,8 +26,6 @@ import (
 	"syscall"
 	"text/template"
 	"time"
-
-	"github.com/suisrc/zgg/z/cfg"
 )
 
 var (
@@ -42,7 +39,6 @@ var (
 	AppInfo = "(https://github.com/suisrc/zgg)"
 
 	C = new(struct {
-		Debug  bool
 		Server ServerConfig
 	})
 
@@ -64,37 +60,6 @@ type ServerConfig struct {
 	TplPath string `json:"tpl"`    // templates folder path
 	ReqXrtd string `json:"xrt"`    // X-Request-Rt default value
 	Engine  string `json:"engine"` // router engine
-}
-
-func init() {
-	// 注册配置函数
-	cfg.Register(C)
-}
-
-func LoadConfig() {
-	var cfs string
-	flag.StringVar(&cfs, "c", "", "config file path")
-	flag.BoolVar(&(C.Debug), "debug", false, "debug mode")
-	flag.BoolVar(&(C.Server.Local), "local", false, "http server local mode")
-	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
-	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
-	flag.StringVar(&(C.Server.CrtFile), "crt", "", "http server cer file")
-	flag.StringVar(&(C.Server.KeyFile), "key", "", "http server key file")
-	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
-	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
-	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
-	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
-	flag.Parse()
-
-	cfg.CFG_ENV = "zgg" // 默认环境变量前缀，ZGG_XXX, 可以取值 cfg.CFG_ENV = Appname
-	if cfs != "" {
-		Printf("load config files:  %s\n", cfs)
-		cfg.MustLoad(strings.Split(cfs, ",")...)
-	} else {
-		cfg.MustLoad() // 加载默认配置，包括系统环境变量
-	}
-
-	cfg.PrintConfig()
 }
 
 // ----------------------------------------------------------------------------
@@ -139,7 +104,7 @@ func (aa *Zgg) ServeInit(srv IServer) bool {
 	}
 	// -----------------------------------------------
 	if aa.SvcKit == nil {
-		aa.SvcKit = NewSvcKit(aa.RefSrv, C.Debug)
+		aa.SvcKit = NewSvcKit(aa.RefSrv, IsDebug())
 	}
 	if builder, ok := Engines[C.Server.Engine]; ok {
 		aa.Engine = builder(aa.SvcKit)
@@ -151,7 +116,7 @@ func (aa *Zgg) ServeInit(srv IServer) bool {
 	aa.Closeds = make([]Closed, 0)
 	// -----------------------------------------------
 	if aa.TplKit == nil {
-		aa.TplKit = NewTplKit(aa.RefSrv, C.Debug)
+		aa.TplKit = NewTplKit(aa.RefSrv, IsDebug())
 	}
 	if C.Server.TplPath != "" {
 		err := aa.TplKit.Preload(C.Server.TplPath)
@@ -166,7 +131,7 @@ func (aa *Zgg) ServeInit(srv IServer) bool {
 		if opt.Val == nil {
 			continue
 		}
-		if C.Debug {
+		if IsDebug() {
 			Println("[register]:", opt.Key)
 		}
 		cls := opt.Val(aa.RefSrv)
@@ -242,7 +207,7 @@ func (aa *Zgg) RunAndWait(hdl http.HandlerFunc) {
 
 // 默认相应函数 http.HandlerFunc
 func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
-	if C.Debug {
+	if IsDebug() {
 		Printf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
 		rw.Header().Set("Serv-Handler", aa.Engine.Name())
 	}
@@ -258,7 +223,7 @@ func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
  */
 func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	if key == "" {
-		if C.Debug {
+		if IsDebug() {
 			Printf("[_handle_]: %36s    %v\n", "/", handle)
 		}
 		aa.Engine.Handle("", "", handle)
@@ -286,7 +251,7 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 		method = strings.ToUpper(method)
 	}
 
-	if C.Debug { // log for debug
+	if IsDebug() { // log for debug
 		Printf("[_handle_]: %36s    %v\n", method+" /"+action, handle)
 	}
 	aa.Engine.Handle(method, action, handle)

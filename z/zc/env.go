@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
-package cfg
+package zc
 
 import (
 	"os"

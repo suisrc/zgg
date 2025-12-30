@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -64,15 +64,15 @@ type Record struct {
 }
 
 func (r Record) MarshalJSON() ([]byte, error) {
-	return cfg.ToJsonBytes(&r, "json", cfg.LowerFirst, false)
+	return zc.ToJsonBytes(&r, "json", zc.LowerFirst, false)
 }
 
 func (rc *Record) ToStr() string {
-	return cfg.ToStr2(&rc)
+	return zc.ToStr2(&rc)
 }
 
 func (rc *Record) ToFormatStr() string {
-	return cfg.ToStr2(&rc)
+	return zc.ToStr2(&rc)
 }
 
 // Convert by RecordTrace

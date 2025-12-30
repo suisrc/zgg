@@ -5,7 +5,7 @@
 
 // 一个基础 toml 解析器
 
-package cfg
+package zc
 
 import (
 	"bufio"

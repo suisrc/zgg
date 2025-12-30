@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -40,17 +40,17 @@ func Init(www fs.FS) {
 }
 
 func Init3(www fs.FS, ifn InitializFunc) {
-	cfg.Register(&C)
+	zc.Register(&C)
 
 	flag.StringVar(&C.Front2.Folder, "f2folder", "/www", "static folder")
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
-	flag.Var(cfg.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
+	flag.Var(zc.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
 	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
-	flag.Var(cfg.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
+	flag.Var(zc.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
-	flag.Var(cfg.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
-	flag.Var(cfg.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
+	flag.Var(zc.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
+	flag.Var(zc.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
 
 	z.Register("00-front2", func(srv z.IServer) z.Closed {
 		hfs := http.FS(www)
@@ -122,7 +122,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) bool {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
-		if z.C.Debug {
+		if zc.C.Debug {
 			z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
@@ -136,7 +136,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) bool {
 	}
 	// --------------------------------------------------------------
 	rp := FixPath(rr, aa.RootPath, aa.Folder)
-	if z.C.Debug {
+	if zc.C.Debug {
 		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			rr.URL.Path, rr.URL.RawPath, rp)
 	}

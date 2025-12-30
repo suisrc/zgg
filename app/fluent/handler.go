@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/cfg"
+	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
@@ -29,7 +29,7 @@ type FluentConfig struct {
 }
 
 func Init() {
-	cfg.Register(&C)
+	zc.Register(&C)
 
 	flag.StringVar(&C.Fluent.StorePath, "logstore", "logs", "日志存储路径")
 	flag.StringVar(&C.Fluent.RoutePath, "logroute", "api/logs", "路由访问路径")
@@ -38,7 +38,7 @@ func Init() {
 	flag.Int64Var(&C.Fluent.MaxSize, "logmaxsize", 10*1024*1024, "日志文件最大大小, 默认 10M")
 
 	z.Register("03-fluent", func(srv z.IServer) z.Closed {
-		if !z.C.Debug && strings.Contains(C.Fluent.StorePath, "../") {
+		if !zc.C.Debug && strings.Contains(C.Fluent.StorePath, "../") {
 			z.Printf("logstore path error, contains '../': %s", C.Fluent.StorePath)
 			srv.ServeStop()
 			return nil
