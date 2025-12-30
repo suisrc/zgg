@@ -21,7 +21,7 @@ wire 是一个依赖注入框架， 但是考虑到框架本身就比较小，�
 ## 快速开发
 
 ```go
-package app
+package zhe
 
 import (
 	"github.com/suisrc/zgg/z"
@@ -62,16 +62,29 @@ type HelloApi struct {
 # 命令
 xxx [command] [arguments]
 
-xxx web (default)
-  -c     string # 配置文件
-  -debug bool   # debug mode 
-  -local bool   # local mode， addr = 127.0.0.1
-  -addr  string # 服务绑定的ip， (default "0.0.0.0")
-  -port  int    # 服务绑定的 port，(default 80)
-  -crt   string # 服务绑定的 crt file，https 模式
-  -key   string # 服务绑定的 key file，https 模式
-  -eng   string # 路由引擎， 默认 map， 其他： mux， rdx
-  -api   string # 服务绑定的 api root path
+kdemo 
+  -addr string
+        http server addr (default "0.0.0.0")
+  -api string
+        http server api path
+  -c string
+        config file path
+  -crt string
+        http server cer file
+  -debug
+        debug mode
+  -eng string
+        http server router engine (default "map")
+  -key string
+        http server key file
+  -local
+        http server local mode
+  -port int
+        http server Port (default 80)
+  -tpl string
+        templates folder path
+  -xrt string
+        X-Request-Rt default value
 
 xxx version # 查看应用版本
 
@@ -87,7 +100,9 @@ xxx -debug -local
 
 ```
 
-## 其他说明
+## 使用说明
 
-[k8skit](https://github.com/suisrc/k8skit.git) k8s工具包
-- kubesider: k8s 边车注入服务
+
+ k8s集群工具箱
+
+[zgg](https://github.com/suisrc/zgg.git) Web服务框架
