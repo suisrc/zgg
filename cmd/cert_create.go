@@ -35,7 +35,7 @@ func CertCreate() {
 		println("cert domain is empty")
 		return
 	}
-	crt, err := crt.CreateCE(nil, cname, "", 0, domains, nil, nil, nil)
+	crt, err := crt.CreateCE(nil, cname, 0, domains, nil, nil, nil)
 	if err != nil {
 		println(err.Error())
 		return
