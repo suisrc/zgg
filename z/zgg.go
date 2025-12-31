@@ -158,37 +158,49 @@ func (aa *Zgg) ServeStop() {
 			cls() // 模块关闭
 		}
 	}
+	Println("http server shutdown")
 }
 
 // 启动 HTTP 服务
 func (aa *Zgg) RunAndWait(hdl http.HandlerFunc) {
 	// ------------------------------------------------------------------------
 	// Printf("http server Started, Linsten: %s:%d\n", srv.Addr, srv.Port)
-	// http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), handler) // 启动HTTP服务
+	// http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), handler)
+	// ------------------------------------------------------------------------
+	// defer aa.RefSrv.ServeStop()
+	// aa.RunningServer(&http.Server{Handler: hdl})
 	// ------------------------------------------------------------------------
 	// 启动HTTP服务， 并可优雅的终止
-	hsv := &http.Server{Addr: fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port), Handler: hdl}
-	go func() {
-		if C.Server.Local {
-			Printf("http server started, linsten: %s:%d (LOCAL)\n", "127.0.0.1", C.Server.Port)
-			if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				Fatalf("Linsten: %s\n", err)
-			}
-		} else if C.Server.CrtFile == "" || C.Server.KeyFile == "" {
-			Printf("http server started, linsten: %s:%d (HTTP)\n", C.Server.Addr, C.Server.Port)
-			if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				Fatalf("Linsten: %s\n", err)
-			}
-		} else {
-			if C.Server.Port == 80 {
-				C.Server.Port = 443 // 默认使用443端口
-			}
-			Printf("http server started, linsten: %s:%d (HTTPS)\n", C.Server.Addr, C.Server.Port)
-			if err := hsv.ListenAndServeTLS(C.Server.CrtFile, C.Server.KeyFile); err != nil && err != http.ErrServerClosed {
-				Fatalf("Linsten: %s\n", err)
-			}
+	hsv := &http.Server{Handler: hdl}
+	go aa.RunningServer(hsv)
+	aa.WaitForServer(hsv)
+}
+
+func (aa *Zgg) RunningServer(hsv *http.Server) {
+	// hsv.Handler = hdl
+	hsv.Addr = fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
+	if C.Server.Local {
+		Printf("http server started, linsten: %s:%d (LOCAL)\n", "127.0.0.1", C.Server.Port)
+		if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			Fatalf("Linsten: %s\n", err)
 		}
-	}()
+	} else if C.Server.CrtFile == "" || C.Server.KeyFile == "" {
+		Printf("http server started, linsten: %s:%d (HTTP)\n", C.Server.Addr, C.Server.Port)
+		if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			Fatalf("Linsten: %s\n", err)
+		}
+	} else {
+		if C.Server.Port == 80 {
+			C.Server.Port = 443 // 默认使用443端口
+		}
+		Printf("http server started, linsten: %s:%d (HTTPS)\n", C.Server.Addr, C.Server.Port)
+		if err := hsv.ListenAndServeTLS(C.Server.CrtFile, C.Server.KeyFile); err != nil && err != http.ErrServerClosed {
+			Fatalf("Linsten: %s\n", err)
+		}
+	}
+}
+
+func (aa *Zgg) WaitForServer(hsv *http.Server) {
 	ssc := make(chan os.Signal, 1)
 	signal.Notify(ssc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-ssc
@@ -200,7 +212,6 @@ func (aa *Zgg) RunAndWait(hdl http.HandlerFunc) {
 		Fatal("http server shutdown:", err)
 	}
 	aa.RefSrv.ServeStop() // 停止业务模块， 先停服务，后停模块
-	Println("http server shutdown")
 }
 
 // ----------------------------------------------------------------------------
@@ -215,12 +226,8 @@ func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	aa.Engine.ServeHTTP(rw, rr)
 }
 
-// ----------------------------------------------------------------------------
-
-/**
- * 增加处理函数
- * @param key: [method:]action, 如果 method 为空，则默认为 所有请求
- */
+// 增加处理函数
+// @param key: [method:]action, 如果 method 为空，则默认为 所有请求
 func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	if key == "" {
 		if IsDebug() {
