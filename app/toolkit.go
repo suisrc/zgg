@@ -14,7 +14,7 @@ var (
 )
 
 // func init() {
-// 	z.Register("11-app.init", func(srv z.IServer) z.Closed {
+// 	z.Register("11-app.init", func(zgg *z.Zgg) z.Closed {
 // 		// 创建 k8sclient
 // 		client, err := CreateClient(z.C.Server.Local)
 // 		if err != nil {

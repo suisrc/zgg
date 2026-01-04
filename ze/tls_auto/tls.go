@@ -50,13 +50,12 @@ func init() {
 			return nil
 		}
 		certConf := crt.CertConfig{
-			Profiles: map[string]crt.SignProfile{
-				"default": {
-					Expiry: "10y",
-					SubjectName: crt.SignSubject{
-						Organization:     "default",
-						OrganizationUnit: "default",
-					},
+			"default": {
+				Expiry:  "10y",
+				KeySize: 2048,
+				SubjectName: crt.SignSubject{
+					Organization:     "default",
+					OrganizationUnit: "default",
 				},
 			},
 		}
@@ -95,12 +94,11 @@ func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certif
 		sni, _, err = net.SplitHostPort(hello.Conn.LocalAddr().String())
 		if err == nil {
 			sip := net.ParseIP(sni)
-			cer, err = crt.CreateCE(&aa.CertConf, "", nil, []net.IP{sip}, aa.CaCrtBts, aa.CaKeyBts)
+			cer, err = crt.CreateCE(aa.CertConf, "", nil, []net.IP{sip}, aa.CaCrtBts, aa.CaKeyBts)
 		}
 	} else {
 		sni = hello.ServerName
-		cer, err = crt.CreateCE(&aa.CertConf, "", []string{sni}, nil, aa.CaCrtBts, aa.CaKeyBts)
-
+		cer, err = crt.CreateCE(aa.CertConf, "", []string{sni}, nil, aa.CaCrtBts, aa.CaKeyBts)
 	}
 	if err != nil {
 		if z.IsDebug() {

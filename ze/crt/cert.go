@@ -19,10 +19,7 @@ import (
 	"time"
 )
 
-type CertConfig struct {
-	SignKey  SignKey                `json:"key"`
-	Profiles map[string]SignProfile `json:"profiles"`
-}
+type CertConfig map[string]SignProfile
 
 type SignKey struct {
 	Size int `json:"size"`
@@ -38,7 +35,7 @@ type SignSubject struct {
 
 type SignProfile struct {
 	Expiry      string      `json:"expiry"`
-	SignKey     SignKey     `json:"key"`
+	KeySize     int         `json:"size"`
 	SubjectName SignSubject `json:"name"`
 }
 
@@ -52,14 +49,10 @@ type SignResult struct {
 //===========================================================================
 
 // 合并配置
-func (aa *CertConfig) Merge(bb *CertConfig) bool {
+func (aa CertConfig) Merge(bb CertConfig) bool {
 	update := false
-	if bb.SignKey.Size > 0 && bb.SignKey.Size != aa.SignKey.Size {
-		aa.SignKey.Size = bb.SignKey.Size
-		update = true
-	}
-	for bKey, bVal := range bb.Profiles {
-		aa.Profiles[bKey] = bVal
+	for bKey, bVal := range bb {
+		aa[bKey] = bVal
 		update = true
 	}
 	return update
@@ -136,13 +129,13 @@ type cdata struct {
 	CaCrt     *x509.Certificate
 }
 
-func _cdata(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts []byte) (*cdata, error) {
+func _cdata(certConfig CertConfig, commonName string, caCrtPemBts, caKeyPemBts []byte) (*cdata, error) {
 	var profile *SignProfile
 	// 获取证书配置
 	if certConfig != nil {
-		if pfile, ok := certConfig.Profiles[commonName]; ok {
+		if pfile, ok := certConfig[commonName]; ok {
 			profile = &pfile
-		} else if pfile, ok = certConfig.Profiles["default"]; ok {
+		} else if pfile, ok = certConfig["default"]; ok {
 			profile = &pfile
 		} else {
 			return nil, fmt.Errorf("no profile: %s", commonName)
@@ -154,8 +147,8 @@ func _cdata(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts 
 		}}
 	}
 	keySize := 2048
-	if certConfig != nil && certConfig.SignKey.Size > 0 {
-		keySize = certConfig.SignKey.Size
+	if certConfig != nil && profile.KeySize > 0 {
+		keySize = profile.KeySize
 	}
 	// 过期时间
 	notAfter, err := GetExpiredTime(profile.Expiry, (10*365 + 2))
@@ -189,9 +182,9 @@ func _cdata(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts 
 			caKey, err = x509.ParseECPrivateKey(caKeyBlk.Bytes)
 			algorithm = x509.ECDSAWithSHA256
 			if certConfig != nil {
-				if certConfig.SignKey.Size >= 4096 {
+				if keySize >= 4096 {
 					algorithm = x509.ECDSAWithSHA512
-				} else if certConfig.SignKey.Size >= 2048 {
+				} else if keySize >= 2048 {
 					algorithm = x509.ECDSAWithSHA384
 				}
 			}
@@ -199,9 +192,9 @@ func _cdata(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts 
 			caKey, err = x509.ParsePKCS1PrivateKey(caKeyBlk.Bytes)
 			algorithm = x509.SHA256WithRSA
 			if certConfig != nil {
-				if certConfig.SignKey.Size >= 4096 {
+				if keySize >= 4096 {
 					algorithm = x509.SHA512WithRSA
-				} else if certConfig.SignKey.Size >= 2048 {
+				} else if keySize >= 2048 {
 					algorithm = x509.SHA384WithRSA
 				}
 			}
@@ -233,12 +226,12 @@ func _cdata(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts 
 }
 
 // 构建的根CA证书，默认有效期99年
-func CreateCA(certConfig *CertConfig, commonName string) (SignResult, error) {
+func CreateCA(certConfig CertConfig, commonName string) (SignResult, error) {
 	ata, err := _cdata(certConfig, commonName, nil, nil)
 	if err != nil {
 		return SignResult{}, err
 	}
-	pkey, _ := rsa.GenerateKey(rand.Reader, certConfig.SignKey.Size) //生成一对具有指定字位数的RSA密钥
+	pkey, _ := rsa.GenerateKey(rand.Reader, ata.KeySize) //生成一对具有指定字位数的RSA密钥
 
 	sermax := new(big.Int).Lsh(big.NewInt(1), 128) //把 1 左移 128 位，返回给 big.Int
 	serial, _ := rand.Int(rand.Reader, sermax)     //返回在 [0, max) 区间均匀随机分布的一个随机值
@@ -271,7 +264,7 @@ func CreateCA(certConfig *CertConfig, commonName string) (SignResult, error) {
 }
 
 // 构建中间CA证书，默认有效期10年
-func CreateSA(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
+func CreateSA(certConfig CertConfig, commonName string, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
 	ata, err := _cdata(certConfig, commonName, caCrtPemBts, caKeyPemBts)
 	if err != nil {
 		return SignResult{}, err
@@ -310,7 +303,7 @@ func CreateSA(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBt
 }
 
 // 创建一个证书，默认有效期10年
-func CreateCE(certConfig *CertConfig, commonName string, dns []string, ips []net.IP, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
+func CreateCE(certConfig CertConfig, commonName string, dns []string, ips []net.IP, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
 	if commonName == "" {
 		if len(dns) == 1 {
 			commonName = dns[0]

@@ -20,30 +20,26 @@ func Test_cert(t *testing.T) {
 
 	// 读取 cert-ca 文件内容给 cert.CertConfig 对象
 	// bts, _ := os.ReadFile("../../_out/cert-ca.json")
-	cfg := &crt.CertConfig{
-		// CommonName: "Kubernetes",
-		SignKey: crt.SignKey{Size: 2048},
-		Profiles: map[string]crt.SignProfile{
-			"ca": {
-				Expiry: "18282d", // 50年
-				SubjectName: crt.SignSubject{
-					Organization:     "ca",
-					OrganizationUnit: "ca",
-				},
+	cfg := crt.CertConfig{
+		"ca": {
+			Expiry: "18282d", // 50年
+			SubjectName: crt.SignSubject{
+				Organization:     "ca",
+				OrganizationUnit: "ca",
 			},
-			"sa": {
-				Expiry: "10y",
-				SubjectName: crt.SignSubject{
-					Organization:     "sa",
-					OrganizationUnit: "sa",
-				},
+		},
+		"sa": {
+			Expiry: "10y",
+			SubjectName: crt.SignSubject{
+				Organization:     "sa",
+				OrganizationUnit: "sa",
 			},
-			"default": {
-				Expiry: "10y",
-				SubjectName: crt.SignSubject{
-					Organization:     "default",
-					OrganizationUnit: "default",
-				},
+		},
+		"default": {
+			Expiry: "10y",
+			SubjectName: crt.SignSubject{
+				Organization:     "default",
+				OrganizationUnit: "default",
 			},
 		},
 	}
