@@ -53,7 +53,7 @@ func CertK8S() {
 		z.Fatal(err)
 	}
 
-	crt, err := crt.CreateCE(nil, "", 0, []string{"api.exp.com"}, []net.IP{{127, 0, 0, 1}}, crtBts, keyBts)
+	crt, err := crt.CreateCE(nil, "", []string{"api.exp.com"}, []net.IP{{127, 0, 0, 1}}, crtBts, keyBts)
 	if err != nil {
 		z.Fatal(err)
 	}

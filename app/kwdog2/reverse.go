@@ -30,7 +30,7 @@ type Kwdog2Config struct {
 }
 
 // 初始化方法， 处理 api 的而外配置接口
-type InitializFunc func(api *KwdogApi, srv z.IServer)
+type InitializFunc func(api *KwdogApi, zgg *z.Zgg)
 
 func Init() {
 	Init3(nil)
@@ -48,7 +48,7 @@ func Init3(ifn InitializFunc) {
 	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
 	flag.BoolVar(&C.Kwdog2.Ttylog, "k2ttylog", false, "是否打印日志")
 
-	z.Register("01-kwdog2", func(srv z.IServer) z.Closed {
+	z.Register("01-kwdog2", func(zgg *z.Zgg) z.Closed {
 		var err error
 		api := &KwdogApi{
 			RootPath:   C.Kwdog2.RootPath,
@@ -64,7 +64,7 @@ func Init3(ifn InitializFunc) {
 		api.GtwDefault, err = gtw.NewTargetGateway(api.ServAddr, api.BufferPool)
 		if err != nil {
 			z.Printf("register kwdow2 error, %v", err.Error())
-			srv.ServeStop()
+			zgg.ServeStop()
 			return nil
 		}
 		api.GtwDefault.ProxyName = "default-gateway"
@@ -74,10 +74,10 @@ func Init3(ifn InitializFunc) {
 		// api.Authorizer = gte.NewAuthorize1(api.Sites, "") // 同 NewLoggerOnly
 		// // api.Authorizer = gte.NewLoggerOnly(api.Sites)
 
-		srv.AddRouter(api.RootPath, api.ServeHTTP)
+		zgg.AddRouter(api.RootPath, api.ServeHTTP)
 
 		if ifn != nil {
-			ifn(api, srv) // 初始化方法
+			ifn(api, zgg) // 初始化方法
 		}
 		return nil
 	})

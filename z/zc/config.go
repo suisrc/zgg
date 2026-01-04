@@ -31,29 +31,6 @@ type Config struct {
 	Print bool `default:"false" json:"printconfig"`
 }
 
-// --------------------------------------------------------------------------------
-
-func Register(c any) {
-	ctype := reflect.TypeOf(c)
-	if ctype.Kind() != reflect.Pointer {
-		panic("z/zc: Register c(arg) must be pointer")
-	}
-	cs[fmt.Sprintf("%v.%p", ctype.Elem(), c)] = c
-}
-
-// PrintConfig 打印配置
-func PrintConfig() {
-	if C.Print {
-		for name, conf := range cs {
-			println("--------" + name)
-			println(ToStr2(conf))
-		}
-		println("----------------------------------------------")
-	}
-}
-
-// --------------------------------------------------------------------------------
-
 var (
 	CFG_TAG = "json" // 自定义标签配置名称
 	CFG_ENV = "zgg"  // 自定义环境变量前缀
@@ -64,59 +41,79 @@ type ILoader interface {
 	Load(any) error
 }
 
-// MustLoad 加载配置, 这是一个简单的配置加载器
-// 如果发生无法解决的问题，可以使用 github.com/koding/multiconfig 替换
-func MustLoad(fpaths ...string) {
+// --------------------------------------------------------------------------------
+
+func Register(c any) {
+	ctype := reflect.TypeOf(c)
+	if ctype.Kind() != reflect.Pointer {
+		panic("z/zc: Register c(arg) must be pointer")
+	}
+	cs[fmt.Sprintf("%v.%p", ctype.Elem(), c)] = c
+}
+
+func LoadConfig(cfs string) {
 	load.Do(func() {
-		loaders := []ILoader{NewTAG()}
-		for _, fpath := range fpaths {
-			fpath = strings.TrimSpace(fpath)
-			if fpath == "" {
-				continue
-			}
-			// load config file
-			if data, err := os.ReadFile(fpath); err == nil {
-				loaders = append(loaders, NewTOML(data))
-			} else {
-				log.Println("z/zc: read file error, ", err.Error())
+		// var cfs string
+		// flag.StringVar(&cfs, "c", "", "config file path")
+		// flag.Parse() // command line arguments
+		// ---------------------------------------------------------------
+
+		loaders := []ILoader{NewTAG()} // 通过标签初始化配置
+		if cfs != "" {
+			// 通过文件加载配置
+			for fpath := range strings.SplitSeq(cfs, ",") {
+				fpath = strings.TrimSpace(fpath)
+				if fpath == "" {
+					continue
+				}
+				// load config file
+				if data, err := os.ReadFile(fpath); err == nil {
+					loaders = append(loaders, NewTOML(data))
+				} else {
+					log.Println("z/zc: read file error, ", err.Error())
+				}
 			}
 		}
-		loaders = append(loaders, NewENV(CFG_ENV))
-		for _, loader := range loaders {
-			for _, conf := range cs {
-				loader.Load(conf)
+		loaders = append(loaders, NewENV(CFG_ENV)) // 通过环境加载配置
+
+		// // 如果发生无法解决的问题，可以使用 github.com/koding/multiconfig 替换
+		// loaders := []multiconfig.Loader{&multiconfig.TagLoader{}}
+		// for fpath := range strings.SplitSeq(cfs, ",") {
+		// 	//if strings.HasSuffix(fpath, "ini") {
+		// 	//	loaders = append(loaders, &multiconfig.INILLoader{Path: fpath})
+		// 	//}
+		// 	if strings.HasSuffix(fpath, "toml") {
+		// 		loaders = append(loaders, &multiconfig.TOMLLoader{Path: fpath})
+		// 	}
+		// 	if strings.HasSuffix(fpath, "json") {
+		// 		loaders = append(loaders, &multiconfig.JSONLoader{Path: fpath})
+		// 	}
+		// 	if strings.HasSuffix(fpath, "yml") || strings.HasSuffix(fpath, "yaml") {
+		// 		loaders = append(loaders, &multiconfig.YAMLLoader{Path: fpath})
+		// 	}
+		// }
+		// loaders = append(loaders, &multiconfig.EnvironmentLoader{Prefix: strings.ToUpper(CFG_ENV)})
+		// // m := multiconfig.DefaultLoader{
+		// // 	Loader:    multiconfig.MultiLoader(loaders...),
+		// // 	Validator: multiconfig.MultiValidator(&multiconfig.RequiredValidator{}),
+		// // }
+
+		// ---------------------------------------------------------------
+		// load config
+		for _, conf := range cs {
+			for _, loader := range loaders {
+				if err := loader.Load(conf); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(2)
+				}
 			}
 		}
 	})
+	if C.Print {
+		for name, conf := range cs {
+			println("--------" + name)
+			println(ToStr2(conf))
+		}
+		println("----------------------------------------------")
+	}
 }
-
-// 基于 github.com/koding/multiconfig 加载配置
-// func MustLoad(fpaths ...string) {
-// 	load.Do(func() {
-// 		loaders := []multiconfig.Loader{&multiconfig.TagLoader{}}
-// 		for _, fpath := range fpaths {
-// 			//if strings.HasSuffix(fpath, "ini") {
-// 			//	loaders = append(loaders, &multiconfig.INILLoader{Path: fpath})
-// 			//}
-// 			if strings.HasSuffix(fpath, "toml") {
-// 				loaders = append(loaders, &multiconfig.TOMLLoader{Path: fpath})
-// 			}
-// 			if strings.HasSuffix(fpath, "json") {
-// 				loaders = append(loaders, &multiconfig.JSONLoader{Path: fpath})
-// 			}
-// 			if strings.HasSuffix(fpath, "yml") || strings.HasSuffix(fpath, "yaml") {
-// 				loaders = append(loaders, &multiconfig.YAMLLoader{Path: fpath})
-// 			}
-// 		}
-// 		loaders = append(loaders, &multiconfig.EnvironmentLoader{Prefix: strings.ToUpper(CFG_ENV)})
-
-// 		m := multiconfig.DefaultLoader{
-// 			Loader:    multiconfig.MultiLoader(loaders...),
-// 			Validator: multiconfig.MultiValidator(&multiconfig.RequiredValidator{}),
-// 		}
-// 		// 加载配置
-// 		for _, conf := range cs {
-// 			m.MustLoad(conf)
-// 		}
-// 	})
-// }

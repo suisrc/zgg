@@ -15,32 +15,32 @@ import (
 
 func Test_cert(t *testing.T) {
 
-	// curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt https://127.0.0.1:81/healthz
-	// curl --cacert _out/cert/ca.crt https://127.0.0.1:81/healthz
+	// curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt https://127.0.0.1:442/healthz
+	// curl -s --cacert _out/cert/ca.crt https://127.0.0.1:442/healthz | jq
 
 	// 读取 cert-ca 文件内容给 cert.CertConfig 对象
 	// bts, _ := os.ReadFile("../../_out/cert-ca.json")
 	cfg := &crt.CertConfig{
-		CommonName: "Kubernetes",
-		SignKey:    crt.SignKey{Size: 2048},
-		CaProfile: crt.SignProfile{
-			Expiry: "18282d", // 50年
-			SubjectName: &crt.SignSubject{
-				Organization:     "ca",
-				OrganizationUnit: "ca",
-			},
-		},
+		// CommonName: "Kubernetes",
+		SignKey: crt.SignKey{Size: 2048},
 		Profiles: map[string]crt.SignProfile{
+			"ca": {
+				Expiry: "18282d", // 50年
+				SubjectName: crt.SignSubject{
+					Organization:     "ca",
+					OrganizationUnit: "ca",
+				},
+			},
 			"sa": {
 				Expiry: "10y",
-				SubjectName: &crt.SignSubject{
+				SubjectName: crt.SignSubject{
 					Organization:     "sa",
 					OrganizationUnit: "sa",
 				},
 			},
 			"default": {
 				Expiry: "10y",
-				SubjectName: &crt.SignSubject{
+				SubjectName: crt.SignSubject{
 					Organization:     "default",
 					OrganizationUnit: "default",
 				},
@@ -50,16 +50,16 @@ func Test_cert(t *testing.T) {
 	// json.Unmarshal(bts, cfg)
 
 	// 生成证书
-	ca, err := crt.CreateCA(cfg)
+	ca, err := crt.CreateCA(cfg, "ca")
 	if err != nil {
 		panic(err)
 	}
-	sa, err := crt.CreateSA(cfg, "sa", 0, []byte(ca.Crt), []byte(ca.Key))
+	sa, err := crt.CreateSA(cfg, "sa", []byte(ca.Crt), []byte(ca.Key))
 	if err != nil {
 		panic(err)
 	}
 
-	ct, err := crt.CreateCE(cfg, "dev1", 0, []string{"dev1.com"}, []net.IP{{127, 0, 0, 1}}, []byte(sa.Crt), []byte(sa.Key))
+	ct, err := crt.CreateCE(cfg, "dev1", []string{"dev1.com"}, []net.IP{{127, 0, 0, 1}}, []byte(sa.Crt), []byte(sa.Key))
 	if err != nil {
 		panic(err)
 	}
@@ -143,7 +143,7 @@ func Test_verify(t *testing.T) {
 // go test -v ze/crt/cert_test.go -run Test_cer1
 
 func Test_cer1(t *testing.T) {
-	crt, err := crt.CreateCE(nil, "dev1", 0, []string{"dev1.com"}, nil, nil, nil)
+	crt, err := crt.CreateCE(nil, "dev1", []string{"dev1.com"}, nil, nil, nil)
 	if err != nil {
 		panic(err)
 	}

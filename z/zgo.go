@@ -25,30 +25,16 @@ func IsDebug() bool {
 func init() {
 	// 注册配置函数
 	zc.Register(C)
-}
 
-func LoadConfig() {
-	var cfs string
-	flag.StringVar(&cfs, "c", "", "config file path")
 	flag.BoolVar(&(zc.C.Debug), "debug", false, "debug mode")
 	flag.BoolVar(&(zc.C.Print), "print", false, "print mode")
 	flag.BoolVar(&(C.Server.Local), "local", false, "http server local mode")
 	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
 	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
-	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
-	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
-	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
 	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
-	flag.Parse()
-
-	if cfs != "" {
-		Printf("load config files:  %s\n", cfs)
-		zc.MustLoad(strings.Split(cfs, ",")...)
-	} else {
-		zc.MustLoad() // 加载默认配置，包括系统环境变量
-	}
-
-	zc.PrintConfig()
+	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
+	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
+	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
 }
 
 // -----------------------------------------------------------------------------------

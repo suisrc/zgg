@@ -55,21 +55,18 @@ type ServerConfig struct {
 	Local   bool   `json:"local"`
 	Addr    string `json:"addr" default:"0.0.0.0"`
 	Port    int    `json:"port"  default:"80"`
+	Engine  string `json:"engine"` // router engine
 	ApiPath string `json:"api"`    // root api path
 	TplPath string `json:"tpl"`    // templates folder path
-	ReqXrtd string `json:"xrt"`    // X-Request-Rt default value
-	Engine  string `json:"engine"` // router engine
+	ReqXrtd string `json:"xrt"`    // X-Request-Rt default value, 1: zgg, 2: ali, 3: html
 }
 
 // ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
 
 var _ http.Handler = (*Zgg)(nil)
-var _ IServer = (*Zgg)(nil)
 
 // 默认服务实体
 type Zgg struct {
-	RefSrv IServer // 自身引用
 	// HTTP服务实例
 	HttpSrv *http.Server
 	Closeds []Closed // 模块关闭函数列表
@@ -79,34 +76,17 @@ type Zgg struct {
 	Engine Engine // 路由引擎
 	SvcKit SvcKit // 服务工具
 	TplKit TplKit // 模版工具
-	// 标记列表
-	FlagStop bool // 终止标记
-}
-
-func (aa *Zgg) GetSvcKit() SvcKit {
-	return aa.SvcKit
-}
-
-func (aa *Zgg) GetTplKit() TplKit {
-	return aa.TplKit
-}
-
-func (aa *Zgg) GetEngine() Engine {
-	return aa.Engine
+	_abort bool   // 终止标记
 }
 
 // ----------------------------------------------------------------------------
 
 // 服务初始化
-func (aa *Zgg) ServeInit(srv IServer) bool {
-	aa.RefSrv = srv
-	if aa.RefSrv == nil {
-		aa.RefSrv = aa // 默认自身引用
-	}
-	// -----------------------------------------------
+func (aa *Zgg) ServeInit() bool {
 	if aa.SvcKit == nil {
-		aa.SvcKit = NewSvcKit(aa.RefSrv, IsDebug())
+		aa.SvcKit = NewSvcKit(aa, IsDebug())
 	}
+	aa.Closeds = []Closed{}
 	if builder, ok := Engines[C.Server.Engine]; ok {
 		aa.Engine = builder(aa.SvcKit)
 		Printf("[_router_]: build %s.router by [-eng %s]\n", aa.Engine.Name(), C.Server.Engine)
@@ -114,20 +94,18 @@ func (aa *Zgg) ServeInit(srv IServer) bool {
 		Printf("[_router_]: router not found by [-eng %s]\n", C.Server.Engine)
 		return false
 	}
-	aa.Closeds = make([]Closed, 0)
-	// -----------------------------------------------
 	if aa.TplKit == nil {
-		aa.TplKit = NewTplKit(aa.RefSrv, IsDebug())
-	}
-	if C.Server.TplPath != "" {
-		err := aa.TplKit.Preload(C.Server.TplPath)
-		if err != nil {
-			Printf("[_tplkit_]: Preload error: %v\n", err)
+		aa.TplKit = NewTplKit(aa, IsDebug())
+		if C.Server.TplPath != "" {
+			err := aa.TplKit.Preload(C.Server.TplPath)
+			if err != nil {
+				Printf("[_tplkit_]: Preload error: %v\n", err)
+			}
 		}
 	}
 	// -----------------------------------------------
 	Println("[register]: register options...")
-	aa.RefSrv.AddRouter("healthz", Healthz) // 默认注册健康检查
+	aa.AddRouter("healthz", Healthz) // 默认注册健康检查
 	for _, opt := range options {
 		if opt.Val == nil {
 			continue
@@ -135,11 +113,11 @@ func (aa *Zgg) ServeInit(srv IServer) bool {
 		if IsDebug() {
 			Println("[register]:", opt.Key)
 		}
-		cls := opt.Val(aa.RefSrv)
+		cls := opt.Val(aa)
 		if cls != nil {
 			aa.Closeds = append(aa.Closeds, cls)
 		}
-		if aa.FlagStop {
+		if aa._abort {
 			Println("[register]: serve already stop! exit...")
 			return false // 退出
 		}
@@ -150,10 +128,10 @@ func (aa *Zgg) ServeInit(srv IServer) bool {
 
 // 服务终止，注意，这里只会终止模版，不会终止服务， 终止服务，需要调用 hsv.Shutdown
 func (aa *Zgg) ServeStop() {
-	if aa.FlagStop {
+	if aa._abort {
 		return
 	}
-	aa.FlagStop = true
+	aa._abort = true
 	if aa.Closeds != nil {
 		for _, cls := range aa.Closeds {
 			cls() // 模块关闭
@@ -163,42 +141,59 @@ func (aa *Zgg) ServeStop() {
 }
 
 // 启动 HTTP 服务
-func (aa *Zgg) RunAndWait(hdl http.HandlerFunc) {
+func (aa *Zgg) RunServe(hdl http.Handler, addr string) {
+	if hdl == nil {
+		hdl = aa
+	}
+	if addr == "" {
+		if C.Server.Local {
+			C.Server.Addr = "127.0.0.1"
+		}
+		if aa.TLSConf == nil {
+			addr = fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
+			Printf("http server started, linsten: %s (HTTP)\n", addr)
+		} else {
+			switch C.Server.Port {
+			case 80:
+				C.Server.Port = 443
+			case 81:
+				C.Server.Port = 442
+			case 8080:
+				C.Server.Port = 8443
+			case 8081:
+				C.Server.Port = 8442
+			}
+			addr = fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
+			Printf("http server started, linsten: %s (HTTPS)\n", addr)
+		}
+	} else {
+		Printf("http server started, linsten: %s(PARAM)\n", addr)
+	}
 	// ------------------------------------------------------------------------
-	// Printf("http server Started, Linsten: %s:%d\n", srv.Addr, srv.Port)
-	// http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), handler)
+	// 方案1, 不推荐
+	// Println("http server Started, Linsten: " + addr)
+	// http.ListenAndServe(addr, hdl)
 	// ------------------------------------------------------------------------
-	// defer aa.RefSrv.ServeStop()
-	// aa.RunningServer(&http.Server{Handler: hdl})
+	// 方案2, 多启动
+	// defer aa.ServeStop()
+	// aa.RunningServer(&http.Server{Handler: hdl, Addr: addr})
 	// ------------------------------------------------------------------------
-	// 启动HTTP服务， 并可优雅的终止
-	hsv := &http.Server{Handler: hdl}
+	// 方案3， 启动HTTP服务， 并可优雅的终止
+	hsv := &http.Server{Handler: hdl, Addr: addr}
 	go aa.RunningServer(hsv)
 	aa.WaitForServer(hsv)
 }
 
+// ----------------------------------------------------------------------------
+
 func (aa *Zgg) RunningServer(hsv *http.Server) {
-	// hsv.Handler = hdl
-	hsv.Addr = fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
-	if C.Server.Local {
-		Printf("http server started, linsten: %s:%d (LOCAL)\n", "127.0.0.1", C.Server.Port)
-		if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			Fatalf("Linsten: %s\n", err)
-		}
-	} else if aa.TLSConf == nil {
-		Printf("http server started, linsten: %s:%d (HTTP)\n", C.Server.Addr, C.Server.Port)
-		if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			Fatalf("Linsten: %s\n", err)
-		}
-	} else {
-		if C.Server.Port == 80 {
-			C.Server.Port = 443 // 默认使用443端口
-		}
-		Printf("http server started, linsten: %s:%d (HTTPS)\n", C.Server.Addr, C.Server.Port)
+	if aa.TLSConf != nil {
 		hsv.TLSConfig = aa.TLSConf // Certificates, GetCertificate, GetConfigForClient
 		if err := hsv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-			Fatalf("Linsten: %s\n", err)
+			Fatalf("Server Exit Error: %s\n", err)
 		}
+	} else if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		Fatalf("Server Exit Error: %s\n", err)
 	}
 }
 
@@ -213,12 +208,12 @@ func (aa *Zgg) WaitForServer(hsv *http.Server) {
 	if err := hsv.Shutdown(ctx); err != nil {
 		Fatal("http server shutdown:", err)
 	}
-	aa.RefSrv.ServeStop() // 停止业务模块， 先停服务，后停模块
+	aa.ServeStop() // 停止业务模块， 先停服务，后停模块
 }
 
 // ----------------------------------------------------------------------------
 
-// 默认相应函数 http.HandlerFunc
+// 默认相应函数 http.HandlerFunc(zgg.ServeHTTP)
 func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if IsDebug() {
 		Printf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
@@ -274,13 +269,13 @@ var _ SvcKit = (*SvcKit0)(nil)
 
 type SvcKit0 struct {
 	debug  bool
-	server IServer
+	server *Zgg
 	svcmap map[string]any
 	typmap map[reflect.Type]any
 	svclck sync.RWMutex
 }
 
-func NewSvcKit(server IServer, debug bool) SvcKit {
+func NewSvcKit(server *Zgg, debug bool) SvcKit {
 	svckit := &SvcKit0{
 		debug:  debug,
 		server: server,
@@ -294,7 +289,7 @@ func NewSvcKit(server IServer, debug bool) SvcKit {
 	return svckit
 }
 
-func (aa *SvcKit0) Srv() IServer {
+func (aa *SvcKit0) Zgg() *Zgg {
 	return aa.server
 }
 
@@ -411,7 +406,7 @@ type TplKit0 struct {
 	FuncMap template.FuncMap // 支持链式调用
 }
 
-func NewTplKit(server IServer, debug bool) TplKit {
+func NewTplKit(server *Zgg, debug bool) TplKit {
 	return &TplKit0{
 		debug: debug,
 		tpls:  make(map[string]*Tpl),

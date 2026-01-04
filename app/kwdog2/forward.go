@@ -13,7 +13,7 @@ import (
 // https://github.com/gojue/ecapture
 func Init2() {
 
-	z.Register("01-kwdog2", func(srv z.IServer) z.Closed {
+	z.Register("01-kwdog2", func(zgg *z.Zgg) z.Closed {
 		api := &ForwardApi{}
 		arp := gte.NewRecordPrint()
 		abp := gtw.NewBufferPool(32*1024, 0)
@@ -22,7 +22,7 @@ func Init2() {
 		api.GtwDefault.ProxyName = "forward-gateway"
 		api.GtwDefault.RecordPool = arp
 
-		srv.AddRouter("", api.ServeHTTP)
+		zgg.AddRouter("", api.ServeHTTP)
 		return nil
 	})
 

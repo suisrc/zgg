@@ -20,10 +20,8 @@ import (
 )
 
 type CertConfig struct {
-	CommonName string                 `json:"CN"`
-	SignKey    SignKey                `json:"key"`
-	CaProfile  SignProfile            `json:"CA"`
-	Profiles   map[string]SignProfile `json:"profiles"`
+	SignKey  SignKey                `json:"key"`
+	Profiles map[string]SignProfile `json:"profiles"`
 }
 
 type SignKey struct {
@@ -39,10 +37,9 @@ type SignSubject struct {
 }
 
 type SignProfile struct {
-	Expiry      string       `json:"expiry"`
-	CommonName  string       `json:"CN"`
-	SignKey     SignKey      `json:"key"`
-	SubjectName *SignSubject `json:"name"`
+	Expiry      string      `json:"expiry"`
+	SignKey     SignKey     `json:"key"`
+	SubjectName SignSubject `json:"name"`
 }
 
 //===========================================================================
@@ -129,47 +126,136 @@ func IsPemExpired(pemStr string) (bool, time.Time, error) {
 	return false, pemCrt.NotAfter, nil
 }
 
-// 构建的根CA证书，默认有效期99年
-func CreateCA(config *CertConfig) (SignResult, error) {
-	profile := &config.CaProfile
-	subject := pkix.Name{ //Name代表一个X.509识别名。只包含识别名的公共属性，额外的属性被忽略。
-		CommonName:         config.CommonName,
-		Country:            StrToArray(profile.SubjectName.Country),
-		Province:           StrToArray(profile.SubjectName.Province),
-		Locality:           StrToArray(profile.SubjectName.Locality),
-		Organization:       StrToArray(profile.SubjectName.Organization),
-		OrganizationalUnit: StrToArray(profile.SubjectName.OrganizationUnit),
+// CreateCertificate
+type cdata struct {
+	Subject   pkix.Name
+	NotAfter  time.Time
+	KeySize   int
+	Algorithm x509.SignatureAlgorithm
+	CaKey     any
+	CaCrt     *x509.Certificate
+}
+
+func _cdata(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts []byte) (*cdata, error) {
+	var profile *SignProfile
+	// 获取证书配置
+	if certConfig != nil {
+		if pfile, ok := certConfig.Profiles[commonName]; ok {
+			profile = &pfile
+		} else if pfile, ok = certConfig.Profiles["default"]; ok {
+			profile = &pfile
+		} else {
+			return nil, fmt.Errorf("no profile: %s", commonName)
+		}
+	} else {
+		profile = &SignProfile{Expiry: "10y", SubjectName: SignSubject{
+			Organization:     "default",
+			OrganizationUnit: "default",
+		}}
+	}
+	keySize := 2048
+	if certConfig != nil && certConfig.SignKey.Size > 0 {
+		keySize = certConfig.SignKey.Size
 	}
 	// 过期时间
-	notAfter, err := GetExpiredTime(profile.Expiry, (20*365 + 24))
+	notAfter, err := GetExpiredTime(profile.Expiry, (10*365 + 2))
+	if err != nil {
+		return nil, err
+	}
+	// ----------------------------------------------------------------------------
+	var algorithm x509.SignatureAlgorithm
+	var caCrt *x509.Certificate
+	var caKey any
+
+	if caCrtPemBts != nil && caKeyPemBts != nil {
+		var err error
+		caCrtBlk, _ := pem.Decode(caCrtPemBts)
+		if caCrtBlk == nil {
+			return nil, fmt.Errorf("invalid ca.crt, pem")
+		}
+		caCrt, err = x509.ParseCertificate(caCrtBlk.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ca.crt, bts, %s", err.Error())
+		}
+		if notAfter.After(caCrt.NotAfter) {
+			notAfter = caCrt.NotAfter // 使用CA证书的过期时间
+		}
+
+		caKeyBlk, _ := pem.Decode(caKeyPemBts)
+		if caKeyBlk == nil {
+			return nil, fmt.Errorf("invalid ca.key, pem")
+		}
+		if caKeyBlk.Type == "EC PRIVATE KEY" {
+			caKey, err = x509.ParseECPrivateKey(caKeyBlk.Bytes)
+			algorithm = x509.ECDSAWithSHA256
+			if certConfig != nil {
+				if certConfig.SignKey.Size >= 4096 {
+					algorithm = x509.ECDSAWithSHA512
+				} else if certConfig.SignKey.Size >= 2048 {
+					algorithm = x509.ECDSAWithSHA384
+				}
+			}
+		} else {
+			caKey, err = x509.ParsePKCS1PrivateKey(caKeyBlk.Bytes)
+			algorithm = x509.SHA256WithRSA
+			if certConfig != nil {
+				if certConfig.SignKey.Size >= 4096 {
+					algorithm = x509.SHA512WithRSA
+				} else if certConfig.SignKey.Size >= 2048 {
+					algorithm = x509.SHA384WithRSA
+				}
+			}
+		}
+		// caKey, err = x509.ParsePKCS1PrivateKey(caKeyBlk.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ca.key, bts, %s", err.Error())
+		}
+	}
+	if algorithm == x509.UnknownSignatureAlgorithm {
+		algorithm = x509.SHA256WithRSA
+	}
+	// ----------------------------------------------------------------------------
+	return &cdata{
+		Subject: pkix.Name{ //Name代表一个X.509识别名。只包含识别名的公共属性，额外的属性被忽略。
+			CommonName:         commonName,
+			Country:            StrToArray(profile.SubjectName.Country),
+			Province:           StrToArray(profile.SubjectName.Province),
+			Locality:           StrToArray(profile.SubjectName.Locality),
+			Organization:       StrToArray(profile.SubjectName.Organization),
+			OrganizationalUnit: StrToArray(profile.SubjectName.OrganizationUnit),
+		},
+		NotAfter:  notAfter,
+		KeySize:   keySize,
+		Algorithm: algorithm,
+		CaKey:     caKey,
+		CaCrt:     caCrt,
+	}, nil
+}
+
+// 构建的根CA证书，默认有效期99年
+func CreateCA(certConfig *CertConfig, commonName string) (SignResult, error) {
+	ata, err := _cdata(certConfig, commonName, nil, nil)
 	if err != nil {
 		return SignResult{}, err
 	}
-	// 加密方式
-	algorithm := x509.SHA256WithRSA
-	if config.SignKey.Size >= 4096 {
-		algorithm = x509.SHA512WithRSA
-	} else if config.SignKey.Size >= 2048 {
-		algorithm = x509.SHA384WithRSA
-	}
-	pkey, _ := rsa.GenerateKey(rand.Reader, config.SignKey.Size) //生成一对具有指定字位数的RSA密钥
+	pkey, _ := rsa.GenerateKey(rand.Reader, certConfig.SignKey.Size) //生成一对具有指定字位数的RSA密钥
 
 	sermax := new(big.Int).Lsh(big.NewInt(1), 128) //把 1 左移 128 位，返回给 big.Int
 	serial, _ := rand.Int(rand.Reader, sermax)     //返回在 [0, max) 区间均匀随机分布的一个随机值
 	pder := x509.Certificate{
 		SerialNumber: serial, // SerialNumber 是 CA 颁布的唯一序列号，在此使用一个大随机数来代表它
 		IsCA:         true,
-		Subject:      subject,
+		Subject:      ata.Subject,
 		NotBefore:    time.Now(),
-		NotAfter:     notAfter,
+		NotAfter:     ata.NotAfter,
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage: []x509.ExtKeyUsage{
 			x509.ExtKeyUsageServerAuth,
 			x509.ExtKeyUsageClientAuth,
 		},
 		BasicConstraintsValid: true,
-		SignatureAlgorithm:    algorithm, // SignatureAlgorithm 签名算法
-		MaxPathLen:            1,         // 允许中间 CA 证书路径长度为1
+		SignatureAlgorithm:    ata.Algorithm, // SignatureAlgorithm 签名算法
+		MaxPathLen:            1,             // 允许中间 CA 证书路径长度为1
 	}
 	// ----------------------------------------------------------------------------
 	//CreateCertificate基于模板创建一个新的证书, 第二个第三个参数相同，则证书是自签名的
@@ -185,8 +271,8 @@ func CreateCA(config *CertConfig) (SignResult, error) {
 }
 
 // 构建中间CA证书，默认有效期10年
-func CreateSA(certConfig *CertConfig, commonName string, keySize int, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
-	ata, err := _cdata(certConfig, commonName, keySize, caCrtPemBts, caKeyPemBts)
+func CreateSA(certConfig *CertConfig, commonName string, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
+	ata, err := _cdata(certConfig, commonName, caCrtPemBts, caKeyPemBts)
 	if err != nil {
 		return SignResult{}, err
 	}
@@ -223,116 +309,8 @@ func CreateSA(certConfig *CertConfig, commonName string, keySize int, caCrtPemBt
 
 }
 
-type cdata struct {
-	Subject   pkix.Name
-	NotAfter  time.Time
-	KeySize   int
-	Algorithm x509.SignatureAlgorithm
-	CaKey     any
-	CaCrt     *x509.Certificate
-}
-
-func _cdata(config *CertConfig, commonName string, keySize int, caCrtPemBts, caKeyPemBts []byte) (*cdata, error) {
-	var profile *SignProfile
-	// 获取证书配置
-	if config != nil {
-		if pfile, ok := config.Profiles[commonName]; ok {
-			profile = &pfile
-		} else if pfile, ok = config.Profiles["default"]; ok {
-			profile = &pfile
-		} else {
-			return nil, fmt.Errorf("no profile: %s", commonName)
-		}
-	} else {
-		profile = &SignProfile{Expiry: "10y", SubjectName: &SignSubject{
-			Organization:     "default",
-			OrganizationUnit: "default",
-		}}
-	}
-	if keySize <= 0 {
-		if config != nil {
-			keySize = config.SignKey.Size
-		} else {
-			keySize = 2048
-		}
-	}
-	// 过期时间
-	notAfter, err := GetExpiredTime(profile.Expiry, (10*365 + 2))
-	if err != nil {
-		return nil, err
-	}
-	// ----------------------------------------------------------------------------
-	var algorithm x509.SignatureAlgorithm
-	var caCrt *x509.Certificate
-	var caKey any
-
-	if caCrtPemBts != nil && caKeyPemBts != nil {
-		var err error
-		caCrtBlk, _ := pem.Decode(caCrtPemBts)
-		if caCrtBlk == nil {
-			return nil, fmt.Errorf("invalid ca.crt, pem")
-		}
-		caCrt, err = x509.ParseCertificate(caCrtBlk.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("invalid ca.crt, bts, %s", err.Error())
-		}
-		if notAfter.After(caCrt.NotAfter) {
-			notAfter = caCrt.NotAfter // 使用CA证书的过期时间
-		}
-
-		caKeyBlk, _ := pem.Decode(caKeyPemBts)
-		if caKeyBlk == nil {
-			return nil, fmt.Errorf("invalid ca.key, pem")
-		}
-		if caKeyBlk.Type == "EC PRIVATE KEY" {
-			caKey, err = x509.ParseECPrivateKey(caKeyBlk.Bytes)
-			algorithm = x509.ECDSAWithSHA256
-			if config != nil {
-				if config.SignKey.Size >= 4096 {
-					algorithm = x509.ECDSAWithSHA512
-				} else if config.SignKey.Size >= 2048 {
-					algorithm = x509.ECDSAWithSHA384
-				}
-			}
-		} else {
-			caKey, err = x509.ParsePKCS1PrivateKey(caKeyBlk.Bytes)
-			algorithm = x509.SHA256WithRSA
-			if config != nil {
-				if config.SignKey.Size >= 4096 {
-					algorithm = x509.SHA512WithRSA
-				} else if config.SignKey.Size >= 2048 {
-					algorithm = x509.SHA384WithRSA
-				}
-			}
-		}
-		// caKey, err = x509.ParsePKCS1PrivateKey(caKeyBlk.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("invalid ca.key, bts, %s", err.Error())
-		}
-	}
-	if algorithm == x509.UnknownSignatureAlgorithm {
-		algorithm = x509.SHA256WithRSA
-	}
-	// ----------------------------------------------------------------------------
-	return &cdata{
-		Subject: pkix.Name{ //Name代表一个X.509识别名。只包含识别名的公共属性，额外的属性被忽略。
-			CommonName:         commonName,
-			Country:            StrToArray(profile.SubjectName.Country),
-			Province:           StrToArray(profile.SubjectName.Province),
-			Locality:           StrToArray(profile.SubjectName.Locality),
-			Organization:       StrToArray(profile.SubjectName.Organization),
-			OrganizationalUnit: StrToArray(profile.SubjectName.OrganizationUnit),
-		},
-		NotAfter:  notAfter,
-		KeySize:   keySize,
-		Algorithm: algorithm,
-		CaKey:     caKey,
-		CaCrt:     caCrt,
-	}, nil
-}
-
-// CreateCertificate 创建一个证书，默认有效期10年
-func CreateCE(certConfig *CertConfig, commonName string, keySize int, dns []string, ips []net.IP, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
+// 创建一个证书，默认有效期10年
+func CreateCE(certConfig *CertConfig, commonName string, dns []string, ips []net.IP, caCrtPemBts, caKeyPemBts []byte) (SignResult, error) {
 	if commonName == "" {
 		if len(dns) == 1 {
 			commonName = dns[0]
@@ -342,7 +320,7 @@ func CreateCE(certConfig *CertConfig, commonName string, keySize int, dns []stri
 			return SignResult{}, fmt.Errorf("invalid commonName")
 		}
 	}
-	ata, err := _cdata(certConfig, commonName, keySize, caCrtPemBts, caKeyPemBts)
+	ata, err := _cdata(certConfig, commonName, caCrtPemBts, caKeyPemBts)
 	if err != nil {
 		return SignResult{}, err
 	}

@@ -25,8 +25,9 @@ proxy:
 helm:
 	helm -n default template deploy/chart > deploy/bundle.yml
 
+# -eng rdx/mux/map
 main:
-	go run main.go -c __zgg.toml
+	go run main.go -eng map -local -c __zgg.toml
 # -tpl ./tmpl
 tenv:
 	ZGG_SERVER_PORT=81 go run main.go -local -debug -print

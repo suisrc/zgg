@@ -7,6 +7,9 @@ import (
 	"github.com/suisrc/zgg/z"
 	_ "github.com/suisrc/zgg/ze/rdx"
 
+	// _ "github.com/suisrc/zgg/ze/tls_file"
+	// _ "github.com/suisrc/zgg/ze/tls_auto"
+
 	// "k8s.io/klog/v2"
 	// _ "github.com/suisrc/zgg/app/zhe"
 	_ "github.com/suisrc/zgg/cmd"

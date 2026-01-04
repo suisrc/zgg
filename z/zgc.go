@@ -90,7 +90,7 @@ func (ctx *Ctx) HTML(tpl string, res any, hss int) bool {
 	if hss > 0 {
 		ctx.Writer.WriteHeader(hss)
 	}
-	return HTML0(ctx.SvcKit.Srv(), ctx.Request, ctx.Writer, res, tpl)
+	return HTML0(ctx.SvcKit.Zgg(), ctx.Request, ctx.Writer, res, tpl)
 }
 
 // 已 TEXT 模板格式写出响应
@@ -231,6 +231,9 @@ func JSON(ctx *Ctx, res *Result) bool {
 	if res.TraceID != "" {
 		ctx.Writer.Header().Set("X-Request-Id", res.TraceID)
 	}
+	if !res.Success && res.ErrShow <= 0 {
+		res.ErrShow = 1
+	}
 	// 响应其他头部
 	if ctx.Request.Header != nil { // 设置响应头
 		for k, v := range res.Header {
@@ -272,8 +275,6 @@ func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
 	}
 	if rs.ErrShow > 0 {
 		ha["showType"] = rs.ErrShow
-	} else {
-		ha["showType"] = 1 // default
 	}
 	if rs.TraceID != "" {
 		ha["traceId"] = rs.TraceID
@@ -305,17 +306,17 @@ func HTML3(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
 	if rs.Status > 0 {
 		rw.WriteHeader(rs.Status)
 	}
-	return HTML0(rs.Ctx.SvcKit.Srv(), rr, rw, rs, tmpl)
+	return HTML0(rs.Ctx.SvcKit.Zgg(), rr, rw, rs, tmpl)
 }
 
 // 响应 HTML 模板结果: content-type http-status html-data
-func HTML0(sv IServer, rr *http.Request, rw http.ResponseWriter, rs any, tp string) bool {
+func HTML0(zg *Zgg, rr *http.Request, rw http.ResponseWriter, rs any, tp string) bool {
 	// 响应结果
-	if sv == nil {
+	if zg == nil {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		rw.Write([]byte("template render error: server not found"))
 	} else {
-		err := sv.GetTplKit().Render(rw, tp, rs)
+		err := zg.TplKit.Render(rw, tp, rs)
 		if err != nil {
 			rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			rw.Write([]byte("template render error: " + err.Error()))
@@ -353,13 +354,13 @@ func Register(key string, opt OptionFunc) {
 }
 
 // GET http method
-func GET(action string, hdl HandleFunc, srv IServer) {
-	srv.AddRouter(http.MethodGet+" "+action, hdl)
+func GET(action string, hdl HandleFunc, zgg *Zgg) {
+	zgg.AddRouter(http.MethodGet+" "+action, hdl)
 }
 
 // POST http method
-func POST(action string, hdl HandleFunc, srv IServer) {
-	srv.AddRouter(http.MethodPost+" "+action, hdl)
+func POST(action string, hdl HandleFunc, zgg *Zgg) {
+	zgg.AddRouter(http.MethodPost+" "+action, hdl)
 }
 
 /**
@@ -401,7 +402,7 @@ func Inject[T any](kit SvcKit, val T) T {
 type Closed func()
 
 // 定义配置函数
-type OptionFunc func(IServer) Closed
+type OptionFunc func(*Zgg) Closed
 
 var (
 	// 应用配置列表，依据 key 排序，初始化顺序
@@ -430,25 +431,11 @@ type TplKit interface {
 
 // 服务工具接口
 type SvcKit interface {
-	Srv() IServer                   // 获取模块管理器 *Server 接口
+	Zgg() *Zgg                      // 获取模块管理器 *Zgg 接口
 	Get(key string) any             // 获取服务
 	Set(key string, val any) SvcKit // 增加服务 val = nil 是卸载服务
 	Map() map[string]any            // 服务列表, 注意，是副本
 	Inj(obj any) SvcKit             // 注册服务 injec 使用 `svckit:"xxx"` 初始化服务
-}
-
-// 模块接口, Server
-type IServer interface {
-	// 获取服务工具
-	GetSvcKit() SvcKit
-	// 获取模版工具
-	GetTplKit() TplKit
-	// 获取路由工具
-	GetEngine() Engine
-	// 增加处理路由
-	AddRouter(key string, handle HandleFunc) // Enroll
-	// 关闭服务, 危险，非关闭的服务，请勿调用
-	ServeStop()
 }
 
 // 引擎接口, Engine, 不适用 Router 是为了和 其他 Router 名字上区分开。以便于支持多 Router 而不会出现冲突

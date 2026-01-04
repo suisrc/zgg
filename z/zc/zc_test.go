@@ -16,8 +16,7 @@ import (
 func Test_config(t *testing.T) {
 	zc.Register(&Data{})
 	log.Println("===========================loading")
-	zc.MustLoad("zc_test.toml")
-	zc.PrintConfig()
+	zc.LoadConfig("zc_test.toml,zc_test1.toml")
 	log.Println("===========================loading")
 }
 

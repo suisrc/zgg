@@ -33,7 +33,7 @@ type Front2Config struct {
 }
 
 // 初始化方法， 处理 api 的而外配置接口
-type InitializFunc func(api *IndexApi, srv z.IServer)
+type InitializFunc func(api *IndexApi, zgg *z.Zgg)
 
 func Init(www fs.FS) {
 	Init3(www, nil)
@@ -52,7 +52,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	flag.Var(zc.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
 	flag.Var(zc.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
 
-	z.Register("00-front2", func(srv z.IServer) z.Closed {
+	z.Register("00-front2", func(zgg *z.Zgg) z.Closed {
 		hfs := http.FS(www)
 		api := &IndexApi{
 			Folder:   C.Front2.Folder,
@@ -69,12 +69,12 @@ func Init3(www fs.FS, ifn InitializFunc) {
 		if C.Front2.IsNative {
 			api.ServeFS = http.FileServer(hfs)
 		}
-		srv.AddRouter("", api.ServeHTTP)
+		zgg.AddRouter("", api.ServeHTTP)
 		if C.Front2.ShowPath != "" {
-			srv.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
+			zgg.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
 		}
 		if ifn != nil {
-			ifn(api, srv) // 初始化方法
+			ifn(api, zgg) // 初始化方法
 		}
 		return nil
 	})

@@ -6,9 +6,12 @@
 package z
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/suisrc/zgg/z/zc"
 )
 
 // 程序入口
@@ -48,36 +51,18 @@ var (
 
 func RunHttpServe() {
 	PrintVersion()
-	LoadConfig()
-	// zgg server
+	// config
+	var cfs string
+	flag.StringVar(&cfs, "c", "", "config file path")
+	flag.Parse() // command line arguments
+	zc.LoadConfig(cfs)
+	// server
 	zgg := &Zgg{}
-	if !zgg.ServeInit(zgg) {
-		return // init error, exit
+	if zgg.ServeInit() {
+		zgg.RunServe(nil, "")
 	}
-	// run and wait http server
-	zgg.RunAndWait(zgg.ServeHTTP)
 }
 
 func PrintVersion() {
 	println(AppName, Version, AppInfo)
 }
-
-// func Exit(err error, code int) {
-// 	fmt.Println("exit with error:", err.Error())
-// 	os.Exit(code)
-// }
-
-// ----------------------------------------------------------------------------
-// 重写服务
-
-// func init() {
-// 	CmdR["web"] = RunHttpServe
-// }
-// // 定制扩展 zgg 框架
-// type Egg struct {
-// 	Zgg
-// 	//...
-// }
-// func (aa *Egg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
-// 	//...
-// }
