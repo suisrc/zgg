@@ -8,9 +8,7 @@ package tlsauto
 import (
 	"crypto/tls"
 	"flag"
-	"net"
 	"os"
-	"sync"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/zc"
@@ -26,14 +24,14 @@ var (
 type ServerConfig struct {
 	CrtCA string `json:"cacrt"`
 	KeyCA string `json:"cakey"`
-	IsSub bool   `json:"casub"`
+	IsSAA bool   `json:"casaa"`
 }
 
 func init() {
 	zc.Register(&C)
 	flag.StringVar(&(C.Server.CrtCA), "cacrt", "", "http server crt ca file")
 	flag.StringVar(&(C.Server.KeyCA), "cakey", "", "http server key ca file")
-	flag.BoolVar(&C.Server.IsSub, "casub", false, "是否是中间证书")
+	flag.BoolVar(&C.Server.IsSAA, "casaa", false, "是否是中间证书")
 
 	z.Register("10-tlsauto", func(zgg *z.Zgg) z.Closed {
 		if C.Server.CrtCA == "" || C.Server.KeyCA == "" {
@@ -64,75 +62,14 @@ func init() {
 		}
 
 		cfg := &tls.Config{}
-		cfg.GetCertificate = (&TLSAutoConfig{
+		cfg.GetCertificate = (&crt.TLSAutoConfig{
 			CaKeyBts: caKeyBts,
 			CaCrtBts: caCrtBts,
 			CertConf: certConf,
-			IsSubCa:  C.Server.IsSub,
+			IsSaCert: C.Server.IsSAA,
 		}).GetCertificate
 		zgg.TLSConf = cfg
 
 		return nil
 	})
-}
-
-type TLSAutoConfig struct {
-	CaKeyBts []byte
-	CaCrtBts []byte
-	CertConf crt.CertConfig
-	IsSubCa  bool
-
-	cache sync.Map // 缓存池
-}
-
-func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	if ct, ok := aa.cache.Load(hello.ServerName); ok {
-		return ct.(*tls.Certificate), nil
-	}
-
-	var err error
-	var sni string
-	var cer crt.SignResult
-	if hello.ServerName == "" {
-		sni, _, err = net.SplitHostPort(hello.Conn.LocalAddr().String())
-		if err == nil {
-			sip := net.ParseIP(sni)
-			cer, err = crt.CreateCE(aa.CertConf, "", nil, []net.IP{sip}, aa.CaCrtBts, aa.CaKeyBts)
-		}
-	} else {
-		sni = hello.ServerName
-		cer, err = crt.CreateCE(aa.CertConf, "", []string{sni}, nil, aa.CaCrtBts, aa.CaKeyBts)
-	}
-	if err != nil {
-		if z.IsDebug() {
-			zc.Println("[_tlsauto]: GetCertificate: ", sni, " error: ", err)
-		}
-		return nil, err
-	}
-	if aa.IsSubCa {
-		cer.Crt += string(aa.CaCrtBts)
-	}
-	if z.IsDebug() {
-		zc.Println("[_tlsauto]: GetCertificate: ", sni)
-		zc.Printf("=================== cert .crt ===================%s\n%s\n", sni, cer.Crt)
-		zc.Printf("=================== cert .key ===================%s\n%s\n", sni, cer.Key)
-		zc.Println("=================================================")
-	}
-	ct, err := tls.X509KeyPair([]byte(cer.Crt), []byte(cer.Key))
-	if err != nil {
-		zc.Println("[_tlsauto]: GetCertificate: ", sni, " load error: ", err)
-		return nil, err
-	}
-	aa.cache.Store(hello.ServerName, &ct)
-	return &ct, nil
-}
-
-func (aa *TLSAutoConfig) GetConfigForClient(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-	cert, err := aa.GetCertificate(hello)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{
-		Certificates: []tls.Certificate{*cert},
-	}, nil
 }
