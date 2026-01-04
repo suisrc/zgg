@@ -38,14 +38,12 @@ func Init() {
 	flag.Int64Var(&C.Fluent.MaxSize, "logmaxsize", 10*1024*1024, "日志文件最大大小, 默认 10M")
 
 	z.Register("03-fluent", func(zgg *z.Zgg) z.Closed {
-		if !zc.C.Debug && strings.Contains(C.Fluent.StorePath, "../") {
-			z.Printf("logstore path error, contains '../': %s", C.Fluent.StorePath)
-			zgg.ServeStop()
+		if !z.IsDebug() && strings.Contains(C.Fluent.StorePath, "../") {
+			zgg.ServeStop("logstore path error, contains '../':", C.Fluent.StorePath)
 			return nil
 		}
 		if C.Fluent.RoutePath == "" {
-			z.Printf("logroute path error, is empty")
-			zgg.ServeStop()
+			zgg.ServeStop("logroute path error, is empty")
 			return nil
 		}
 
@@ -59,7 +57,7 @@ func Init() {
 			RoutePath: "/" + rp,
 		}
 		api.AbsPath, _ = filepath.Abs(C.Fluent.StorePath)
-		z.Printf("[logstore]: store-path -> %s", api.AbsPath)
+		zc.Printf("[logstore]: store-path -> %s", api.AbsPath)
 		api.HttpFS = http.FS(os.DirFS(api.AbsPath))
 
 		zgg.AddRouter("GET "+rp, api.lst)

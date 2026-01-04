@@ -1,3 +1,8 @@
+// Copyright 2026 suisrc. All rights reserved.
+// Based on the path package, Copyright 2009 The Go Authors.
+// Use of this source code is governed by a BSD-style license that can be found
+// at https://github.com/suisrc/zgg/blob/main/LICENSE.
+
 package tlsauto
 
 import (
@@ -32,21 +37,19 @@ func init() {
 
 	z.Register("10-tlsauto", func(zgg *z.Zgg) z.Closed {
 		if C.Server.CrtCA == "" || C.Server.KeyCA == "" {
-			z.Println("[_tlsauto]: cacrt file or cakey file is empty")
+			zc.Println("[_tlsauto]: cacrt file or cakey file is empty")
 			return nil
 		}
-		z.Println("[_tlsauto]: crt=", C.Server.CrtCA, " key=", C.Server.KeyCA)
+		zc.Println("[_tlsauto]: crt=", C.Server.CrtCA, " key=", C.Server.KeyCA)
 
 		caCrtBts, err := os.ReadFile(C.Server.CrtCA)
 		if err != nil {
-			z.Printf("[_tlsauto]: cacrt file error: %s\n", err)
-			zgg.ServeStop()
+			zgg.ServeStop("[_tlsauto]: cacrt file error:", err.Error())
 			return nil
 		}
 		caKeyBts, err := os.ReadFile(C.Server.KeyCA)
 		if err != nil {
-			z.Printf("[_tlsauto]: cakey file error: %s\n", err)
-			zgg.ServeStop()
+			zgg.ServeStop("[_tlsauto]: cakey file error:", err.Error())
 			return nil
 		}
 		certConf := crt.CertConfig{
@@ -102,7 +105,7 @@ func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certif
 	}
 	if err != nil {
 		if z.IsDebug() {
-			z.Println("[_tlsauto]: GetCertificate: ", sni, " error: ", err)
+			zc.Println("[_tlsauto]: GetCertificate: ", sni, " error: ", err)
 		}
 		return nil, err
 	}
@@ -110,14 +113,14 @@ func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certif
 		cer.Crt += string(aa.CaCrtBts)
 	}
 	if z.IsDebug() {
-		z.Println("[_tlsauto]: GetCertificate: ", sni)
-		z.Printf("=================== cert .crt ===================%s\n%s\n", sni, cer.Crt)
-		z.Printf("=================== cert .key ===================%s\n%s\n", sni, cer.Key)
-		z.Println("=================================================")
+		zc.Println("[_tlsauto]: GetCertificate: ", sni)
+		zc.Printf("=================== cert .crt ===================%s\n%s\n", sni, cer.Crt)
+		zc.Printf("=================== cert .key ===================%s\n%s\n", sni, cer.Key)
+		zc.Println("=================================================")
 	}
 	ct, err := tls.X509KeyPair([]byte(cer.Crt), []byte(cer.Key))
 	if err != nil {
-		z.Println("[_tlsauto]: GetCertificate: ", sni, " load error: ", err)
+		zc.Println("[_tlsauto]: GetCertificate: ", sni, " load error: ", err)
 		return nil, err
 	}
 	aa.cache.Store(hello.ServerName, &ct)

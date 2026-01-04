@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/crt"
 )
 
@@ -24,17 +25,17 @@ func CertEXP() {
 	// caPath = "_out/_ca.crt"
 	pemBts, err := os.ReadFile(caPath)
 	if err != nil {
-		z.Fatal(err)
+		zc.Fatalln(err)
 	}
 	pemBlk, _ := pem.Decode(pemBts)
 	if pemBlk == nil {
-		z.Fatal(err)
+		zc.Fatalln(err)
 	}
 	pemCrt, err := x509.ParseCertificate(pemBlk.Bytes)
 	if err != nil {
-		z.Fatal(err)
+		zc.Fatalln(err)
 	}
-	z.Println("expired: ", pemCrt.NotAfter.Format(time.RFC3339))
+	zc.Println("expired: ", pemCrt.NotAfter.Format(time.RFC3339))
 }
 
 func CertK8S() {
@@ -46,16 +47,16 @@ func CertK8S() {
 
 	crtBts, err := os.ReadFile(crtFile)
 	if err != nil {
-		z.Fatal(err)
+		zc.Fatalln(err)
 	}
 	keyBts, err := os.ReadFile(keyFile)
 	if err != nil {
-		z.Fatal(err)
+		zc.Fatalln(err)
 	}
 
 	crt, err := crt.CreateCE(nil, "", []string{"api.exp.com"}, []net.IP{{127, 0, 0, 1}}, crtBts, keyBts)
 	if err != nil {
-		z.Fatal(err)
+		zc.Fatalln(err)
 	}
 
 	// ------------------------------------------------------------------------

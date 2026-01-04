@@ -1,3 +1,8 @@
+// Copyright 2026 suisrc. All rights reserved.
+// Based on the path package, Copyright 2009 The Go Authors.
+// Use of this source code is governed by a BSD-style license that can be found
+// at https://github.com/suisrc/zgg/blob/main/LICENSE.
+
 package z
 
 import (
@@ -31,17 +36,40 @@ func init() {
 	flag.BoolVar(&(C.Server.Local), "local", false, "http server local mode")
 	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
 	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
+	flag.IntVar(&(C.Server.Ptls), "ptls", 443, "https server Port")
+	flag.BoolVar(&(C.Server.Dual), "dual", false, "running http and https server")
 	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
 	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
 	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
 	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
+
+	// 注册服务
+	Register("90-server", func(zgg *Zgg) Closed {
+		if C.Server.Local {
+			C.Server.Addr = "127.0.0.1"
+		}
+		if C.Server.Ptls > 0 && zgg.TLSConf != nil {
+			addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
+			hsv := &http.Server{Handler: zgg, Addr: addr}
+			zgg.Servers = append(zgg.Servers, &Server{Srv: hsv, TLS: zgg.TLSConf})
+			zc.Println("[register]: register http server, (HTTPS)", addr)
+		}
+		if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
+			addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
+			hsv := &http.Server{Handler: zgg, Addr: addr}
+			zgg.Servers = append(zgg.Servers, &Server{Srv: hsv})
+			zc.Println("[register]: register http server, (HTTP )", addr)
+		}
+		zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
+		return nil
+	})
 }
 
 // -----------------------------------------------------------------------------------
 
 // 健康检查接口
-func Healthz(ctx *Ctx) bool {
-	return ctx.JSON(&Result{Success: true, Data: time.Now().Format("2006-01-02 15:04:05")})
+func Healthz(ctx *Ctx) {
+	ctx.JSON(&Result{Success: true, Data: time.Now().Format("2006-01-02 15:04:05")})
 }
 
 // 创建指针
@@ -158,26 +186,26 @@ func GetRemoteIP(req *http.Request) string {
 // request token auth
 func TokenAuth(token *string, handle HandleFunc) HandleFunc {
 	// 需要验证令牌
-	return func(ctx *Ctx) bool {
+	return func(ctx *Ctx) {
 		if token == nil || *token == "" {
-			return handle(ctx) // auth pass
+			handle(ctx) // auth pass
 		} else if ktn := ctx.Request.Header.Get("Authorization"); ktn == "Token "+*token {
-			return handle(ctx) // auth succ
+			handle(ctx) // auth succ
+		} else {
+			ctx.JSON(&Result{ErrCode: "invalid-token", Message: "无效的令牌"})
 		}
-		return ctx.JSON(&Result{ErrCode: "invalid-token", Message: "无效的令牌"})
 	}
 }
 
 // merge multi func to one func
 func MergeFunc(handles ...HandleFunc) HandleFunc {
-	return func(ctx *Ctx) bool {
-		for _, hh := range handles {
-			if hh(ctx) {
-				ctx.Abort()
-				return true
+	return func(ctx *Ctx) {
+		for _, handle := range handles {
+			handle(ctx)
+			if ctx.IsAbort() {
+				return
 			}
 		}
-		return false
 	}
 }
 
@@ -249,6 +277,7 @@ func (p *BufferPool0) Get() []byte {
 func (p *BufferPool0) Put(buf []byte) {
 	// 1. 检查缓冲区容量是否超过限制
 	if cap(buf) > p.maxCap {
+		buf = nil
 		return
 	}
 	// 2. 重置缓冲区：保留容量，清空内容（len=0）
@@ -275,13 +304,13 @@ func FieldInject(target any, value any, tag string, debug bool) bool {
 			tField.Type.Kind() == reflect.Interface && vType.Implements(tField.Type) {
 			tElem.Field(i).Set(reflect.ValueOf(value))
 			if debug {
-				Printf("[_inject_]: [succ] %s.%s <- %s", tType, tField.Name, vType)
+				zc.Printf("[_inject_]: [succ] %s.%s <- %s", tType, tField.Name, vType)
 			}
 			return true // 注入成功
 		}
 	}
 	if debug {
-		Printf("[_inject_]: [fail] %s not found field.(%s)", tType, vType)
+		zc.Printf("[_inject_]: [fail] %s not found field.(%s)", tType, vType)
 	}
 	return false
 }

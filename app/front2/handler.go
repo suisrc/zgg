@@ -115,15 +115,15 @@ func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
 }
 
 // ServeHTTP
-func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) bool {
+func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
 	for kk, vv := range aa.Routers {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
-		if zc.C.Debug {
-			z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
+		if z.IsDebug() {
+			zc.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
@@ -132,12 +132,12 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) bool {
 		} else {
 			proxy.ServeHTTP(rw, rr) // next
 		}
-		return true
+		return
 	}
 	// --------------------------------------------------------------
 	rp := FixPath(rr, aa.RootPath, aa.Folder)
-	if zc.C.Debug {
-		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
+	if z.IsDebug() {
+		zc.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
@@ -145,7 +145,6 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) bool {
 	} else {
 		aa.TryIndex(rw, rr, rp)
 	}
-	return true
 }
 
 // 判断是否需要转换内容
@@ -224,7 +223,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		ipath := aa.Folder + "/" + index
 		file, err = aa.HttpFS.Open(ipath)
 		if err != nil {
-			z.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
+			zc.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
 			http.NotFound(rw, rr) // 没有重定向的 index.html 文件
 			return
 		}

@@ -1,3 +1,8 @@
+// Copyright 2026 suisrc. All rights reserved.
+// Based on the path package, Copyright 2009 The Go Authors.
+// Use of this source code is governed by a BSD-style license that can be found
+// at https://github.com/suisrc/zgg/blob/main/LICENSE.
+
 package gte
 
 import (
@@ -5,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -18,7 +23,7 @@ func NewRecordPrint() gtw.RecordPool {
 func RecordPrint(rt gtw.RecordTrace) {
 	rc := &Record{}
 	rc.ByRecord0(rt.(*gtw.Record0))
-	z.Println("[_record_]", rc.ToFormatStr())
+	zc.Println("[_record_]", rc.ToFormatStr())
 }
 
 // -----------------------------------

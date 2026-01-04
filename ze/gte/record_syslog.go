@@ -1,3 +1,8 @@
+// Copyright 2026 suisrc. All rights reserved.
+// Based on the path package, Copyright 2009 The Go Authors.
+// Use of this source code is governed by a BSD-style license that can be found
+// at https://github.com/suisrc/zgg/blob/main/LICENSE.
+
 package gte
 
 import (
@@ -6,6 +11,7 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -40,11 +46,11 @@ func (r *rSyslog) Init() *rSyslog {
 	if r.Network == "" {
 		r.Network = "udp"
 	} else if r.Network != "udp" && r.Network != "tcp" {
-		z.Println("[_syslog_]", "NewRecordSyslog, invalid network, ", r.Network)
+		zc.Println("[_syslog_]", "NewRecordSyslog, invalid network, ", r.Network)
 		return r
 	}
 	if r.Address == "" {
-		z.Println("[_syslog_]", "NewRecordSyslog, invalid address, ", r.Address)
+		zc.Println("[_syslog_]", "NewRecordSyslog, invalid address, ", r.Address)
 		return r
 	}
 	if r.Priority <= 0 {
@@ -61,9 +67,9 @@ func (r *rSyslog) Init() *rSyslog {
 		var err error
 		r._klog, err = syslog.Dial(r.Network, r.Address, syslog.Priority(r.Priority), r.TagInfo)
 		if err != nil {
-			z.Println("[_syslog_]", "NewRecordSyslog, unable to connect to syslog: ", err.Error())
+			zc.Println("[_syslog_]", "NewRecordSyslog, unable to connect to syslog: ", err.Error())
 		} else {
-			z.Println("[_syslog_]", "NewRecordSyslog, connect to syslog: ", r.Address)
+			zc.Println("[_syslog_]", "NewRecordSyslog, connect to syslog: ", r.Address)
 		}
 		r._time = time.Now().Unix()
 	}
@@ -75,15 +81,15 @@ func (r *rSyslog) log(rt gtw.RecordTrace) {
 	rc.ByRecord0(rt.(*gtw.Record0))
 	bts, err := rc.MarshalJSON()
 	if err != nil {
-		z.Println("[_syslog_]", "RecordSyslog, unable to marshal json: ", err.Error())
+		zc.Println("[_syslog_]", "RecordSyslog, unable to marshal json: ", err.Error())
 		return
 	}
 	if r._klog == nil {
-		z.Println("[_record_]", string(bts))
+		zc.Println("[_record_]", string(bts))
 		return // 降级到终端输出
 	}
 	if r.PrintTty {
-		z.Println("[_syslog_]", string(bts))
+		zc.Println("[_syslog_]", string(bts))
 		// 同步在终端输出
 	}
 	r._lock.Lock()
@@ -94,14 +100,14 @@ func (r *rSyslog) log(rt gtw.RecordTrace) {
 		// 但是这里有问题，日志传送存在5s空白期，但是这个极端情况，况且是日志服务器崩溃的情况下，可以忽略
 		r._klog, err = syslog.Dial(r.Network, r.Address, syslog.Priority(r.Priority), r.TagInfo)
 		if err != nil {
-			z.Println("[_record_]", string(bts))
-			z.Println("[_syslog_]", "RecordSyslog, unable to connect to syslog: ", err.Error())
+			zc.Println("[_record_]", string(bts))
+			zc.Println("[_syslog_]", "RecordSyslog, unable to connect to syslog: ", err.Error())
 			return
 		}
 		r._time = time.Now().Unix()
 	}
 	if err := r._klog.Info(string(bts)); err != nil {
-		z.Println("[_syslog_]", "RecordSyslog, unable to write to syslog: ", err.Error())
+		zc.Println("[_syslog_]", "RecordSyslog, unable to write to syslog: ", err.Error())
 	}
 }
 

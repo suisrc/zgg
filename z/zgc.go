@@ -1,4 +1,4 @@
-// Copyright 2025 suisrc. All rights reserved.
+// Copyright 2026 suisrc. All rights reserved.
 // Based on the path package, Copyright 2009 The Go Authors.
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
@@ -22,7 +22,7 @@ import (
 )
 
 // 定义处理函数
-type HandleFunc func(rc *Ctx) bool
+type HandleFunc func(rc *Ctx)
 
 // map any
 type HA map[string]any
@@ -70,19 +70,19 @@ func (ctx *Ctx) IsAbort() bool {
 }
 
 // 已 JSON 格式写出响应
-func (ctx *Ctx) JSON(err error) bool {
+func (ctx *Ctx) JSON(err error) {
 	ctx._abort = true // rc.Abort()
 	// 注意，推荐使用 JSON(rc, rs), 这里只是为了简化效用逻辑
 	switch err := err.(type) {
 	case *Result:
-		return JSON(ctx, err)
+		JSON(ctx, err)
 	default:
-		return JSON(ctx, &Result{ErrCode: "unknow-error", Message: err.Error()})
+		JSON(ctx, &Result{ErrCode: "unknow-error", Message: err.Error()})
 	}
 }
 
 // 已 HTML 模板格式写出响应
-func (ctx *Ctx) HTML(tpl string, res any, hss int) bool {
+func (ctx *Ctx) HTML(tpl string, res any, hss int) {
 	ctx._abort = true
 	if ctx.TraceID != "" {
 		ctx.Writer.Header().Set("X-Request-Id", ctx.TraceID)
@@ -90,11 +90,11 @@ func (ctx *Ctx) HTML(tpl string, res any, hss int) bool {
 	if hss > 0 {
 		ctx.Writer.WriteHeader(hss)
 	}
-	return HTML0(ctx.SvcKit.Zgg(), ctx.Request, ctx.Writer, res, tpl)
+	HTML0(ctx.SvcKit.Zgg(), ctx.Request, ctx.Writer, res, tpl)
 }
 
 // 已 TEXT 模板格式写出响应
-func (ctx *Ctx) TEXT(txt string, hss int) bool {
+func (ctx *Ctx) TEXT(txt string, hss int) {
 	ctx._abort = true
 	if ctx.TraceID != "" {
 		ctx.Writer.Header().Set("X-Request-Id", ctx.TraceID)
@@ -104,11 +104,10 @@ func (ctx *Ctx) TEXT(txt string, hss int) bool {
 		ctx.Writer.WriteHeader(hss) // 最后写状态码头
 	}
 	ctx.Writer.Write([]byte(txt))
-	return true
 }
 
 // 已 JSON 错误格式写出响应
-func (ctx *Ctx) JERR(err error, hss int) bool {
+func (ctx *Ctx) JERR(err error, hss int) {
 	ctx._abort = true // rc.Abort()
 	// 注意，推荐使用 JSON(rc, rs), 这里只是为了简化效用逻辑
 	var res *Result
@@ -121,7 +120,7 @@ func (ctx *Ctx) JERR(err error, hss int) bool {
 	if hss > 0 {
 		res.Status = hss
 	}
-	return JSON(ctx, res)
+	JSON(ctx, res)
 }
 
 // 创建上下文函数
@@ -222,7 +221,7 @@ func (aa *Result) Error() string {
 // ----------------------------------------------------------------------------
 
 // 响应 JSON 结果, 这是一个套娃，
-func JSON(ctx *Ctx, res *Result) bool {
+func JSON(ctx *Ctx, res *Result) {
 	res.Ctx = ctx
 	// TraceID 可能不存在，如果不是 '' 则 PASS
 	if res.TraceID == "" {
@@ -243,27 +242,26 @@ func JSON(ctx *Ctx, res *Result) bool {
 	// 响应结果
 	switch ctx.ReqType {
 	case "2":
-		return JSON2(ctx.Request, ctx.Writer, res)
+		JSON2(ctx.Request, ctx.Writer, res)
 	case "3":
-		return HTML3(ctx.Request, ctx.Writer, res)
+		HTML3(ctx.Request, ctx.Writer, res)
 	default:
-		return JSON0(ctx.Request, ctx.Writer, res)
+		JSON0(ctx.Request, ctx.Writer, res)
 	}
 }
 
 // 响应 JSON 结果: content-type http-status json-data
-func JSON0(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
+func JSON0(rr *http.Request, rw http.ResponseWriter, rs *Result) {
 	// 响应结果
 	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if rs.Status > 0 {
 		rw.WriteHeader(rs.Status)
 	}
 	json.NewEncoder(rw).Encode(rs)
-	return true
 }
 
 // 以 '2' 形式格式化, 响应 JSON 结果: content-type http-status json-data
-func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
+func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) {
 	// 转换结构
 	ha := HA{"success": rs.Success}
 	if rs.Data != nil {
@@ -285,15 +283,14 @@ func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
 		rw.WriteHeader(rs.Status)
 	}
 	json.NewEncoder(rw).Encode(ha)
-	return true
 }
 
 // 以 '3' 形式格式化, 选择模版，响应 HTML 模板结果: content-type http-status html-data
-func HTML3(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
+func HTML3(rr *http.Request, rw http.ResponseWriter, rs *Result) {
 	if rs.Ctx == nil {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		rw.Write([]byte("template render error: request content not found"))
-		return true
+		return
 	}
 	tmpl := rs.TplKey
 	if tmpl == "" {
@@ -306,11 +303,11 @@ func HTML3(rr *http.Request, rw http.ResponseWriter, rs *Result) bool {
 	if rs.Status > 0 {
 		rw.WriteHeader(rs.Status)
 	}
-	return HTML0(rs.Ctx.SvcKit.Zgg(), rr, rw, rs, tmpl)
+	HTML0(rs.Ctx.SvcKit.Zgg(), rr, rw, rs, tmpl)
 }
 
 // 响应 HTML 模板结果: content-type http-status html-data
-func HTML0(zg *Zgg, rr *http.Request, rw http.ResponseWriter, rs any, tp string) bool {
+func HTML0(zg *Zgg, rr *http.Request, rw http.ResponseWriter, rs any, tp string) {
 	// 响应结果
 	if zg == nil {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -324,7 +321,6 @@ func HTML0(zg *Zgg, rr *http.Request, rw http.ResponseWriter, rs any, tp string)
 			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 		}
 	}
-	return true
 }
 
 // ----------------------------------------------------------------------------

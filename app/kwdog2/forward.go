@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gte"
 	"github.com/suisrc/zgg/ze/gtw"
 )
@@ -33,12 +34,11 @@ type ForwardApi struct {
 }
 
 // ServeHTTP
-func (aa *ForwardApi) ServeHTTP(zrc *z.Ctx) bool {
+func (aa *ForwardApi) ServeHTTP(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
 	if z.IsDebug() {
-		z.Printf("[_routing]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
+		zc.Printf("[_routing]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
-	return true
 }

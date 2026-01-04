@@ -63,8 +63,7 @@ func Init3(ifn InitializFunc) {
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
 		api.GtwDefault, err = gtw.NewTargetGateway(api.ServAddr, api.BufferPool)
 		if err != nil {
-			z.Printf("register kwdow2 error, %v", err.Error())
-			zgg.ServeStop()
+			zgg.ServeStop("register kwdow2 error,", err.Error())
 			return nil
 		}
 		api.GtwDefault.ProxyName = "default-gateway"
@@ -124,7 +123,7 @@ func (aa *KwdogApi) NewProxy(kk, vv string) (gtw.IGateway, error) {
 }
 
 // ServeHTTP
-func (aa *KwdogApi) ServeHTTP(zrc *z.Ctx) bool {
+func (aa *KwdogApi) ServeHTTP(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
 	for kk, vv := range aa.Routers {
@@ -132,27 +131,25 @@ func (aa *KwdogApi) ServeHTTP(zrc *z.Ctx) bool {
 			continue
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
-			if zc.C.Debug {
-				z.Printf("[_routing]: [%s] %s -> %s\n", proxy.GetProxyName(), zrc.Action, vv)
+			if z.IsDebug() {
+				zc.Printf("[_routing]: [%s] %s -> %s\n", proxy.GetProxyName(), zrc.Action, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else if proxy, err := aa.NewProxy(kk, vv); err != nil {
-			if zc.C.Debug {
-				z.Printf("[_routing]: [%s] %s -> %s, %v\n", kk, zrc.Action, vv, err)
+			if z.IsDebug() {
+				zc.Printf("[_routing]: [%s] %s -> %s, %v\n", kk, zrc.Action, vv, err)
 			}
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		} else {
-			if zc.C.Debug {
-				z.Printf("[_routing]: [%s] %s -> %s\n", proxy.GetProxyName(), zrc.Action, vv)
+			if z.IsDebug() {
+				zc.Printf("[_routing]: [%s] %s -> %s\n", proxy.GetProxyName(), zrc.Action, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		}
-		return true
 	}
 	// --------------------------------------------------------------
-	if zc.C.Debug {
-		z.Printf("[_routing]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, zrc.Action, aa.ServAddr)
+	if z.IsDebug() {
+		zc.Printf("[_routing]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, zrc.Action, aa.ServAddr)
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
-	return true
 }

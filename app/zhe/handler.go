@@ -4,6 +4,7 @@ package zhe
 
 import (
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 )
 
 func init() {
@@ -15,7 +16,7 @@ func Init3() {
 		api := z.Inject(zgg.SvcKit, &HelloApi{})
 		zgg.AddRouter("hello", api.hello)
 		return func() {
-			z.Println("api-hello closed")
+			zc.Println("api-hello closed")
 		}
 	})
 	z.Register("zz-world", func(zgg *z.Zgg) z.Closed {
@@ -36,12 +37,12 @@ type HelloApi struct {
 	TK z.TplKit `svckit:"auto"`      // 根据名称自动注入
 }
 
-func (aa *HelloApi) hello(zrc *z.Ctx) bool {
-	return zrc.JSON(&z.Result{Success: true, Data: "hello!", ErrShow: 1})
+func (aa *HelloApi) hello(zrc *z.Ctx) {
+	zrc.JSON(&z.Result{Success: true, Data: "hello!", ErrShow: 1})
 }
-func (aa *HelloApi) world(zrc *z.Ctx) bool {
-	return zrc.JSON(&z.Result{Success: true, Data: "world!"})
+func (aa *HelloApi) world(zrc *z.Ctx) {
+	zrc.JSON(&z.Result{Success: true, Data: "world!"})
 }
-func (aa *HelloApi) token(zrc *z.Ctx) bool {
-	return zrc.JSON(&z.Result{Success: true, Data: "token!"})
+func (aa *HelloApi) token(zrc *z.Ctx) {
+	zrc.JSON(&z.Result{Success: true, Data: "token!"})
 }

@@ -1,3 +1,8 @@
+// Copyright 2026 suisrc. All rights reserved.
+// Based on the path package, Copyright 2009 The Go Authors.
+// Use of this source code is governed by a BSD-style license that can be found
+// at https://github.com/suisrc/zgg/blob/main/LICENSE.
+
 package tlsfile
 
 import (
@@ -26,18 +31,17 @@ func init() {
 
 	z.Register("10-tlsfile", func(zgg *z.Zgg) z.Closed {
 		if C.Server.CrtFile == "" || C.Server.KeyFile == "" {
-			z.Println("[_tlsfile]: crtfile or keyfile is empty")
+			zc.Println("[_tlsfile]: crtfile or keyfile is empty")
 			return nil
 		}
-		z.Println("[_tlsfile]: crt=", C.Server.CrtFile, " key=", C.Server.KeyFile)
+		zc.Println("[_tlsfile]: crt=", C.Server.CrtFile, " key=", C.Server.KeyFile)
 		var err error
 
 		cfg := &tls.Config{}
 		cfg.Certificates = make([]tls.Certificate, 1)
 		cfg.Certificates[0], err = tls.LoadX509KeyPair(C.Server.CrtFile, C.Server.KeyFile)
 		if err != nil {
-			z.Printf("[_tlsfile]: error: %s\n", err)
-			zgg.ServeStop()
+			zgg.ServeStop("[_tlsfile]: error:", err.Error())
 			return nil
 		}
 		zgg.TLSConf = cfg

@@ -23,7 +23,7 @@ var (
 )
 
 // 列表文件
-func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
+func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
 
@@ -41,7 +41,7 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
 		// 文件读取发生异常
 		http.NotFound(rw, rr)
 		rw.Write([]byte(err.Error()))
-		return true
+		return
 	}
 	// 退出时候关闭文件
 	defer httpFile.Close()
@@ -96,5 +96,4 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) bool {
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rw.Write([]byte(html_top + html_body.String() + thml_end))
 	}
-	return true
 }
