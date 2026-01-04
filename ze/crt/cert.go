@@ -59,7 +59,7 @@ func (aa CertConfig) Merge(bb CertConfig) bool {
 }
 
 // String...
-func (aa *CertConfig) String() string {
+func (aa CertConfig) String() string {
 	str, _ := json.Marshal(aa)
 	return string(str)
 }
