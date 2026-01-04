@@ -43,7 +43,7 @@ func Init3(ifn InitializFunc) {
 	flag.StringVar(&C.Kwdog2.ServAddr, "k2sa", "http://127.0.0.1:80", "后端服务地址")
 	flag.StringVar(&C.Kwdog2.AuthAddr, "k2aa", "", "认证服务地址， 默认只支持 f1kin 服务")
 	flag.Var(zc.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
-	flag.BoolVar(&C.Kwdog2.Routerl, "k2rlog", false, "认证服务地址， 默认只支持 f1kin 服务")
+	flag.BoolVar(&C.Kwdog2.Routerl, "k2rlog", false, "是否记录其他路由的日志")
 	flag.Var(zc.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
 	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
 	flag.BoolVar(&C.Kwdog2.Ttylog, "k2ttylog", false, "是否打印日志")

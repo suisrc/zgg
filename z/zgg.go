@@ -9,6 +9,7 @@ package z
 
 import (
 	"context"
+	"crypto/tls"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -54,8 +55,6 @@ type ServerConfig struct {
 	Local   bool   `json:"local"`
 	Addr    string `json:"addr" default:"0.0.0.0"`
 	Port    int    `json:"port"  default:"80"`
-	CrtFile string `json:"crtfile"`
-	KeyFile string `json:"keyfile"`
 	ApiPath string `json:"api"`    // root api path
 	TplPath string `json:"tpl"`    // templates folder path
 	ReqXrtd string `json:"xrt"`    // X-Request-Rt default value
@@ -74,6 +73,8 @@ type Zgg struct {
 	// HTTP服务实例
 	HttpSrv *http.Server
 	Closeds []Closed // 模块关闭函数列表
+	// TLS 配置, Certificates, GetCertificate, GetConfigForClient
+	TLSConf *tls.Config
 	// 处理函数列表
 	Engine Engine // 路由引擎
 	SvcKit SvcKit // 服务工具
@@ -184,7 +185,7 @@ func (aa *Zgg) RunningServer(hsv *http.Server) {
 		if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			Fatalf("Linsten: %s\n", err)
 		}
-	} else if C.Server.CrtFile == "" || C.Server.KeyFile == "" {
+	} else if aa.TLSConf == nil {
 		Printf("http server started, linsten: %s:%d (HTTP)\n", C.Server.Addr, C.Server.Port)
 		if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			Fatalf("Linsten: %s\n", err)
@@ -194,7 +195,8 @@ func (aa *Zgg) RunningServer(hsv *http.Server) {
 			C.Server.Port = 443 // 默认使用443端口
 		}
 		Printf("http server started, linsten: %s:%d (HTTPS)\n", C.Server.Addr, C.Server.Port)
-		if err := hsv.ListenAndServeTLS(C.Server.CrtFile, C.Server.KeyFile); err != nil && err != http.ErrServerClosed {
+		hsv.TLSConfig = aa.TLSConf // Certificates, GetCertificate, GetConfigForClient
+		if err := hsv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 			Fatalf("Linsten: %s\n", err)
 		}
 	}

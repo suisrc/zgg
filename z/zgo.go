@@ -35,8 +35,6 @@ func LoadConfig() {
 	flag.BoolVar(&(C.Server.Local), "local", false, "http server local mode")
 	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
 	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
-	flag.StringVar(&(C.Server.CrtFile), "crt", "", "http server cer file")
-	flag.StringVar(&(C.Server.KeyFile), "key", "", "http server key file")
 	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
 	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
 	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
