@@ -64,12 +64,10 @@ tflow:
 	fi
 	git commit -am "${tag}" && git tag -a $(tag) -m "${tag}" && git push origin $(tag) && git reset --hard HEAD~1
 
-mflow:
-	@if [ -z "$(m)" ]; then \
-		echo "error: 'm' not specified! Please specify the 'm' using 'make mflow m=(message)'";\
-		exit 1; \
+git:
+	@if [ "$(m)" ]; then \
+		git add -A && git commit -am "$(m)" && git push; \
 	fi
-	git add -A && git commit -am "$(m)" && git push
 	@if [ "$(t)" ]; then \
-	 	git tag -a $(t) -m "${t}" && git push origin $(t)
+	 	git tag -a $(t) -m "${t}" && git push origin $(t); \
 	fi
