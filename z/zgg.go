@@ -349,7 +349,7 @@ func (aa *SvcKit0) Inj(obj any) SvcKit {
 				}
 			}
 			if !found {
-				errstr := fmt.Sprintf("[_svckit_]: [inject] %s.%s <- %s.(type) error not found", //
+				errstr := fmt.Sprintf("[_svckit_]: [inject] %s.%s <- %s.(type) error, service not found", //
 					tType, tField.Name, tField.Type)
 				if aa.debug {
 					zc.Println(errstr)
@@ -358,10 +358,10 @@ func (aa *SvcKit0) Inj(obj any) SvcKit {
 				}
 			}
 		} else {
-			// 通过 `svckit:'[name]'` 中的 [name] 注入
+			// 通过 `svckit:'(name)'` 中的 (name) 注入
 			val := aa.svcmap[tagVal]
 			if val == nil {
-				errstr := fmt.Sprintf("[_svckit_]: [inject] %s.%s <- %s.[name] error not found", //
+				errstr := fmt.Sprintf("[_svckit_]: [inject] %s.%s <- %s.(name) error, service not found", //
 					tType, tField.Name, tagVal)
 				if aa.debug {
 					zc.Println(errstr)

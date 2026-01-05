@@ -2,7 +2,7 @@
 
 NOW = $(shell date -u '+%Y%m%d%I%M%S')
 
-APP = zgg
+APP = $(shell cat vname)
 
 dev: main
 
@@ -51,13 +51,25 @@ test-kube:
 test-custom:
 	go test -v cmd/custom_test.go
 
-test-copy:
-	go test -v ze/cpy/zcpy_test.go
-
 test-cert:
 	go test -v ze/crt/cert_test.go -run Test_cert
 
 push:
 	git push --set-upstream origin $b
 
+tflow:
+	@if [ -z "$(tag)" ]; then \
+		echo "error: 'tag' not specified! Please specify the 'tag' using 'make tflow tag=(version)-(appname)'";\
+		exit 1; \
+	fi
+	git commit -am "${tag}" && git tag -a $(tag) -m "${tag}" && git push origin $(tag) && git reset --hard HEAD~1
 
+mflow:
+	@if [ -z "$(m)" ]; then \
+		echo "error: 'm' not specified! Please specify the 'm' using 'make mflow m=(message)'";\
+		exit 1; \
+	fi
+	git add -A && git commit -am "$(m)" && git push
+	@if [ "$(t)" ]; then \
+	 	git tag -a $(t) -m "${t}" && git push origin $(t)
+	fi

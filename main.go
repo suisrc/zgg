@@ -38,5 +38,5 @@ func main() {
 	// kwdog2.Init() // API边车网关， 通过 Sidecar 模式保护主服务
 	// fluent.Init() // 采集器日志, 为 fluentbit agent 提供 HTTP 收集日志功能
 
-	z.Execute(_app, _ver, "(https://github.com/suisrc/k8skit)")
+	z.Execute(_app, _ver, "(https://github.com/suisrc/zgg)")
 }
