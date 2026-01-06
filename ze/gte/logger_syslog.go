@@ -118,7 +118,7 @@ func (r *lSyslog) _output(depth int, appbuf func([]byte) []byte) error {
 	}
 
 	msg := ""
-	if depth > 0 {
+	if zc.LogTrackFile && depth > 0 {
 		_, file, line, ok := runtime.Caller(depth)
 		if !ok {
 			file = "???"

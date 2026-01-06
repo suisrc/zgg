@@ -41,6 +41,8 @@ var (
 	Printl3 = func(v ...any) {
 		Log.Output(3, func(b []byte) []byte { return fmt.Appendln(b, v...) })
 	}
+
+	LogTrackFile = false
 )
 
 func Printl0(v ...any) {
@@ -100,9 +102,9 @@ func (log *logger0) Output(depth int, appbuf func([]byte) []byte) error {
 	LogItoa(buf, sec, 2)
 	*buf = append(*buf, '.')
 	LogItoa(buf, now.Nanosecond()/1e3, 6)
-	*buf = append(*buf, ' ')
 
-	if depth > 0 {
+	if LogTrackFile && depth > 0 {
+		*buf = append(*buf, ' ')
 		_, file, line, ok := runtime.Caller(depth)
 		if !ok {
 			file = "???"
@@ -119,8 +121,8 @@ func (log *logger0) Output(depth int, appbuf func([]byte) []byte) error {
 		*buf = append(*buf, file...)
 		*buf = append(*buf, ':')
 		LogItoa(buf, line, -1)
-		*buf = append(*buf, ']', ' ')
 	}
+	*buf = append(*buf, ']', ' ')
 	*buf = appbuf(*buf)
 
 	if len(*buf) == 0 || (*buf)[len(*buf)-1] != '\n' {
