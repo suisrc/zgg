@@ -30,10 +30,10 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 	// query参数，path: 文件路径
 	queryPath := rr.URL.Query().Get("path")
 	if queryPath == "" {
-		queryPath = aa.Folder
+		queryPath = aa.Config.Folder
 	}
-	if !strings.HasPrefix(queryPath, aa.Folder) {
-		queryPath = aa.Folder
+	if !strings.HasPrefix(queryPath, aa.Config.Folder) {
+		queryPath = aa.Config.Folder
 	}
 	// 兑换为 http fs 系统的文件
 	httpFile, err := aa.HttpFS.Open(queryPath)
@@ -77,20 +77,20 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 		// ----------------------------------------------------
 		var html_body strings.Builder
 		parentPath := filepath.Dir(queryPath)
-		if !strings.HasPrefix(parentPath, aa.Folder) {
-			parentPath = aa.Folder
+		if !strings.HasPrefix(parentPath, aa.Config.Folder) {
+			parentPath = aa.Config.Folder
 		}
 		// ----------------------------------------------------
-		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.ShowPath, parentPath)
+		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.Config.ShowPath, parentPath)
 		for _, path := range dirPaths {
 			name := path.Name() + "/"
 			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.ShowPath, queryPath, path.Name(), name)
+				aa.Config.ShowPath, queryPath, path.Name(), name)
 		}
 		for _, path := range filPaths {
 			name := path.Name()
 			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.ShowPath, queryPath, path.Name(), name)
+				aa.Config.ShowPath, queryPath, path.Name(), name)
 		}
 		// 整合列表到 html 中
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -17,10 +17,13 @@ import (
 )
 
 // 鉴权器， 为 f1kin 系统定制的验证器
-func NewAuthorize1(sites []string, authz string) *Authorize1 {
+// authz 鉴权服务器，authz = "" 时，只记录日志，不进行鉴权
+// askip 请求中存在 X-Request-Sky-Authorize，可以忽略鉴权
+func NewAuthorize1(sites []string, authz string, askip bool) *Authorize1 {
 	return &Authorize1{
 		Authorize0: gtw.NewAuthorize0(sites),
 		AuthzServe: authz,
+		AllowSkipz: askip,
 		client: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: gtw.TransportGtw0,
@@ -34,6 +37,7 @@ var _ gtw.Authorizer = (*Authorize1)(nil)
 type Authorize1 struct {
 	gtw.Authorize0
 	AuthzServe string       // 验证服务器
+	AllowSkipz bool         // 允许跳过验证
 	client     *http.Client // 请求客户端
 }
 
@@ -44,6 +48,9 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 	}
 	if aa.AuthzServe == "" {
 		return true // 只记录日志，不进行鉴权， 同 NewLoggerAuthz
+	}
+	if aa.AllowSkipz && rr.Header.Get("X-Request-Sky-Authorize") != "" {
+		return true // 忽略验证
 	}
 	//----------------------------------------
 	// if ainfo := rr.Header.Get("X-Request-Sky-Authorize"); ainfo != "" {

@@ -21,23 +21,19 @@ var (
 )
 
 type Front2Config struct {
-	Folder   string            `json:"folder"`
-	ShowPath string            `json:"f2show"`
-	IsNative bool              `json:"native"`
-	RootPath []string          `json:"rootpath"`
-	Index    string            `json:"index"`
-	Indexs   map[string]string `json:"indexs"`
-	TmplPath string            `json:"tmpl"`
-	TmplSuff []string          `json:"suff"`
-	Routers  map[string]string `json:"routers"`
+	Folder   string            `json:"folder"`   // 文件系统文件夹， 比如 /www, 必须是 / 开头
+	ShowPath string            `json:"f2show"`   // 显示 www 文件夹资源
+	IsNative bool              `json:"native"`   // 使用原生文件服务
+	RootPath []string          `json:"rootpath"` // 访问根目录, 访问根目录， 删除根目录后才是文件目录
+	Index    string            `json:"index"`    // 默认首页文件名, index.html
+	Indexs   map[string]string `json:"indexs"`   // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
+	Routers  map[string]string `json:"routers"`  // 路由表
+	TmplPath string            `json:"tmpl"`     // 模版根目录, ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
+	TmplSuff []string          `json:"suff"`     // 替换文件后缀, .html .htm .css .map .js
 }
 
 // 初始化方法， 处理 api 的而外配置接口
 type InitializFunc func(api *IndexApi, zgg *z.Zgg)
-
-func Init(www fs.FS) {
-	Init3(www, nil)
-}
 
 func Init3(www fs.FS, ifn InitializFunc) {
 	zc.Register(&C)
@@ -46,26 +42,15 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
 	flag.Var(zc.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
-	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
-	flag.Var(zc.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
 	flag.Var(zc.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
 	flag.Var(zc.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
+	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
+	flag.Var(zc.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 
-	z.Register("00-front2", func(zgg *z.Zgg) z.Closed {
+	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
 		hfs := http.FS(www)
-		api := &IndexApi{
-			Folder:   C.Front2.Folder,
-			ShowPath: C.Front2.ShowPath,
-			RootPath: C.Front2.RootPath,
-			TmplPath: C.Front2.TmplPath,
-			TmplSuff: C.Front2.TmplSuff,
-			Index_:   C.Front2.Index,
-			Indexs:   C.Front2.Indexs,
-			Routers:  C.Front2.Routers,
-			HttpFS:   hfs,
-			ProxyMap: make(map[string]http.Handler),
-		}
+		api := &IndexApi{Config: C.Front2, HttpFS: hfs}
 		if C.Front2.IsNative {
 			api.ServeFS = http.FileServer(hfs)
 		}
@@ -73,6 +58,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 		if C.Front2.ShowPath != "" {
 			zgg.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
 		}
+
 		if ifn != nil {
 			ifn(api, zgg) // 初始化方法
 		}
@@ -82,35 +68,34 @@ func Init3(www fs.FS, ifn InitializFunc) {
 }
 
 type IndexApi struct {
-	Folder   string            // 文件系统文件夹， 比如 /www, 必须是 / 开头
-	ShowPath string            // 显示 www 文件夹资源
-	RootPath []string          // 访问根目录, 访问根目录， 删除根目录后才是文件目录
-	TmplPath string            // 模版根目录, ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
-	TmplSuff []string          // 替换文件后缀, .html .htm .css .map .js
-	Index_   string            // 默认首页文件名, index.html
-	Indexs   map[string]string // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
-	Routers  map[string]string // 路由表
+	Config Front2Config
 
-	ServeFS  http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
-	HttpFS   http.FileSystem // 文件系统, http.FS(wwwFS)
-	ProxyMap map[string]http.Handler
-	ProxyLck sync.RWMutex
+	ServeFS   http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
+	HttpFS    http.FileSystem // 文件系统, http.FS(wwwFS)
+	_end_rmap map[string]http.Handler
+	_end_lock sync.RWMutex
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
-	aa.ProxyLck.RLock()
-	defer aa.ProxyLck.RUnlock()
-	return aa.ProxyMap[kk]
+	if aa._end_rmap == nil {
+		return nil
+	}
+	aa._end_lock.RLock()
+	defer aa._end_lock.RUnlock()
+	return aa._end_rmap[kk]
 }
 
 func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
-	aa.ProxyLck.Lock()
-	defer aa.ProxyLck.Unlock()
+	aa._end_lock.Lock()
+	defer aa._end_lock.Unlock()
 	proxy, err := gtw.NewTargetProxy(vv) // 创建目标URL
 	if err != nil {
 		return nil, err
 	}
-	aa.ProxyMap[kk] = proxy
+	if aa._end_rmap == nil {
+		aa._end_rmap = make(map[string]http.Handler)
+	}
+	aa._end_rmap[kk] = proxy
 	return proxy, nil
 }
 
@@ -118,7 +103,7 @@ func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
 func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
-	for kk, vv := range aa.Routers {
+	for kk, vv := range aa.Config.Routers {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
@@ -135,7 +120,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 		return
 	}
 	// --------------------------------------------------------------
-	rp := FixPath(rr, aa.RootPath, aa.Folder)
+	rp := FixPath(rr, aa.Config.RootPath, aa.Config.Folder)
 	if z.IsDebug() {
 		zc.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			rr.URL.Path, rr.URL.RawPath, rp)
@@ -149,10 +134,10 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 
 // 判断是否需要转换内容
 func (aa *IndexApi) isFixCtx(name string) bool {
-	if aa.TmplPath == "" {
+	if aa.Config.TmplPath == "" {
 		return false
 	}
-	for _, suff := range aa.TmplSuff {
+	for _, suff := range aa.Config.TmplSuff {
 		if strings.HasSuffix(name, suff) {
 			return true
 		}
@@ -163,10 +148,10 @@ func (aa *IndexApi) isFixCtx(name string) bool {
 
 // 获取 index.html 文件名
 func (aa *IndexApi) getIndex(rp string) string {
-	if index, ok := aa.Indexs[rp]; ok {
+	if index, ok := aa.Config.Indexs[rp]; ok {
 		return index
 	}
-	return aa.Index_
+	return aa.Config.Index
 }
 
 // try index
@@ -193,7 +178,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 	} else if aa.isFixCtx(stat.Name()) {
 		// 需要转换内容 C.RootRout -> C.RootPath
 		text, _ := io.ReadAll(file)
-		tstr := strings.ReplaceAll(string(text), "/"+aa.TmplPath, rp)
+		tstr := strings.ReplaceAll(string(text), "/"+aa.Config.TmplPath, rp)
 		trdr := strings.NewReader(tstr)
 		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), trdr)
 	} else {
@@ -220,7 +205,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		}
 		// 重定向到 index.html（支持前端路由的history模式）
 		index := aa.getIndex(rp)
-		ipath := aa.Folder + "/" + index
+		ipath := aa.Config.Folder + "/" + index
 		file, err = aa.HttpFS.Open(ipath)
 		if err != nil {
 			zc.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
@@ -237,7 +222,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		}
 		// 需要转换内容 C.RootRout -> C.RootPath
 		text, _ := io.ReadAll(file)
-		tstr := strings.ReplaceAll(string(text), "/"+aa.TmplPath, rp)
+		tstr := strings.ReplaceAll(string(text), "/"+aa.Config.TmplPath, rp)
 		trdr := strings.NewReader(tstr)
 		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), trdr)
 	}

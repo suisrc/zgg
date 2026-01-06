@@ -1,6 +1,5 @@
 # 配置文件
-printconfig=true
-
+print=true
 debug=true
 
 [server]
@@ -30,8 +29,9 @@ syslog="klog.default.svc:5141"
 [kwdog2.routers]
 "/api/iam/"="http://end-iam-kin-svc.uat-fmes.svc"
 
-[fluent]
+[kwlog2]
 token="xxx123456789"
 store="./www"
-route="/api/zgg/logs"
+# route="/api/zgg/logs"
+# false: message only
 use_origin=true

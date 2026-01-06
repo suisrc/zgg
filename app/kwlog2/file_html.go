@@ -32,17 +32,17 @@ func (aa *Kwlog2Api) lst(zrc *z.Ctx) {
 	if strings.Contains(queryPath, "..") {
 		rw.WriteHeader(http.StatusForbidden)
 		rw.Write([]byte("Forbidden"))
-		return
-	} else if queryPath == "" {
+		return // 禁止 .. 方式访问
+	}
+	if queryPath == "" {
 		queryPath = "/"
 	}
 	// 兑换为 http fs 系统的文件
 	httpFile, err := aa.HttpFS.Open(queryPath)
 	if err != nil {
-		// 文件读取发生异常
 		http.NotFound(rw, rr)
 		rw.Write([]byte(err.Error()))
-		return
+		return // 文件读取发生异常
 	}
 	defer httpFile.Close() // 退出时候关闭文件
 	// 确定文件状态 ========================================================
@@ -58,6 +58,7 @@ func (aa *Kwlog2Api) lst(zrc *z.Ctx) {
 		http.NotFound(rw, rr)
 		rw.Write([]byte(err.Error()))
 	} else {
+		// 列举文件夹和文件
 		dirPaths := []fs.FileInfo{} // 文件夹
 		filPaths := []fs.FileInfo{} // 文件
 		for _, path := range pathList {
@@ -83,16 +84,16 @@ func (aa *Kwlog2Api) lst(zrc *z.Ctx) {
 			queryPath = ""
 		}
 		// ----------------------------------------------------
-		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.RoutePath, parentPath)
+		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.Config.RoutePath, parentPath)
 		for _, path := range dirPaths {
 			name := path.Name() + "/"
 			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.RoutePath, queryPath, path.Name(), name)
+				aa.Config.RoutePath, queryPath, path.Name(), name)
 		}
 		for _, path := range filPaths {
 			name := path.Name()
 			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.RoutePath, queryPath, path.Name(), name)
+				aa.Config.RoutePath, queryPath, path.Name(), name)
 		}
 		// 整合列表到 html 中
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")

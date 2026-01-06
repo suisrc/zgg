@@ -51,12 +51,14 @@ var (
 
 func RunHttpServe() {
 	PrintVersion()
-	// config
+	Initializ()
+	// parse command line arguments
 	var cfs string
 	flag.StringVar(&cfs, "c", "", "config file path")
-	flag.Parse() // command line arguments
+	flag.Parse()
+	// parse config file
 	zc.LoadConfig(cfs)
-	// server
+	// running server
 	zgg := &Zgg{}
 	if zgg.ServeInit() {
 		zgg.RunServe()

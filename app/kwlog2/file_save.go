@@ -70,9 +70,9 @@ func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 		if !ok {
 			file, _ = aa._files.LoadOrStore(fkey, &LoggerFile{
 				DelFunc: aa.del_file,
-				AbsPath: aa.AbsPath,
+				AbsPath: aa.Config.StorePath,
 				FileKey: fkey,
-				MaxSize: aa.MaxSize,
+				MaxSize: aa.Config.MaxSize,
 			})
 		}
 		tpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(time.RFC3339), rc.PodName)

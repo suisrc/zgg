@@ -98,9 +98,9 @@ Authorization: Bearer kst.9B8A147880FE5434E281C58CDF2EC43E00000002WL90PxBIoL0y2i
 }
 
 // -----------------------------------------------
-// fluent
+// kwlog2
 ### 
-POST {{BASE}}/api/zgg/logs
+POST {{BASE}}/api/logs
 Content-Type: application/json
 Authorization: Token xxx123456789
 X-Request-Tag: test.dev
@@ -113,7 +113,7 @@ X-Request-Tag: test.dev
     "__namespace_name": "default",
     "__node_name": "dev-master",
     "__pod_ip": "10.42.0.122",
-    "__container_name": "httpbin-logtty\u123a",
+    "__container_name": "httpbin-logtty",
     "__container_image": "docker.io/kong/httpbin:0.2.3",
     "__app_name": "httpbin"
 }]

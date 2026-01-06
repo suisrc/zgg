@@ -7,14 +7,21 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
+// 初始化方法， 处理 api 的而外配置接口
+type InitializFunc func(api *HelloApi, zgg *z.Zgg)
+
 func init() {
-	Init3()
+	Init3(nil)
 }
 
-func Init3() {
-	z.Register("01-hello", func(zgg *z.Zgg) z.Closed {
+func Init3(ifn InitializFunc) {
+	z.Register("50-hello", func(zgg *z.Zgg) z.Closed {
 		api := z.Inject(zgg.SvcKit, &HelloApi{})
 		zgg.AddRouter("hello", api.hello)
+
+		if ifn != nil {
+			ifn(api, zgg) // 初始化方法
+		}
 		return func() {
 			zc.Println("api-hello closed")
 		}

@@ -64,6 +64,7 @@ type ServerConfig struct {
 var _ http.Handler = (*Zgg)(nil)
 
 type Server struct {
+	Key string
 	Srv *http.Server
 	TLS *tls.Config
 }
@@ -159,22 +160,16 @@ func (aa *Zgg) RunServe() {
 	// 方案3， 启动HTTP服务， 并可优雅的终止
 	hss := []*http.Server{}
 	for _, hsv := range aa.Servers {
-		var scheme string
-		if hsv.TLS != nil {
-			scheme = "(HTTPS)"
-		} else {
-			scheme = "(HTTP )"
-		}
-		zc.Println("[_server_]: http server started, linsten:", scheme, hsv.Srv.Addr)
-		go aa.RunningServer(hsv.Srv, hsv.TLS)
+		zc.Println("[_server_]: http server started, linsten:", hsv.Key, hsv.Srv.Addr)
+		go aa.Execute(hsv.Srv, hsv.TLS)
 		hss = append(hss, hsv.Srv)
 	}
-	aa.WaitForServer(hss...)
+	aa.WaitFor(hss...)
 }
 
 // ----------------------------------------------------------------------------
 
-func (aa *Zgg) RunningServer(hsv *http.Server, cfg *tls.Config) {
+func (aa *Zgg) Execute(hsv *http.Server, cfg *tls.Config) {
 	if cfg != nil {
 		hsv.TLSConfig = cfg // Certificates, GetCertificate, GetConfigForClient
 		if err := hsv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
@@ -185,7 +180,11 @@ func (aa *Zgg) RunningServer(hsv *http.Server, cfg *tls.Config) {
 	}
 }
 
-func (aa *Zgg) WaitForServer(hss ...*http.Server) {
+func (aa *Zgg) WaitFor(hss ...*http.Server) {
+	if len(hss) == 0 {
+		zc.Println("[_server_]: no server to wait for")
+		return
+	}
 	ssc := make(chan os.Signal, 1)
 	signal.Notify(ssc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-ssc
@@ -208,9 +207,9 @@ func (aa *Zgg) WaitForServer(hss ...*http.Server) {
 func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if IsDebug() {
 		zc.Printf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
-		rw.Header().Set("Serv-Handler", aa.Engine.Name())
+		rw.Header().Set("Xser-Routerz", aa.Engine.Name())
 	}
-	rw.Header().Set("Serv-Version", AppName+":"+Version)
+	rw.Header().Set("Xser-Version", AppName+":"+Version)
 	aa.Engine.ServeHTTP(rw, rr)
 }
 

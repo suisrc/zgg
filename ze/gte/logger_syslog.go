@@ -51,11 +51,11 @@ func (r *lSyslog) Init() *lSyslog {
 	if r.Network == "" {
 		r.Network = "udp"
 	} else if r.Network != "udp" && r.Network != "tcp" {
-		zc.Printl0("[_syslog_]", "lSyslog, invalid network,", r.Network)
+		zc.Printl0("[_lsyslog]:", "invalid network,", r.Network)
 		return r
 	}
 	if r.Address == "" {
-		zc.Printl0("[_syslog_]", "lSyslog, invalid address,", r.Address)
+		zc.Printl0("[_lsyslog]:", "invalid address,", r.Address)
 		return r
 	}
 	if r.Priority <= 0 {
@@ -72,9 +72,9 @@ func (r *lSyslog) Init() *lSyslog {
 		var err error
 		r._klog, err = syslog.Dial(r.Network, r.Address, syslog.Priority(r.Priority), r.TagInfo)
 		if err != nil {
-			zc.Printl0("[_syslog_]", "lSyslog, unable to connect to syslog:", err.Error())
+			zc.Printl0("[_lsyslog]:", "unable to connect to syslog:", err.Error())
 		} else {
-			zc.Printl0("[_syslog_]", "lSyslog, connect to syslog:", r.Address)
+			zc.Printl0("[_lsyslog]:", "connect to syslog:", r.Address)
 		}
 		r._time = time.Now().Unix()
 	}
@@ -147,7 +147,7 @@ func (r *lSyslog) _output(depth int, appbuf func([]byte) []byte) error {
 		r._time = time.Now().Unix() + 5
 	}
 	if err := r._klog.Info(msg); err != nil {
-		zc.Printl0("[_syslog_]", "lSyslog, unable to write to syslog: ", err.Error())
+		zc.Printl0("[_lsyslog]:", "unable to write to syslog: ", err.Error())
 	}
 	return nil
 }

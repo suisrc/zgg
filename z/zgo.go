@@ -27,7 +27,10 @@ func IsDebug() bool {
 	return zc.C.Debug
 }
 
-func init() {
+var HttpServeDef = true // 启动默认 http 服务
+
+// 注册默认方法
+func Initializ() {
 	// 注册配置函数
 	zc.Register(C)
 
@@ -43,26 +46,30 @@ func init() {
 	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
 	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
 
-	// 注册服务
-	Register("90-server", func(zgg *Zgg) Closed {
-		if C.Server.Local {
-			C.Server.Addr = "127.0.0.1"
-		}
-		if C.Server.Ptls > 0 && zgg.TLSConf != nil {
-			addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
-			hsv := &http.Server{Handler: zgg, Addr: addr}
-			zgg.Servers = append(zgg.Servers, &Server{Srv: hsv, TLS: zgg.TLSConf})
-			zc.Println("[register]: register http server, (HTTPS)", addr)
-		}
-		if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
-			addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
-			hsv := &http.Server{Handler: zgg, Addr: addr}
-			zgg.Servers = append(zgg.Servers, &Server{Srv: hsv})
-			zc.Println("[register]: register http server, (HTTP )", addr)
-		}
-		zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
-		return nil
-	})
+	//  register default serve
+	if HttpServeDef {
+		Register("90-server", RegisterDefaultHttpServe)
+	}
+}
+
+func RegisterDefaultHttpServe(zgg *Zgg) Closed {
+	if C.Server.Local {
+		C.Server.Addr = "127.0.0.1"
+	}
+	if C.Server.Ptls > 0 && zgg.TLSConf != nil {
+		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
+		hsv := &http.Server{Handler: zgg, Addr: addr}
+		zgg.Servers = append(zgg.Servers, &Server{Key: "(HTTPS)", Srv: hsv, TLS: zgg.TLSConf})
+		// zc.Println("[register]: register http server, (HTTPS)", addr)
+	}
+	if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
+		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
+		hsv := &http.Server{Handler: zgg, Addr: addr}
+		zgg.Servers = append(zgg.Servers, &Server{Key: "(HTTP1)", Srv: hsv})
+		// zc.Println("[register]: register http server, (HTTP1)", addr)
+	}
+	zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
+	return nil
 }
 
 // -----------------------------------------------------------------------------------
@@ -71,6 +78,16 @@ func init() {
 func Healthz(ctx *Ctx) {
 	ctx.JSON(&Result{Success: true, Data: time.Now().Format("2006-01-02 15:04:05")})
 }
+
+// favicon.ico
+func Favicon(ctx *Ctx) {
+	// 缓存1小时
+	ctx.Writer.Header().Set("Cache-Control", "max-age=3600")
+	ctx.Writer.Header().Set("Content-Type", "image/x-icon")
+	ctx.Writer.Write([]byte{})
+}
+
+// -----------------------------------------------------------------------------------
 
 // 创建指针
 func Ptr[T any](v T) *T {

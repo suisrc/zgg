@@ -28,7 +28,7 @@ var (
 // Config 配置参数
 type Config struct {
 	Debug bool `default:"false" json:"debug"`
-	Print bool `default:"false" json:"printconfig"`
+	Print bool `default:"false" json:"print"`
 }
 
 var (
