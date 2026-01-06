@@ -1,0 +1,82 @@
+# 部署内容
+# kubectl apply -f k8s.yaml
+# 
+# docker 环境下运行
+# docker run --name kwlog2 -v /opt/kwlog2:/opt/kwlog2 -e KIT_KWLOG2_TOKEN=xxx123456789 -d suisrc/k8skit:1.0.1-kwlog2
+# kwlog2.default.svc
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+  name: kwlog2
+  namespace: default
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: kwlog2.xxx.zzz
+      http:
+        paths:
+          - backend:
+              service:
+                name: kwlog2
+                port:
+                  name: http
+            path: /api/logs
+            pathType: Prefix
+  tls:
+    - hosts:
+        - kwlog2.xxx.zzz
+      secretName: tls-kwlog2.xxx.zzz
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kwlog2
+  namespace: default
+spec:
+  ports:
+  - name: http
+    port: 80
+  selector:
+    app: kwlog2
+  # clusterIP: None
+
+---
+# 防止文件读写竞争， 推荐使用 StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet # Deployment or StatefulSet
+metadata:
+  name: kwlog2
+  namespace: default
+spec:
+  serviceName: kwlog2
+  replicas: 1
+  selector: { matchLabels: { app: kwlog2 }}
+  template:
+    metadata: { labels: { app: kwlog2 }}
+    spec:
+      # nodeSelector: { type: master }
+      nodeName: dev-master # 必须指定节点， 单实例部署
+      containers:
+        - image: ghcr.io/suisrc/k8skit:X.Y.Z-kwlog2
+          name: kwlog2
+          # args: ["-print"]
+          env:
+            - {name: TZ, value: Asia/Shanghai }
+            - {name: KIT_KWLOG2_TOKEN, value: xxx123456789 }
+      #     volumeMounts:
+      #       - mountPath: /opt/data
+      #         name: data
+      # volumes:
+      #   - name:  data
+      #     hostPath:
+      #       type: DirectoryOrCreate
+      #       path: /opt/kwlog2
+      #     # nfs:
+      #     #   server: 192.168.3.33
+      #     #   path: /volume0/xxx/yyy/zzz

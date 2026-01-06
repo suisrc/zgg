@@ -1,4 +1,4 @@
-package fluent
+package kwlog2
 
 import (
 	"encoding/json"
@@ -14,56 +14,6 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
-type Record0 struct {
-	Time      float64 `json:"__time"`
-	Namespace string  `json:"__namespace_name"`
-	AppName   string  `json:"__app_name"`
-	PodName   string  `json:"__pod_name"`
-	CriName   string  `json:"__container_name"`
-	CriImage  string  `json:"__container_image"`
-	Message   any     `json:"message"`
-}
-
-type Record struct {
-	Record0
-
-	Origin []byte `json:"-"` // 原始数据
-}
-
-func (rc *Record) UnmarshalJSON(data []byte) error {
-	err := json.Unmarshal(data, &rc.Record0)
-	if err != nil {
-		return err
-	}
-	// if str, ok := rc.Message.(string); ok && len(str) > 0 && str[0] == '{' {
-	// 	map_ := map[string]any{}
-	// 	if err := json.Unmarshal([]byte(str), &map_); err == nil {
-	// 		rc.Message = map_ // 尝试解析 message 内容
-	// 	}
-	// }
-	if rc.Message != nil && !C.Fluent.UseOrigin {
-		if str, ok := rc.Message.(string); ok {
-			// 消息将被替换，补充一些容器信息
-			pre := ""
-			if rc.CriImage != "" {
-				idx := strings.LastIndexByte(rc.CriImage, '/')
-				if idx > 0 {
-					pre = "(" + rc.CriImage[idx+1:] + ") "
-				}
-			}
-			// rc.Origin = []byte(str) // 防止 unicode 字符存在
-			rc.Origin, _ = z.UnicodeToRunes([]byte(pre), []byte(str))
-		} else if bts, err := json.Marshal(rc.Message); err == nil {
-			rc.Origin = bts // 重新被json化的数据
-		}
-	}
-	if rc.Origin == nil {
-		// 存在风险，需要转移
-		rc.Origin, err = z.UnicodeToRunes(data)
-	}
-	return err
-}
-
 var (
 	// 日志标签
 	HeaderTagKey = "X-Request-Tag"
@@ -71,7 +21,7 @@ var (
 	SuccessOK    = &z.Result{Success: true, Data: "ok"}
 )
 
-func (aa *FluentApi) add(zrc *z.Ctx) {
+func (aa *Kwlog2Api) add(zrc *z.Ctx) {
 	logs := []Record{}
 	if err := json.NewDecoder(zrc.Request.Body).Decode(&logs); err != nil {
 		zc.Printf("[logstore]: unmarshal body error, %s", err.Error())
@@ -83,7 +33,7 @@ func (aa *FluentApi) add(zrc *z.Ctx) {
 	zrc.Writer.WriteHeader(http.StatusOK)
 }
 
-func (aa *FluentApi) log(rcs []Record, ktag string) {
+func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 	for _, rc := range rcs {
 		if rc.AppName == "" {
 			rc.AppName = rc.PodName
@@ -122,7 +72,7 @@ func (aa *FluentApi) log(rcs []Record, ktag string) {
 				DelFunc: aa.del_file,
 				AbsPath: aa.AbsPath,
 				FileKey: fkey,
-				MaxSize: C.Fluent.MaxSize,
+				MaxSize: aa.MaxSize,
 			})
 		}
 		tpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(time.RFC3339), rc.PodName)
@@ -130,7 +80,7 @@ func (aa *FluentApi) log(rcs []Record, ktag string) {
 	}
 }
 
-func (aa *FluentApi) del_file(lf *LoggerFile) {
+func (aa *Kwlog2Api) del_file(lf *LoggerFile) {
 	aa._files.Delete(lf.FileKey)
 	zc.Printf("[logstore]: recycle handle -> %s%d.txt", lf.FileKey, lf.Index)
 }

@@ -15,8 +15,10 @@ import (
 	"time"
 )
 
+var _std = NewLogger(os.Stdout)
+
 var (
-	Log = NewLogger()
+	Log = _std
 
 	Printf = func(format string, v ...any) {
 		Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
@@ -41,40 +43,43 @@ var (
 	}
 )
 
+func Printl0(v ...any) {
+	_std.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
+}
+
 // ----------------------------------------------------------------------------
 
 type Logger interface {
 	Output(depth int, append func([]byte) []byte) error
 }
 
-func NewLogger() Logger {
-	logger := &Logger0{}
-	logger.bytePool.New = func() any { return new([]byte) }
-	logger.OutWriter = os.Stdout
+func NewLogger(w io.Writer) Logger {
+	logger := &logger0{}
+	logger._pool.New = func() any { return new([]byte) }
+	logger._klog = w
 	return logger
 }
 
-type Logger0 struct {
-	bytePool sync.Pool
-	outMutex sync.Mutex
-
-	OutWriter io.Writer // destination for output
+type logger0 struct {
+	_pool sync.Pool
+	_lock sync.Mutex
+	_klog io.Writer // destination for output
 }
 
-func (log *Logger0) GetBuffer() *[]byte {
-	return log.bytePool.Get().(*[]byte)
+func (log *logger0) GetBuffer() *[]byte {
+	return log._pool.Get().(*[]byte)
 }
 
-func (log *Logger0) PutBuffer(buf *[]byte) {
+func (log *logger0) PutBuffer(buf *[]byte) {
 	// See https://go.dev/issue/23199
 	if cap(*buf) > 64<<10 {
 		*buf = nil
 	}
 	*buf = (*buf)[:0]
-	log.bytePool.Put(buf)
+	log._pool.Put(buf)
 }
 
-func (log *Logger0) Output(depth int, appbuf func([]byte) []byte) error {
+func (log *logger0) Output(depth int, appbuf func([]byte) []byte) error {
 	now := time.Now() // get this early.
 
 	buf := log.GetBuffer()
@@ -95,9 +100,9 @@ func (log *Logger0) Output(depth int, appbuf func([]byte) []byte) error {
 	LogItoa(buf, sec, 2)
 	*buf = append(*buf, '.')
 	LogItoa(buf, now.Nanosecond()/1e3, 6)
+	*buf = append(*buf, ' ')
 
 	if depth > 0 {
-		*buf = append(*buf, ' ')
 		_, file, line, ok := runtime.Caller(depth)
 		if !ok {
 			file = "???"
@@ -114,17 +119,17 @@ func (log *Logger0) Output(depth int, appbuf func([]byte) []byte) error {
 		*buf = append(*buf, file...)
 		*buf = append(*buf, ':')
 		LogItoa(buf, line, -1)
+		*buf = append(*buf, ']', ' ')
 	}
-	*buf = append(*buf, ']', ' ')
 	*buf = appbuf(*buf)
 
 	if len(*buf) == 0 || (*buf)[len(*buf)-1] != '\n' {
 		*buf = append(*buf, '\n')
 	}
 
-	log.outMutex.Lock()
-	defer log.outMutex.Unlock()
-	_, err := log.OutWriter.Write(*buf)
+	log._lock.Lock()
+	defer log._lock.Unlock()
+	_, err := log._klog.Write(*buf)
 	return err
 }
 

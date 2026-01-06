@@ -1,4 +1,4 @@
-package fluent
+package kwlog2
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ var (
 )
 
 // 列表文件
-func (aa *FluentApi) lst(zrc *z.Ctx) {
+func (aa *Kwlog2Api) lst(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
 

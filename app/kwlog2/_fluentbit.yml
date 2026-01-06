@@ -1,13 +1,29 @@
 # kubectl apply -f fluent.yaml -n default
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: klog
+  namespace: default
+spec:
+  ports:
+  - { name: klog41, port: 5141, protocol: UDP }
+  - { name: http20, port: 2020, protocol: TCP }
+  selector:
+    app: fluent
+  clusterIP: None
+
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fluent
   namespace: default
 data:
-# 2.0 系统， 应用将日志推送到控制台后， 容器通过控制台日志文件采集, 容器的名字以 -logtty 结尾的会自动采集
-# 这是一个的例子，用于我们测试集群的日志收集，1.0系统我们使用sls, cls这类系统，会有费用产生，测试环境没必要
 # klog.default.svc
+# 2.0 系统， 应用将日志推送到控制台后， 容器通过控制台日志文件采集, 容器的名字以 -logtty 结尾的会自动采集
+# 这是一个的例子，用于我们测试集群的日志收集，1.0系统我们使用sls,cls这类系统，会有费用产生，测试环境没必要
   config2: |
     [SERVICE]
         Parsers_File    parsers2.conf
@@ -78,32 +94,8 @@ data:
         Header_tag      X-Request-Tag
 # kubectl logs `kubectl get pod -o wide | grep fluent | cut -d ' ' -f 1` | tail -n 10
 # kubectl delete pod `kubectl get pod -o wide | grep fluent | cut -d ' ' -f 1`
-# 数据处理配置
-  scripts.lua: |
-    function k8s_format_record(tag, timestamp, record)
-      local k8s = record["kubernetes"]
-      if k8s == nil then
-        return 1, timestamp, record
-      end
-      local data = {}
-      data["_time"] = record["_time"]
-      data["_kind"] = record["_kind"]
-      data["message"] = record["message"]
-      data["__namespace_name"] = k8s["namespace_name"]
-      data["__pod_name"] = k8s["pod_name"]
-      data["__pod_ip"] = k8s["pod_ip"]
-      data["__node_name"] = k8s["host"]
-      data["__container_name"] = k8s["container_name"]
-      data["__container_image"] = k8s["container_image"]
-      -- 匹配最后是否有 -logtty, 有删除后面，没有保持整体
-      return 1, timestamp, data
-    end
-    -- [FILTER]
-    --     Name    lua
-    --     Match   klog.var.log.containers.*
-    --     script  /fluent-bit/etc/scripts2.lua
-    --     call    k8s_format_record
-# 自定义解析器, 注意市区解析， z无冒号,Z有冒号
+# 自定义解析器, 注意时区解析， z无冒号,Z有冒号
+# https://github.com/fluent/fluent-bit/blob/master/conf/parsers.conf
   parsers.conf: |
     [PARSER]
         Name    json
@@ -141,33 +133,32 @@ data:
         Time_Key     _time
         Time_Format  %Y-%m-%dT%H:%M:%S.%L%z
         Time_Keep    On
+# 数据处理配置 https://docs.fluentbit.io/manual/data-pipeline/filters/lua
+  scripts.lua: |
+    function k8s_format_record(tag, timestamp, record)
+      local k8s = record["kubernetes"]
+      if k8s == nil then
+        return 1, timestamp, record
+      end
+      local data = {}
+      data["_time"] = record["_time"]
+      data["_kind"] = record["_kind"]
+      data["message"] = record["message"]
+      data["__namespace_name"] = k8s["namespace_name"]
+      data["__pod_name"] = k8s["pod_name"]
+      data["__pod_ip"] = k8s["pod_ip"]
+      data["__node_name"] = k8s["host"]
+      data["__container_name"] = k8s["container_name"]
+      data["__container_image"] = k8s["container_image"]
+      -- 匹配最后是否有 -logtty, 有删除后面，没有保持整体
+      return 1, timestamp, data
+    end
+    -- [FILTER]
+    --     Name    lua
+    --     Match   klog.var.log.containers.*
+    --     script  /fluent-bit/etc/scripts2.lua
+    --     call    k8s_format_record
 
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: klog
-  namespace: default
-spec:
-  ports:
-  - { name: klog41, port: 5141, protocol: UDP }
-  selector:
-    app: fluent
-  clusterIP: None
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: fluent
-  namespace: default
-spec:
-  ports:
-  - { name: klog41, port: 5141, protocol: UDP }
-  - { name: http20, port: 2020, protocol: TCP }
-  selector:
-    app: fluent
-  clusterIP: None
 ---
 # alisls-fluent:v4.2.2.2 是基于 fluentbit:4.2.2 修改的版本，增加的 AliyunSLS 插件
 apiVersion: apps/v1
@@ -185,7 +176,7 @@ spec:
         # fluentbit.io/parser: ????
     spec:
       serviceAccountName: fluent
-      nodeName: dev-master
+      # nodeName: dev-master
       containers:
         - name: app
           image: docker.io/suisrc/alisls-fluent:v4.2.2.2
@@ -244,3 +235,6 @@ subjects:
   - kind: ServiceAccount
     name: fluent
     namespace: default
+
+# 
+---
