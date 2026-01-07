@@ -16,26 +16,23 @@ import (
 
 // 日志转存到控制台上
 
-func NewRecordPrint() gtw.RecordPool {
-	return gtw.NewRecordPool(RecordPrint)
-}
-
-func RecordPrint(rt gtw.RecordTrace) {
-	rc := &Record{}
-	rc.ByRecord0(rt.(*gtw.Record0))
-	zc.Println("[_record_]", rc.ToFormatStr())
+func NewRecordToTTY(convert gtw.ConvertFunc) gtw.RecordPool {
+	return gtw.NewRecordPool(func(record gtw.IRecord) {
+		zc.Println(convert(record).ToFmt())
+	})
 }
 
 // -----------------------------------
 // 日志转存到文件, 简单参考，不要用于生产
 
-func NewRecordSimpleFile(file string) gtw.RecordPool {
+func NewRecordSimpleFile(file string, convert gtw.ConvertFunc) gtw.RecordPool {
 	return gtw.NewRecordPool((&rSimpleFile{file: file}).Init().log)
 }
 
 type rSimpleFile struct {
-	lock sync.Mutex
-	file string
+	convert gtw.ConvertFunc
+	lock    sync.Mutex
+	file    string
 }
 
 func (r *rSimpleFile) Init() *rSimpleFile {
@@ -47,10 +44,8 @@ func (r *rSimpleFile) Init() *rSimpleFile {
 	return r
 }
 
-func (r *rSimpleFile) log(rt gtw.RecordTrace) {
-	rc := &Record{}
-	rc.ByRecord0(rt.(*gtw.Record0))
-	bs, _ := rc.MarshalJSON()
+func (r *rSimpleFile) log(rt gtw.IRecord) {
+	bs, _ := r.convert(rt).ToJson()
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	// 追加写入文件

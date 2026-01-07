@@ -15,7 +15,7 @@ import (
 )
 
 type Authorizer interface {
-	Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt RecordTrace) bool
+	Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt IRecord) bool
 }
 
 // -------------------------------------------------------------------------------------
@@ -38,7 +38,7 @@ func NewAuthorize0(sites []string) Authorize0 {
 	}
 }
 
-func (aa *Authorize0) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt_ RecordTrace) bool {
+func (aa *Authorize0) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt_ IRecord) bool {
 	rt, _ := rt_.(*Record0) // 转换
 	if rr.Header == nil {
 		rr.Header = make(http.Header)

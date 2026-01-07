@@ -63,15 +63,9 @@ type ServerConfig struct {
 
 var _ http.Handler = (*Zgg)(nil)
 
-type Server struct {
-	Key string
-	Srv *http.Server
-	TLS *tls.Config
-}
-
 // 默认服务实体
 type Zgg struct {
-	Servers []*Server   // 服务器列表
+	Servers map[string]*http.Server
 	Closeds []Closed    // 模块关闭函数列表
 	TLSConf *tls.Config // Certificates, GetCertificate
 
@@ -85,7 +79,7 @@ type Zgg struct {
 
 // 服务初始化
 func (aa *Zgg) ServeInit() bool {
-	aa.Servers = []*Server{}
+	aa.Servers = map[string]*http.Server{}
 	aa.Closeds = []Closed{}
 	if aa.SvcKit == nil {
 		aa.SvcKit = NewSvcKit(aa, IsDebug())
@@ -159,19 +153,18 @@ func (aa *Zgg) RunServe() {
 	// ------------------------------------------------------------------------
 	// 方案3， 启动HTTP服务， 并可优雅的终止
 	hss := []*http.Server{}
-	for _, hsv := range aa.Servers {
-		zc.Println("[_server_]: http server started, linsten:", hsv.Key, hsv.Srv.Addr)
-		go aa.Execute(hsv.Srv, hsv.TLS)
-		hss = append(hss, hsv.Srv)
+	for key, hsv := range aa.Servers {
+		zc.Println("[_server_]: http server started, linsten:", key, hsv.Addr)
+		go aa.Execute(hsv)
+		hss = append(hss, hsv)
 	}
 	aa.WaitFor(hss...)
 }
 
 // ----------------------------------------------------------------------------
 
-func (aa *Zgg) Execute(hsv *http.Server, cfg *tls.Config) {
-	if cfg != nil {
-		hsv.TLSConfig = cfg // Certificates, GetCertificate, GetConfigForClient
+func (aa *Zgg) Execute(hsv *http.Server) {
+	if hsv.TLSConfig != nil {
 		if err := hsv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 			zc.Fatalf("[_server_]: server exit error: %s\n", err)
 		}

@@ -7,6 +7,7 @@ package crt
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
 	"sync"
 
@@ -20,30 +21,50 @@ type TLSAutoConfig struct {
 	CertConf CertConfig
 	IsSaCert bool
 
-	cache sync.Map // 缓存池
+	_lock sync.Mutex
+	_lmap map[string]*tls.Certificate
 }
 
-func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	if ct, ok := aa.cache.Load(hello.ServerName); ok {
-		return ct.(*tls.Certificate), nil
-	}
-
-	var err error
-	var sni string
-	var cer SignResult
-	if hello.ServerName == "" {
-		sni, _, err = net.SplitHostPort(hello.Conn.LocalAddr().String())
-		if err == nil {
-			sip := net.ParseIP(sni)
-			cer, err = CreateCE(aa.CertConf, "", nil, []net.IP{sip}, aa.CaCrtBts, aa.CaKeyBts)
+func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, error) {
+	key := sni
+	if key == "" {
+		if ipp == "" {
+			return nil, errors.New("sni and ipp is empty")
 		}
-	} else {
-		sni = hello.ServerName
+		var err error
+		key, _, err = net.SplitHostPort(ipp)
+		if err != nil {
+			if z.IsDebug() {
+				zc.Println("[_tlsauto]: NewCertificate: ", ipp, " error: ", err)
+			}
+			return nil, err
+		}
+	}
+	if aa._lmap != nil {
+		if ct, ok := aa._lmap[key]; ok {
+			return ct, nil
+		}
+	}
+	// ----------------------------------------------------------------------------
+	aa._lock.Lock()
+	defer aa._lock.Unlock()
+	if aa._lmap == nil {
+		aa._lmap = make(map[string]*tls.Certificate)
+	}
+	if ct, ok := aa._lmap[key]; ok {
+		return ct, nil
+	}
+	var err error
+	var cer SignResult
+	if sni != "" {
 		cer, err = CreateCE(aa.CertConf, "", []string{sni}, nil, aa.CaCrtBts, aa.CaKeyBts)
+	} else {
+		sip := net.ParseIP(key)
+		cer, err = CreateCE(aa.CertConf, "", nil, []net.IP{sip}, aa.CaCrtBts, aa.CaKeyBts)
 	}
 	if err != nil {
 		if z.IsDebug() {
-			zc.Println("[_tlsconf]: GetCertificate: ", sni, " error: ", err)
+			zc.Println("[_tlsauto]: NewCertificate: ", key, " error: ", err)
 		}
 		return nil, err
 	}
@@ -51,24 +72,28 @@ func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certif
 		cer.Crt += string(aa.CaCrtBts)
 	}
 	if z.IsDebug() {
-		zc.Println("[_tlsconf]: GetCertificate: ", sni)
-		zc.Printf("=================== cert .crt ===================%s\n%s\n", sni, cer.Crt)
-		zc.Printf("=================== cert .key ===================%s\n%s\n", sni, cer.Key)
-		zc.Println("=================================================")
+		zc.Println("[_tlsauto]: NewCertificate: ", key)
+		zc.Printf("=============== cert .crt ===============%s\n%s\n", key, cer.Crt)
+		zc.Printf("=============== cert .key ===============%s\n%s\n", key, cer.Key)
+		zc.Println("=========================================")
 	}
 	ct, err := tls.X509KeyPair([]byte(cer.Crt), []byte(cer.Key))
 	if err != nil {
-		zc.Println("[_tlsconf]: GetCertificate: ", sni, " load error: ", err)
+		zc.Println("[_tlsauto]: NewCertificate: ", key, " load error: ", err)
 		return nil, err
 	}
-	aa.cache.Store(hello.ServerName, &ct)
+	aa._lmap[key] = &ct
 	return &ct, nil
 }
 
+func (aa *TLSAutoConfig) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return aa.GetCert(hello.ServerName, hello.Conn.LocalAddr().String())
+}
+
 func (aa *TLSAutoConfig) GetConfigForClient(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-	cert, err := aa.GetCertificate(hello)
-	if err != nil {
+	if cert, err := aa.GetCert(hello.ServerName, hello.Conn.LocalAddr().String()); err != nil {
 		return nil, err
+	} else {
+		return &tls.Config{Certificates: []tls.Certificate{*cert}}, nil
 	}
-	return &tls.Config{Certificates: []tls.Certificate{*cert}}, nil
 }

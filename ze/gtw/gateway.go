@@ -41,7 +41,7 @@ func (p *GatewayProxy) GetProxyName() string {
 	return p.ProxyName
 }
 
-func (p *GatewayProxy) NewRecord() RecordTrace {
+func (p *GatewayProxy) NewRecord() IRecord {
 	if p.RecordPool == nil {
 		return nil
 	}
@@ -306,7 +306,7 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (p *GatewayProxy) CopyResponse2(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration, record RecordTrace) error {
+func (p *GatewayProxy) CopyResponse2(dst http.ResponseWriter, src io.Reader, flushInterval time.Duration, record IRecord) error {
 	var w io.Writer = dst
 
 	if flushInterval != 0 {

@@ -17,6 +17,8 @@ var (
 	C = struct {
 		Kwdog2 Kwdog2Config
 	}{}
+
+	RecordFunc = gte.ToRecord0
 )
 
 type Kwdog2Config struct {
@@ -50,7 +52,7 @@ func Init3(ifn InitializFunc) {
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
 		var err error
 		api := &KwdogApi{Config: C.Kwdog2}
-		api.RecordPool = gte.NewRecordSyslog(api.Config.Syslog, "udp", 0, api.Config.Ttylog)
+		api.RecordPool = gte.NewRecordSyslog(api.Config.Syslog, "udp", 0, api.Config.Ttylog, RecordFunc)
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
 		api.GtwDefault, err = gtw.NewTargetGateway(api.Config.NextAddr, api.BufferPool)
 		if err != nil {
@@ -62,8 +64,7 @@ func Init3(ifn InitializFunc) {
 		api.GtwDefault.Authorizer = gte.NewAuthorize1(api.Config.Sites, api.Config.AuthAddr, api.Config.AuthSkip)
 		// api.Authorizer = gte.NewLoggerOnly(api.Sites)
 
-		srv := &http.Server{Addr: api.Config.AddrPort, Handler: api}
-		zgg.Servers = append(zgg.Servers, &z.Server{Key: "(KWDOG)", Srv: srv})
+		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}
 
 		if ifn != nil {
 			ifn(api, zgg) // 初始化方法

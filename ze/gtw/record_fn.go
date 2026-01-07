@@ -27,6 +27,9 @@ func (t *Record0) LogRequest(req *http.Request) {
 	t.Referer = req.Referer()
 
 	t.Scheme = req.Header.Get("X-Scheme")
+	if t.Scheme == "" {
+		t.Scheme = req.URL.Scheme
+	}
 	t.Method = req.Method
 	t.ReqHost = req.Host
 	t.ReqURL = req.URL.String()
@@ -83,7 +86,8 @@ func (t *Record0) LogRespBody(bsz int64, err error, buf []byte) {
 	}
 	ct := t.RespHeader.Get("Content-Type")
 	if !strings.HasPrefix(ct, "application/json") &&
-		!strings.HasPrefix(ct, "application/xml") {
+		!strings.HasPrefix(ct, "application/xml") &&
+		!strings.HasPrefix(ct, "text/plain") {
 		t.RespBody = []byte("###response content type: " + ct)
 		return // ignore
 	}

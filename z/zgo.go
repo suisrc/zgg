@@ -58,14 +58,12 @@ func RegisterDefaultHttpServe(zgg *Zgg) Closed {
 	}
 	if C.Server.Ptls > 0 && zgg.TLSConf != nil {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
-		hsv := &http.Server{Handler: zgg, Addr: addr}
-		zgg.Servers = append(zgg.Servers, &Server{Key: "(HTTPS)", Srv: hsv, TLS: zgg.TLSConf})
+		zgg.Servers["(HTTPS)"] = &http.Server{Handler: zgg, Addr: addr, TLSConfig: zgg.TLSConf}
 		// zc.Println("[register]: register http server, (HTTPS)", addr)
 	}
 	if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
-		hsv := &http.Server{Handler: zgg, Addr: addr}
-		zgg.Servers = append(zgg.Servers, &Server{Key: "(HTTP1)", Srv: hsv})
+		zgg.Servers["(HTTP1)"] = &http.Server{Handler: zgg, Addr: addr}
 		// zc.Println("[register]: register http server, (HTTP1)", addr)
 	}
 	zgg.AddRouter("healthz", Healthz) // 默认注册健康检查

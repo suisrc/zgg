@@ -17,12 +17,13 @@ import (
 
 // 日志 通过 syslog 发送
 
-func NewRecordSyslog(addr, net string, pir int, tty bool) gtw.RecordPool {
+func NewRecordSyslog(addr, net string, pir int, tty bool, convert gtw.ConvertFunc) gtw.RecordPool {
 	return gtw.NewRecordPool((&rSyslog{
 		Network:  net,
 		Address:  addr,
 		Priority: pir,
 		PrintTty: tty,
+		Convert:  convert,
 	}).Init().log)
 }
 
@@ -32,6 +33,7 @@ type rSyslog struct {
 	Priority int    // 128 ?
 	TagInfo  string // app.ns， 应用.空间
 	PrintTty bool   // 同步终端输出
+	Convert  gtw.ConvertFunc
 
 	_klog *syslog.Writer
 	_lock sync.Mutex
@@ -46,8 +48,7 @@ func (r *rSyslog) Init() *rSyslog {
 		return r
 	}
 	if r.Address == "" {
-		zc.Println("[_rsyslog]:", "invalid address, ", r.Address)
-		return r
+		return r // 忽略日志远程输出
 	}
 	if r.Priority <= 0 {
 		r.Priority = int(syslog.LOG_LOCAL0)
@@ -72,16 +73,14 @@ func (r *rSyslog) Init() *rSyslog {
 	return r
 }
 
-func (r *rSyslog) log(rt gtw.RecordTrace) {
-	rc := &Record{}
-	rc.ByRecord0(rt.(*gtw.Record0))
-	bts, err := rc.MarshalJSON()
+func (r *rSyslog) log(rt gtw.IRecord) {
+	bts, err := r.Convert(rt).ToJson()
 	if err != nil {
 		zc.Println("[_rsyslog]:", "unable to marshal json: ", err.Error())
 		return
 	}
 	if r._klog == nil {
-		zc.Println("[_rsyslog]:", string(bts))
+		zc.Println(string(bts))
 		return // 降级到终端输出
 	}
 	if r.PrintTty {

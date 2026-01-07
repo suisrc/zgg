@@ -10,35 +10,44 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
-type RecordTrace interface {
+type IRecord interface {
 	LogRequest(req *http.Request)
 	LogOutRequest(out *http.Request)
 	LogResponse(res *http.Response)
 	LogRespBody(bsz int64, err error, buf []byte)
 	SetRespBody(string)
 	Recycle()
-	Cleanup() RecordTrace
+	Cleanup() IRecord
 	SetUpstream(addr string)
 	SetSrvAuthz(addr string)
 }
 
 // 日志处理句柄
-type RecordFunc func(record RecordTrace)
+type RecordSave func(record IRecord)
 
 // 记录内容追踪
 type RecordPool interface {
-	Get() RecordTrace
-	Put(RecordTrace)
+	Get() IRecord
+	Put(IRecord)
 }
+
+type FRecord interface {
+	ToJson() ([]byte, error)
+	ToStr() string
+	ToFmt() string
+}
+
+type ConvertFunc func(IRecord) FRecord
 
 // --------------------------------------------------------------------
 
-var _ RecordTrace = (*Record0)(nil)
+var _ IRecord = (*Record0)(nil)
+var _ FRecord = (*Record0)(nil)
 
 // 日志内容追踪
 type Record0 struct {
 	Pool RecordPool `json:"-"` // 缓冲池
-	Save RecordFunc `json:"-"` // 处理者
+	Save RecordSave `json:"-"` // 处理者
 
 	TraceID   string // trace id
 	RemoteIP  string // remote ip
@@ -74,7 +83,7 @@ type Record0 struct {
 	_abort    bool  // 是否终止
 }
 
-func (rt *Record0) Cleanup() RecordTrace {
+func (rt *Record0) Cleanup() IRecord {
 	rt._abort = false
 
 	rt.TraceID = ""
@@ -123,10 +132,26 @@ func (rc *Record0) SetSrvAuthz(addr string) {
 	rc.SrvAuthzAddr = addr
 }
 
+func (rc Record0) MarshalJSON() ([]byte, error) {
+	return zc.ToJsonBytes(&rc, "json", zc.LowerFirst, false)
+}
+
+func (rc *Record0) ToJson() ([]byte, error) {
+	return zc.ToJsonBytes(rc, "json", zc.LowerFirst, false)
+}
+
+func (rc *Record0) ToStr() string {
+	return zc.ToStr(&rc)
+}
+
+func (rc *Record0) ToFmt() string {
+	return zc.ToStr2(&rc)
+}
+
 // ----------------------------------------------------------------------------
 
 // NewRecordPool 初始化缓冲池
-func NewRecordPool(save RecordFunc) RecordPool {
+func NewRecordPool(save RecordSave) RecordPool {
 	pool := &RecordPool0{
 		pool: &sync.Pool{},
 		save: save,
@@ -146,19 +171,20 @@ func NewRecordPool(save RecordFunc) RecordPool {
 // RecordPool0 记录内容复用池
 type RecordPool0 struct {
 	pool *sync.Pool
-	save RecordFunc
+	save RecordSave
 }
 
 // Get
-func (p *RecordPool0) Get() RecordTrace {
-	return p.pool.Get().(RecordTrace)
+func (p *RecordPool0) Get() IRecord {
+	return p.pool.Get().(IRecord)
 }
 
 // Put
-func (p *RecordPool0) Put(rt RecordTrace) {
+func (p *RecordPool0) Put(rt IRecord) {
 	p.pool.Put(rt.Cleanup())
 }
 
+// -------------------------------------------------------------------
 // -------------------------------------------------------------------
 
 var (

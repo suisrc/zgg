@@ -55,8 +55,7 @@ func (r *lSyslog) Init() *lSyslog {
 		return r
 	}
 	if r.Address == "" {
-		zc.Printl0("[_lsyslog]:", "invalid address,", r.Address)
-		return r
+		return r // 忽略日志远程输出
 	}
 	if r.Priority <= 0 {
 		r.Priority = int(syslog.LOG_LOCAL0)

@@ -41,7 +41,7 @@ type Authorize0 struct {
 	client AuthClient // 请求客户端
 }
 
-func (aa *Authorize0) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.RecordTrace) bool {
+func (aa *Authorize0) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
 	aa.Authorize0.Authz(gw, rw, rr, rt)
 	//----------------------------------------
 	user, pwd, ok := rr.BasicAuth()

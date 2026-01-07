@@ -41,7 +41,7 @@ type Authorize1 struct {
 	client     *http.Client // 请求客户端
 }
 
-func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.RecordTrace) bool {
+func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
 	aa.Authorize0.Authz(gw, rw, rr, rt)
 	if rt != nil {
 		rt.SetSrvAuthz(aa.AuthzServe)

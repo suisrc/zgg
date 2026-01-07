@@ -1,7 +1,8 @@
 package proxy2
 
+// curl -k -x 127.0.0.1:12014 https://ipinfo.io
+
 import (
-	"crypto/tls"
 	"flag"
 	"net/http"
 	"os"
@@ -19,12 +20,12 @@ var (
 	C = struct {
 		Proxy2 Proxy2Config
 	}{}
+
+	RecordFunc = gte.ToRecord1
 )
 
 type Proxy2Config struct {
 	AddrPort string `json:"port" default:"0.0.0.0:12012"`
-	AddrPtls string `json:"ptls" default:"0.0.0.0:12014"`
-	Dual     bool   `json:"dual"`
 	CrtCA    string `json:"cacrt"`
 	KeyCA    string `json:"cakey"`
 	IsSAA    bool   `json:"casaa"`
@@ -43,9 +44,7 @@ type InitializFunc func(api *Proxy2Api, zgg *z.Zgg)
 func Init3(ifn InitializFunc) {
 	zc.Register(&C)
 
-	flag.StringVar(&(C.Proxy2.AddrPort), "p2port", "0.0.0.0:12012", "http server addr and port")
-	flag.StringVar(&(C.Proxy2.AddrPtls), "p2ptls", "0.0.0.0:12014", "https server addr and port")
-	flag.BoolVar(&(C.Proxy2.Dual), "p2dual", false, "是否同时启动 http 和 https")
+	flag.StringVar(&(C.Proxy2.AddrPort), "p2port", "0.0.0.0:12012", "proxy server addr and port")
 	flag.StringVar(&(C.Proxy2.CrtCA), "p2crt", "", "CA证书文件")
 	flag.StringVar(&(C.Proxy2.KeyCA), "p2key", "", "CA私钥文件")
 	flag.BoolVar(&(C.Proxy2.IsSAA), "p2saa", false, "是否为中间证书")
@@ -59,14 +58,7 @@ func Init3(ifn InitializFunc) {
 			zgg.ServeStop("register proxy2 error,", err.Error())
 			return nil
 		}
-		if api.TLSConfig != nil { // https
-			srv := &http.Server{Addr: C.Proxy2.AddrPtls, Handler: api, TLSConfig: api.TLSConfig}
-			zgg.Servers = append(zgg.Servers, &z.Server{Key: "(PROXY-HTTPS)", Srv: srv})
-		}
-		if C.Proxy2.Dual || api.TLSConfig == nil { // http
-			srv := &http.Server{Addr: C.Proxy2.AddrPort, Handler: api}
-			zgg.Servers = append(zgg.Servers, &z.Server{Key: "(PROXY-HTTP1)", Srv: srv})
-		}
+		zgg.Servers["(PROXY)"] = &http.Server{Addr: C.Proxy2.AddrPort, Handler: api}
 
 		if ifn != nil {
 			ifn(api, zgg) // 初始化方法
@@ -78,10 +70,11 @@ func Init3(ifn InitializFunc) {
 
 func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	abp := gtw.NewBufferPool(32*1024, 0)
-	api.GtwDefault = &gtw.GatewayProxy{ReverseProxy: gtw.ReverseProxy{BufferPool: abp}}
+	api.GtwDefault = &gtw.ForwardProxy{}
+	api.GtwDefault.BufferPool = abp
 	api.GtwDefault.Rewrite = func(r *gtw.ProxyRequest) {}
 	api.GtwDefault.ProxyName = "proxy2-gateway"
-	api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, "udp", 0, cfg.Ttylog)
+	api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, "udp", 0, cfg.Ttylog, RecordFunc)
 	// api.GtwDefault.RecordPool = gte.NewRecordPrint()
 
 	if cfg.CrtCA == "" || cfg.KeyCA == "" {
@@ -89,31 +82,30 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	}
 	crtBts, err := os.ReadFile(cfg.CrtCA)
 	if err != nil {
-		if os.IsNotExist(err) {
-			zc.Println("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
-			// 创建根证书
-			config := crt.CertConfig{"default": {
-				Expiry: "20y",
-				SubjectName: crt.SignSubject{
-					Organization:     "default",
-					OrganizationUnit: "default",
-				},
-			}}
-			dir := filepath.Dir(cfg.CrtCA)
-			if err := os.MkdirAll(dir, 0644); err != nil {
-				return err
-			}
-			ca, err := crt.CreateCA(config, "default")
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(cfg.CrtCA, []byte(ca.Crt), 0644); err != nil {
-				return err
-			}
-			if err := os.WriteFile(cfg.KeyCA, []byte(ca.Key), 0644); err != nil {
-				return err
-			}
-		} else {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		// 创建根证书
+		zc.Println("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
+		config := crt.CertConfig{"default": {
+			Expiry: "20y",
+			SubjectName: crt.SignSubject{
+				Organization:     "default",
+				OrganizationUnit: "default",
+			},
+		}}
+		dir := filepath.Dir(cfg.CrtCA)
+		if err := os.MkdirAll(dir, 0644); err != nil {
+			return err
+		}
+		ca, err := crt.CreateCA(config, "default")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(cfg.CrtCA, []byte(ca.Crt), 0644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(cfg.KeyCA, []byte(ca.Key), 0644); err != nil {
 			return err
 		}
 	}
@@ -121,7 +113,7 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	if err != nil {
 		return err
 	}
-	config := crt.TLSAutoConfig{
+	api.GtwDefault.TLSConfig = &crt.TLSAutoConfig{
 		CaCrtBts: crtBts,
 		CaKeyBts: keyBts,
 		CertConf: crt.CertConfig{"default": {
@@ -132,14 +124,12 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 			},
 		}},
 	}
-	api.TLSConfig = &tls.Config{GetCertificate: (&config).GetCertificate}
 
 	return nil
 }
 
 type Proxy2Api struct {
-	TLSConfig  *tls.Config
-	GtwDefault *gtw.GatewayProxy // 默认网关
+	GtwDefault *gtw.ForwardProxy // 默认网关
 }
 
 // ServeHTTP

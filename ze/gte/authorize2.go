@@ -32,7 +32,7 @@ type Authorize2 struct {
 // *redis.Client = redis.NewClient(*redis.Options)
 // *redis.ClusterClient = redis.NewClusterClient(*redis.ClusterOptions)
 
-func (aa *Authorize2) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.RecordTrace) bool {
+func (aa *Authorize2) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
 	aa.Authorize0.Authz(gw, rw, rr, rt)
 	//----------------------------------------
 	cid, err := rr.Cookie(aa.CookieKey)

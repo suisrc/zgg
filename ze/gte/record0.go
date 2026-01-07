@@ -6,7 +6,6 @@
 package gte
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/url"
@@ -17,9 +16,17 @@ import (
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
-// 日志内容
+var SensitiveRequestHeaders = []string{
+	"Authorization",
+	"Cookie",
+	"X-Request-Sky-",
+}
 
-type Record struct {
+// 日志基础内容
+
+var _ gtw.FRecord = (*Record0)(nil)
+
+type Record0 struct {
 	TraceId   string
 	ClientId  string
 	RemoteIp  string
@@ -36,19 +43,6 @@ type Record struct {
 	RemoteAddr string  // remote addr
 	ReqTime    float64 // serve time
 	Upstime    float64 // upstream time
-
-	FlowId      string
-	TokenId     string
-	Nickname    string
-	AccountCode string
-	UserCode    string
-	TenantCode  string
-	UserTenCode string
-	AppCode     string
-	AppTenCode  string
-	RoleCode    string
-
-	MatchPolicys string
 
 	ServiceName string
 	ServiceAddr string
@@ -68,24 +62,34 @@ type Record struct {
 	Result2  string
 }
 
-func (r Record) MarshalJSON() ([]byte, error) {
-	return zc.ToJsonBytes(&r, "json", zc.LowerFirst, false)
+// ==========================================================
+
+func (rc Record0) MarshalJSON() ([]byte, error) {
+	return zc.ToJsonBytes(&rc, "json", zc.LowerFirst, false)
 }
 
-func (rc *Record) ToStr() string {
+func (rc *Record0) ToJson() ([]byte, error) {
+	return zc.ToJsonBytes(rc, "json", zc.LowerFirst, false)
+}
+
+func (rc *Record0) ToStr() string {
+	return zc.ToStr(&rc)
+}
+
+func (rc *Record0) ToFmt() string {
 	return zc.ToStr2(&rc)
 }
 
-func (rc *Record) ToFormatStr() string {
-	return zc.ToStr2(&rc)
-}
+// ==========================================================
 
 // Convert by RecordTrace
-func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
+func ToRecord0(rt_ gtw.IRecord) gtw.FRecord {
 	rt, _ := rt_.(*gtw.Record0)
-	if rt == nil {
-		return // 跳过
-	}
+	rc := &Record0{}
+	ByRecord0(rt, rc)
+	return rc
+}
+func ByRecord0(rt *gtw.Record0, rc *Record0) {
 	rc.GatewayName = gtw.GetServeName()
 
 	rc.TraceId = rt.TraceID
@@ -106,38 +110,7 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 
 	// -------------------------------------------------------------------
 	if uri, err := url.Parse(rt.ReqURL); err == nil {
-		qry := uri.Query()
-		rc.FlowId = qry.Get("flow")
 		rc.Action = gtw.GetAction(uri)
-	}
-	if rt.OutReqHeader != nil {
-		rc.MatchPolicys = rt.OutReqHeader.Get("X-Request-Sky-Policys")
-	}
-	if token := rt.OutReqHeader.Get("X-Request-Sky-Authorize"); token != "" {
-		tknj := map[string]any{}
-		if tknb, err := base64.StdEncoding.DecodeString(token); err != nil {
-		} else if err := json.Unmarshal(tknb, &tknj); err != nil {
-		} else {
-			rc.TokenId, _ = tknj["jti"].(string)
-			rc.Nickname, _ = tknj["nnm"].(string)
-			rc.AccountCode, _ = tknj["sub"].(string)
-			rc.UserCode, _ = tknj["uco"].(string)
-			rc.TenantCode, _ = tknj["tco"].(string)
-			rc.UserTenCode, _ = tknj["tuc"].(string)
-			rc.AppCode, _ = tknj["three"].(string)
-			rc.AppTenCode, _ = tknj["app"].(string)
-			rc.RoleCode, _ = tknj["trc"].(string)
-			if rc.RoleCode == "" {
-				rc.RoleCode, _ = tknj["rol"].(string)
-			}
-		}
-	}
-	if rc.TokenId == "" {
-		if auth := rt.OutReqHeader.Get("Authorization"); auth != "" && strings.HasPrefix(auth, "Bearer kst.") {
-			rc.TokenId = auth[52:76]
-		} else if auth := rt.Cookie["kst"]; auth != nil && strings.HasPrefix(auth.Value, "kst.") {
-			rc.TokenId = auth.Value[45:69]
-		}
 	}
 
 	rc.ServiceName = rt.ReqHost
@@ -166,9 +139,14 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	// 请求
 	if rt.OutReqHeader != nil {
 		for kk, vv := range rt.OutReqHeader {
-			if gtw.EqualFold(kk, "Authorization") || //
-				gtw.EqualFold(kk, "Cookie") || //
-				gtw.HasPrefixFold(kk, "X-Request-Sky-") {
+			sensitive := false
+			for _, ss := range SensitiveRequestHeaders {
+				if gtw.HasPrefixFold(kk, ss) {
+					sensitive = true
+					break
+				}
+			}
+			if sensitive {
 				for _, v := range vv {
 					rc.ReqHeader2s += kk + ": " + v + "\n"
 				}
@@ -177,7 +155,6 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 					rc.ReqHeaders += kk + ": " + v + "\n"
 				}
 			}
-
 		}
 	} else if rt.ReqHeader != nil {
 		// OutReqHeader 包含 ReqHeader 的数据，所以 ReqHeaders 冗余
@@ -190,7 +167,7 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	if len(rt.ReqBody) > 0 {
 		rc.ReqBody = string(rt.ReqBody)
 	}
-	// 相应
+	// 相应头信息
 	if rt.RespHeader != nil {
 		for kk, vv := range rt.RespHeader {
 			for _, v := range vv {
@@ -201,6 +178,7 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 			}
 		}
 	}
+	// 响应体信息尝试解析
 	if len(rt.RespBody) > 0 {
 		if rt.RespBody[0] == '{' {
 			// json 响应体，解析内容， 如果解析失败，跳过，这里需要消耗大量资源
@@ -215,32 +193,11 @@ func (rc *Record) ByRecord0(rt_ gtw.RecordTrace) {
 	}
 	rc.RespSize = rt.RespSize
 	// -------------------------------------------------------------------
+	// 尝试分析结果
 	rc.Result2 = "success"
 	if rc.Status >= 400 {
-		rc.Result2 = "abnormal"
+		rc.Result2 = "abnormal" // 异常
 	} else if rc.Status >= 300 {
-		rc.Result2 = "redirect"
-	} else if rc.RespBody == nil {
-		// 响应体为空
-	} else if data, ok := rc.RespBody.(map[string]any); ok {
-		// 解析 json 响应体
-		if succ, _ := data["success"]; succ != nil && !succ.(bool) {
-			if showType, _ := data["showType"]; showType != nil {
-				if showType.(int) == 9 {
-					rc.Result2 = "redirect"
-				} else {
-					rc.Result2 = "abnormal"
-				}
-			} else if errshow, _ := data["errshow"]; errshow != nil {
-				if errshow.(int) == 9 {
-					rc.Result2 = "redirect"
-				} else {
-					rc.Result2 = "abnormal"
-				}
-			} else {
-				rc.Result2 = "abnormal"
-			}
-		}
+		rc.Result2 = "redirect" // 重定向
 	}
-
 }

@@ -176,7 +176,17 @@ func Test_ToBasicVal(t *testing.T) {
 
 }
 
+type RecordDat0 struct {
+	Data0 string
+}
+
+type RecordDat1 struct {
+	Data1 string
+	RecordDat0
+}
+
 type Record struct {
+	RecordDat1
 	NameKey string
 	AgeKey  int
 
@@ -194,7 +204,7 @@ type RecordData struct {
 }
 
 func (r RecordData) MarshalJSON() ([]byte, error) {
-	return zc.ToJsonBytes(&r, "json", zc.Camel2Case, true)
+	return zc.ToJsonBytes(&r, "json", zc.Camel2Case, false)
 }
 
 // go test -v z/zc/zc_test.go -run Test_ToJson

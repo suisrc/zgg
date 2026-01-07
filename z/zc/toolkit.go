@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -772,10 +773,11 @@ func Camel2Case(s string) string {
 	return buf.String()
 }
 
-func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[string]any, error) {
+func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[string]any, []string, error) {
 	if tag == "" {
 		tag = "json"
 	}
+	lst := []string{}
 	rst := map[string]any{}
 	vType := reflect.TypeOf(val)
 	value := reflect.ValueOf(val)
@@ -792,6 +794,17 @@ func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[stri
 		if vTag == "-" {
 			continue
 		}
+		if vField.Anonymous && vField.Type.Kind() == reflect.Struct {
+			// 匿名字段
+			vvv, kkk, err := ToJsonMap(value.Field(i).Interface(), tag, kfn, non)
+			if err != nil {
+				return nil, nil, err
+			}
+			maps.Copy(rst, vvv)
+			lst = append(lst, kkk...)
+			continue
+		}
+		// 普通字段
 		vName := vField.Name
 		if vTag == "" && kfn != nil {
 			vName = kfn(vName)
@@ -803,8 +816,9 @@ func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[stri
 			}
 		}
 		rst[vName] = value.Field(i).Interface()
+		lst = append(lst, vName)
 	}
-	return rst, nil
+	return rst, lst, nil
 }
 
 //	func (r Data) MarshalJSON() ([]byte, error) {
@@ -818,9 +832,27 @@ func ToJsonMap(val any, tag string, kfn func(string) string, non bool) (map[stri
 // - @param kfn 键名转换函数
 // - @param non 是否忽略零值
 func ToJsonBytes(val any, tag string, kfn func(string) string, non bool) ([]byte, error) {
-	rst, err := ToJsonMap(val, tag, kfn, non)
+	vvv, kkk, err := ToJsonMap(val, tag, kfn, non)
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(rst)
+	// return json.Marshal(vvv)
+	buf := bytes.NewBuffer([]byte{'{'})
+	for _, key := range kkk {
+		bts, err := json.Marshal(vvv[key])
+		if err != nil {
+			return nil, err
+		}
+		buf.WriteByte('"')
+		buf.WriteString(key)
+		buf.WriteByte('"')
+		buf.WriteByte(':')
+		buf.Write(bts)
+		buf.WriteByte(',')
+	}
+	if buf.Len() > 1 {
+		buf.Truncate(buf.Len() - 1)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }

@@ -48,11 +48,23 @@ test-kube:
 	TEST_ASSET_KUBECTL=_out/kubebuilder/bin/kubectl \
 	go test -v -run TestCustom testdata/custom_test.go
 
-test-custom:
+cmd-custom:
 	go test -v cmd/custom_test.go
 
-test-cert:
-	go test -v ze/crt/cert_test.go -run Test_cert
+cmd-cert:
+	go run main.go cert --path _out/cert
+
+cmd-certca:
+	go run main.go certca --path _out/cert
+
+cmd-certsa:
+	go run main.go certsa --path _out/cert
+
+cmd-certce:
+	go run main.go certce --path _out/cert
+
+cmd-cert-exp:
+	go run main.go cert-exp
 
 push:
 	git push --set-upstream origin $b
