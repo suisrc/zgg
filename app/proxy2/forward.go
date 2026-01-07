@@ -21,7 +21,7 @@ var (
 		Proxy2 Proxy2Config
 	}{}
 
-	RecordFunc = gte.ToRecord1
+	RecordFunc = gte.ToRecord0
 )
 
 type Proxy2Config struct {
