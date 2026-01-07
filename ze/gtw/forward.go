@@ -26,6 +26,11 @@ func (p *ForwardProxy) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 }
 
 func (p *ForwardProxy) ServeHTTPS(rw http.ResponseWriter, rr *http.Request) {
+	if p.TLSConfig == nil {
+		zc.Println("[_forward]: tls config is nil")
+		return
+	}
+
 	target := rr.Host
 	if _, _, err := net.SplitHostPort(target); err != nil {
 		target += ":443"
