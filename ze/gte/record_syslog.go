@@ -51,7 +51,7 @@ func (r *rSyslog) Init() *rSyslog {
 		return r // 忽略日志远程输出
 	}
 	if r.Priority <= 0 {
-		r.Priority = int(syslog.LOG_LOCAL0)
+		r.Priority = int(syslog.LOG_LOCAL0 | syslog.LOG_INFO)
 	}
 	if r.TagInfo == "" {
 		r.TagInfo = z.AppName
@@ -99,7 +99,7 @@ func (r *rSyslog) log(rt gtw.IRecord) {
 		r._klog.Close() // 重置 syslog.Writer
 		r._time = time.Now().Unix() + 5
 	}
-	if err := r._klog.Info(string(bts)); err != nil {
+	if _, err := r._klog.Write(bts); err != nil {
 		zc.Println("[_rsyslog]:", "unable to write to syslog: ", err.Error())
 	}
 }

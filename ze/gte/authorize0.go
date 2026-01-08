@@ -43,13 +43,12 @@ type Authorize0 struct {
 
 func (aa *Authorize0) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
 	aa.Authorize0.Authz(gw, rw, rr, rt)
-	//----------------------------------------
-	user, pwd, ok := rr.BasicAuth()
+	usr, pwd, ok := rr.BasicAuth()
 	if !ok {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return false
 	}
-	rid, err := aa.client.Do(rw, rr, user)
+	rid, err := aa.client.Do(rw, rr, usr)
 	if err != nil {
 		if err != gtw.ErrNil {
 			// gw.GetErrorHandler()(rw, rr, err) // StatusBadGateway = 502
@@ -57,7 +56,7 @@ func (aa *Authorize0) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 			gw.Logf(msg + "\n")
 			rw.WriteHeader(http.StatusInternalServerError)
 			if rt != nil {
-				rt.SetRespBody("###" + msg)
+				rt.SetRespBody([]byte("###" + msg))
 			}
 		}
 		return false

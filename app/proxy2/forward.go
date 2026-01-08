@@ -31,7 +31,9 @@ type Proxy2Config struct {
 	IsSAA    bool   `json:"casaa"`
 	Expiry   string `json:"expiry" default:"20y"`
 	Syslog   string `json:"syslog"` // 日志发送地址
-	Ttylog   bool   `json:"ttylog"` // 是否打印日志
+	LogNet   string `json:"logudp"` // 日志发送协议
+	LogPri   int    `json:"logpri"` // 日志优先级
+	LogTty   bool   `json:"logtty"` // 是否打印日志
 }
 
 // 不可使用， 考虑使用 eBPF 无侵入的方式
@@ -49,8 +51,10 @@ func Init3(ifn InitializFunc) {
 	flag.StringVar(&(C.Proxy2.KeyCA), "p2key", "", "CA私钥文件")
 	flag.BoolVar(&(C.Proxy2.IsSAA), "p2saa", false, "是否为中间证书")
 	flag.StringVar(&(C.Proxy2.Expiry), "p2exp", "20y", "创建根证书的有效期")
-	flag.StringVar(&C.Proxy2.Syslog, "k2syslog", "", "日志发送地址")
-	flag.BoolVar(&C.Proxy2.Ttylog, "k2ttylog", false, "是否打印日志")
+	flag.StringVar(&C.Proxy2.Syslog, "p2syslog", "", "日志发送地址")
+	flag.StringVar(&C.Proxy2.LogNet, "p2lognet", "udp", "日志发送协议")
+	flag.IntVar(&C.Proxy2.LogPri, "p2logpri", 0, "日志优先级")
+	flag.BoolVar(&C.Proxy2.LogTty, "p2logtty", false, "是否打印日志")
 
 	z.Register("12-proxy2", func(zgg *z.Zgg) z.Closed {
 		api := new(Proxy2Api)
@@ -74,7 +78,7 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	api.GtwDefault.BufferPool = abp
 	api.GtwDefault.Rewrite = func(r *gtw.ProxyRequest) {}
 	api.GtwDefault.ProxyName = "proxy2-gateway"
-	api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, "udp", 0, cfg.Ttylog, RecordFunc)
+	api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, cfg.LogNet, cfg.LogPri, cfg.LogTty, RecordFunc)
 	// api.GtwDefault.RecordPool = gte.NewRecordPrint()
 
 	if cfg.CrtCA == "" || cfg.KeyCA == "" {

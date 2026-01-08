@@ -15,7 +15,7 @@ type IRecord interface {
 	LogOutRequest(out *http.Request)
 	LogResponse(res *http.Response)
 	LogRespBody(bsz int64, err error, buf []byte)
-	SetRespBody(string)
+	SetRespBody([]byte)
 	Recycle()
 	Cleanup() IRecord
 	SetUpstream(addr string)
@@ -42,7 +42,6 @@ type ConvertFunc func(IRecord) FRecord
 // --------------------------------------------------------------------
 
 var _ IRecord = (*Record0)(nil)
-var _ FRecord = (*Record0)(nil)
 
 // 日志内容追踪
 type Record0 struct {
@@ -87,10 +86,10 @@ func (rt *Record0) Cleanup() IRecord {
 	rt._abort = false
 
 	rt.TraceID = ""
-	rt.ClientID = ""
 	rt.RemoteIP = ""
 	rt.UserAgent = ""
 	rt.Referer = ""
+	rt.ClientID = ""
 
 	rt.Scheme = ""
 	rt.Method = ""
@@ -104,6 +103,8 @@ func (rt *Record0) Cleanup() IRecord {
 	rt.OutReqURL = ""
 	rt.OutReqHeader = nil
 	rt.UpstreamAddr = ""
+	rt.SrvAuthzAddr = ""
+	rt.UpstreamTime = 0
 
 	rt.RespHeader = nil
 	rt.RespBody = nil
@@ -130,22 +131,6 @@ func (rc *Record0) SetUpstream(addr string) {
 
 func (rc *Record0) SetSrvAuthz(addr string) {
 	rc.SrvAuthzAddr = addr
-}
-
-func (rc Record0) MarshalJSON() ([]byte, error) {
-	return zc.ToJsonBytes(&rc, "json", zc.LowerFirst, false)
-}
-
-func (rc *Record0) ToJson() ([]byte, error) {
-	return zc.ToJsonBytes(rc, "json", zc.LowerFirst, false)
-}
-
-func (rc *Record0) ToStr() string {
-	return zc.ToStr(&rc)
-}
-
-func (rc *Record0) ToFmt() string {
-	return zc.ToStr2(&rc)
 }
 
 // ----------------------------------------------------------------------------

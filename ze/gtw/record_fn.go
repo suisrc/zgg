@@ -105,8 +105,9 @@ func (t *Record0) LogRespBody(bsz int64, err error, buf []byte) {
 	}
 }
 
-func (t *Record0) SetRespBody(str string) {
-	t.RespBody = []byte(str)
+func (t *Record0) SetRespBody(bts []byte) {
+	t.RespBody = make([]byte, len(bts))
+	copy(t.RespBody, bts)
 }
 
 // 追踪记录, 将日志写入日志系统中

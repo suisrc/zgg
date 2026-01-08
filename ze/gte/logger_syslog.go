@@ -58,7 +58,7 @@ func (r *lSyslog) Init() *lSyslog {
 		return r // 忽略日志远程输出
 	}
 	if r.Priority <= 0 {
-		r.Priority = int(syslog.LOG_LOCAL0)
+		r.Priority = int(syslog.LOG_LOCAL0 | syslog.LOG_INFO)
 	}
 	if r.TagInfo == "" {
 		r.TagInfo = z.AppName

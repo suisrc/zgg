@@ -34,7 +34,6 @@ type Authorize2 struct {
 
 func (aa *Authorize2) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
 	aa.Authorize0.Authz(gw, rw, rr, rt)
-	//----------------------------------------
 	cid, err := rr.Cookie(aa.CookieKey)
 	if err != nil {
 		// 没有登录信息，直接返回 401 错误
@@ -49,7 +48,7 @@ func (aa *Authorize2) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 			gw.Logf(msg + "\n")
 			rw.WriteHeader(http.StatusInternalServerError)
 			if rt != nil {
-				rt.SetRespBody("###" + msg)
+				rt.SetRespBody([]byte("###" + msg))
 			}
 		}
 		return false

@@ -30,7 +30,9 @@ type Kwdog2Config struct {
 	Rtrack   bool              `json:"rtrack"`  // 追踪路由
 	Sites    []string          `json:"sites"`   // 站点列表， 用于标记 _xc
 	Syslog   string            `json:"syslog"`  // 日志发送地址
-	Ttylog   bool              `json:"ttylog"`  // 是否打印日志
+	LogNet   string            `json:"logudp"`  // 日志发送协议
+	LogPri   int               `json:"logpri"`  // 日志优先级
+	LogTty   bool              `json:"logtty"`  // 是否打印日志
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -47,21 +49,36 @@ func Init3(ifn InitializFunc) {
 	flag.BoolVar(&C.Kwdog2.Rtrack, "k2rlog", false, "是否记录其他路由的日志")
 	flag.Var(zc.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
 	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
-	flag.BoolVar(&C.Kwdog2.Ttylog, "k2ttylog", false, "是否打印日志")
+	flag.StringVar(&C.Kwdog2.LogNet, "k2lognet", "udp", "日志发送协议")
+	flag.IntVar(&C.Kwdog2.LogPri, "k2logpri", 0, "日志优先级")
+	flag.BoolVar(&C.Kwdog2.LogTty, "k2logtty", false, "是否打印日志")
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
 		var err error
 		api := &KwdogApi{Config: C.Kwdog2}
-		api.RecordPool = gte.NewRecordSyslog(api.Config.Syslog, "udp", 0, api.Config.Ttylog, RecordFunc)
+		api.RecordPool = gte.NewRecordSyslog(
+			api.Config.Syslog,
+			api.Config.LogNet,
+			api.Config.LogPri,
+			api.Config.LogTty,
+			RecordFunc,
+		)
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
-		api.GtwDefault, err = gtw.NewTargetGateway(api.Config.NextAddr, api.BufferPool)
+		api.GtwDefault, err = gtw.NewTargetGateway(
+			api.Config.NextAddr,
+			api.BufferPool,
+		)
 		if err != nil {
 			zgg.ServeStop("register kwdow2 error,", err.Error())
 			return nil
 		}
 		api.GtwDefault.ProxyName = "kwdog2-gateway"
 		api.GtwDefault.RecordPool = api.RecordPool
-		api.GtwDefault.Authorizer = gte.NewAuthorize1(api.Config.Sites, api.Config.AuthAddr, api.Config.AuthSkip)
+		api.GtwDefault.Authorizer = gte.NewAuthorize1(
+			api.Config.Sites,
+			api.Config.AuthAddr,
+			api.Config.AuthSkip,
+		)
 		// api.Authorizer = gte.NewLoggerOnly(api.Sites)
 
 		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}

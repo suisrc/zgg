@@ -74,7 +74,7 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		gw.Logf(msg + "\n")
 		rw.WriteHeader(http.StatusInternalServerError)
 		if rt != nil {
-			rt.SetRespBody("###" + msg)
+			rt.SetRespBody([]byte("###" + msg))
 		}
 		return false
 	}
@@ -84,7 +84,7 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		gw.Logf(msg + "\n")
 		rw.WriteHeader(http.StatusInternalServerError)
 		if rt != nil {
-			rt.SetRespBody("###" + msg)
+			rt.SetRespBody([]byte("###" + msg))
 		}
 		return false
 	}
@@ -101,7 +101,7 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 	if err != nil {
 		gw.GetErrorHandler()(rw, req, err)
 		if rt != nil {
-			rt.SetRespBody("###error authorize1, request authz serve, " + err.Error())
+			rt.SetRespBody([]byte("###error authorize1, request authz serve, " + err.Error()))
 		}
 		return false
 	}
