@@ -25,7 +25,7 @@ type AuthClient interface {
 
 // -----------------------------------------------------------------------------------------
 
-// 鉴权器, basic auth， 基础鉴权
+// 鉴权器, basic auth， 基础鉴权， 仅限于参考
 func NewAuthorize0(sites []string, client AuthClient) *Authorize2 {
 	return &Authorize2{
 		Authorize0: gtw.NewAuthorize0(sites),

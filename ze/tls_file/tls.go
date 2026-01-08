@@ -3,6 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
+// 通过文件加载 http 服务的证书文件
+
 package tlsfile
 
 import (

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 
@@ -79,7 +80,7 @@ func (p *ForwardProxy) ServeHTTPS(rw http.ResponseWriter, rr *http.Request) {
 	tr.URL.Scheme = "https"
 	tr.URL.Host = tr.Host
 	tw := NewTlsResponseWriter(ctls)
-	defer tw.(http.Flusher).Flush()
+	// defer tw.(http.Flusher).Flush()
 	p.GatewayProxy.ServeHTTP(tw, tr)
 }
 
@@ -87,28 +88,28 @@ func (p *ForwardProxy) ServeHTTPS(rw http.ResponseWriter, rr *http.Request) {
 
 func NewTlsResponseWriter(conn *tls.Conn) http.ResponseWriter {
 	return &tlsResponseWriter{
-		conn:   conn,
 		header: make(http.Header),
 		status: http.StatusOK, // 默认状态码200
-		writer: bufio.NewWriter(conn),
+		writer: conn,
+		// writer: bufio.NewWriter(conn),
 	}
 }
 
 var _ http.ResponseWriter = (*tlsResponseWriter)(nil)
-var _ http.Flusher = (*tlsResponseWriter)(nil)
 
 // 实现http.ResponseWriter接口
 type tlsResponseWriter struct {
-	conn   *tls.Conn     // 底层TLS连接
-	header http.Header   // 响应头部
-	status int           // 响应状态码（默认200）
-	wrote  bool          // 是否已写入响应（避免重复写入状态行）
-	writer *bufio.Writer // 缓冲写入，提升性能
+	header http.Header // 响应头部
+	status int         // 响应状态码（默认200）
+	wrote  bool        // 是否已写入响应（避免重复写入状态行）
+	writer io.Writer
+	// writer *bufio.Writer // 缓冲写入，提升性能， gateway中有缓存， 这里不需要缓存
 }
 
-func (w *tlsResponseWriter) Flush() {
-	w.writer.Flush()
-}
+// http.Flusher
+// func (w *tlsResponseWriter) Flush() {
+// 	w.writer.Flush()
+// }
 
 func (w *tlsResponseWriter) Header() http.Header {
 	return w.header
@@ -133,7 +134,7 @@ func (w *tlsResponseWriter) Write(b []byte) (int, error) {
 			return 0, err
 		}
 		// 第三步：写入空行（分隔头部与Body）
-		if _, err := w.writer.WriteString("\r\n"); err != nil {
+		if _, err := w.writer.Write([]byte{'\r', '\n'}); err != nil {
 			return 0, err
 		}
 		w.wrote = true // 标记已写入响应头

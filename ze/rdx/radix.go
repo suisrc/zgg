@@ -14,6 +14,7 @@ import (
 // -----------------------------------------------------------------------------------
 // 基于 Tire / Radix Tree 的 httprouter 的路由
 // 也是为外部扩展路由提供标准实现方式
+// 路由算法引用 https://github.com/julienschmidt/httprouter
 
 func init() {
 	z.Engines["rdx"] = NewRdxRouter

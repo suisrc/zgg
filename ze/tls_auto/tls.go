@@ -3,6 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
+// 根据指定的 CA 动态生成证书
+
 package tlsauto
 
 import (

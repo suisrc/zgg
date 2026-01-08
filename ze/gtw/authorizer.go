@@ -29,7 +29,7 @@ type Authorize0 struct {
 	ClientAge int
 }
 
-// 不适用指针，是方便其他依赖注入
+// 基础例子， 提供 tarce-id 和 cookie__xc 增加功能
 func NewAuthorize0(sites []string) Authorize0 {
 	return Authorize0{
 		ClientKey: "_xc",
