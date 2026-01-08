@@ -25,6 +25,7 @@ var (
 )
 
 type Proxy2Config struct {
+	Disabled bool   `json:"disabled"`
 	AddrPort string `json:"port" default:"0.0.0.0:12012"`
 	CrtCA    string `json:"cacrt"`
 	KeyCA    string `json:"cakey"`
@@ -46,6 +47,7 @@ type InitializFunc func(api *Proxy2Api, zgg *z.Zgg)
 func Init3(ifn InitializFunc) {
 	zc.Register(&C)
 
+	flag.BoolVar(&(C.Proxy2.Disabled), "p2disabled", false, "是否禁用proxy2")
 	flag.StringVar(&(C.Proxy2.AddrPort), "p2port", "0.0.0.0:12012", "proxy server addr and port")
 	flag.StringVar(&(C.Proxy2.CrtCA), "p2crt", "", "CA证书文件")
 	flag.StringVar(&(C.Proxy2.KeyCA), "p2key", "", "CA私钥文件")
@@ -57,6 +59,11 @@ func Init3(ifn InitializFunc) {
 	flag.BoolVar(&C.Proxy2.LogTty, "p2logtty", false, "是否打印日志")
 
 	z.Register("12-proxy2", func(zgg *z.Zgg) z.Closed {
+		if C.Proxy2.Disabled {
+			zc.Println("[_proxy2_]: disabled")
+			return nil
+		}
+
 		api := new(Proxy2Api)
 		if err := api.Init(C.Proxy2); err != nil {
 			zgg.ServeStop("register proxy2 error,", err.Error())

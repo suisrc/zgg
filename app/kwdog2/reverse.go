@@ -22,6 +22,7 @@ var (
 )
 
 type Kwdog2Config struct {
+	Disabled bool              `json:"disabled"`
 	AddrPort string            `json:"addr" default:"0.0.0.0:12006"`
 	NextAddr string            `json:"next"`    // 默认 127.0.0.1:80
 	AuthAddr string            `json:"authz"`   // ??
@@ -41,6 +42,7 @@ type InitializFunc func(api *KwdogApi, zgg *z.Zgg)
 func Init3(ifn InitializFunc) {
 	zc.Register(&C)
 
+	flag.BoolVar(&C.Kwdog2.Disabled, "k2disabled", false, "是否禁用kwdog2")
 	flag.StringVar(&C.Kwdog2.AddrPort, "k2addr", "0.0.0.0:12006", "监控认证端口")
 	flag.StringVar(&C.Kwdog2.NextAddr, "k2next", "http://127.0.0.1:80", "后端服务地址")
 	flag.StringVar(&C.Kwdog2.AuthAddr, "k2auth", "", "认证服务地址， 默认只支持 f1kin 服务")
@@ -54,6 +56,11 @@ func Init3(ifn InitializFunc) {
 	flag.BoolVar(&C.Kwdog2.LogTty, "k2logtty", false, "是否打印日志")
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
+		if C.Kwdog2.Disabled {
+			zc.Println("[_kwdog2_]: disabled")
+			return nil
+		}
+
 		var err error
 		api := &KwdogApi{Config: C.Kwdog2}
 		api.RecordPool = gte.NewRecordSyslog(
