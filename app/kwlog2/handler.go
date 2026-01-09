@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/suisrc/zgg/z"
 )
@@ -28,6 +29,7 @@ type Kwlog2Config struct {
 	RoutePath string `json:"route"` // 访问跟路径
 	MaxSize   int64  `json:"max_size"`
 	UseOrigin bool   `json:"use_origin"`
+	LogTime   string `json:"log_time" default:"2006-01-02T15:04:05Z07:00"`
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -41,6 +43,7 @@ func Init3(ifn InitializFunc) {
 	flag.StringVar(&C.Kwlog2.Token, "logtoken", "", "存储日志秘钥")
 	flag.BoolVar(&C.Kwlog2.UseOrigin, "logorigin", false, "保存原始数据")
 	flag.Int64Var(&C.Kwlog2.MaxSize, "logmaxsize", 10*1024*1024, "日志文件最大大小, 默认 10M")
+	flag.StringVar(&C.Kwlog2.LogTime, "logtimerfc", time.RFC3339, "日志时间格式")
 
 	z.Register("31-kwlog2", func(zgg *z.Zgg) z.Closed {
 		if !z.IsDebug() && strings.Contains(C.Kwlog2.StorePath, "../") {
