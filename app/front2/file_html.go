@@ -84,13 +84,13 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.Config.ShowPath, parentPath)
 		for _, path := range dirPaths {
 			name := path.Name() + "/"
-			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.Config.ShowPath, queryPath, path.Name(), name)
+			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">%s</a>\n", //
+				aa.Config.ShowPath, filepath.Join(queryPath, path.Name()), name)
 		}
 		for _, path := range filPaths {
 			name := path.Name()
-			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s/%s\">%s</a>\n", //
-				aa.Config.ShowPath, queryPath, path.Name(), name)
+			fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">%s</a>\n", //
+				aa.Config.ShowPath, filepath.Join(queryPath, path.Name()), name)
 		}
 		// 整合列表到 html 中
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")

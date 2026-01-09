@@ -76,7 +76,7 @@ func Initializ() {
 
 	flag.Var(NewBoolVal(&(zc.C.Debug)), "debug", "debug mode")
 	flag.Var(NewBoolVal(&(zc.C.Print)), "print", "print mode")
-	flag.Var(NewStrVal(&(zc.C.Syslog)), "syslog", "logger to syslog server")
+	flag.Var(NewStrVal(&(zc.C.Syslog), ""), "syslog", "logger to syslog server")
 	flag.Var(NewBoolVal(&(zc.C.LogTty)), "logtty", "logger to tty")
 	flag.Var(NewBoolVal(&(C.Server.Fxser)), "fxser", "http header flag xser-*")
 	flag.Var(NewBoolVal(&(C.Server.Local)), "local", "http server local mode")

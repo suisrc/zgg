@@ -34,10 +34,10 @@ type Front2Config struct {
 // 初始化方法， 处理 api 的而外配置接口
 type InitializFunc func(api *IndexApi, zgg *z.Zgg)
 
-func Init3(www fs.FS, ifn InitializFunc) {
+func Init3(www fs.FS, dir string, ifn InitializFunc) {
 	z.Config(&C)
 
-	flag.StringVar(&C.Front2.Folder, "f2folder", "/www", "static folder")
+	flag.Var(z.NewStrVal(&C.Front2.Folder, dir), "f2folder", "static folder")
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
 	flag.Var(z.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
@@ -204,7 +204,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		}
 		// 重定向到 index.html（支持前端路由的history模式）
 		index := aa.getIndex(rp)
-		ipath := aa.Config.Folder + "/" + index
+		ipath := filepath.Join(aa.Config.Folder, index)
 		file, err = aa.HttpFS.Open(ipath)
 		if err != nil {
 			z.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
@@ -239,9 +239,9 @@ func FixPath(rr *http.Request, paths []string, folder string) string {
 		}
 	}
 	if folder != "" {
-		rr.URL.Path = folder + rr.URL.Path
+		rr.URL.Path = filepath.Join(folder, rr.URL.Path)
 		if rr.URL.RawPath != "" {
-			rr.URL.RawPath = folder + rr.URL.RawPath
+			rr.URL.RawPath = filepath.Join(folder, rr.URL.RawPath)
 		}
 	}
 	return rp

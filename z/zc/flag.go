@@ -18,7 +18,10 @@ var _ flag.Value = (*stringVal)(nil)
 // -- string Value
 type stringVal string
 
-func NewStrVal(p *string) *stringVal {
+func NewStrVal(p *string, v string) *stringVal {
+	if *p == "" {
+		*p = v
+	}
 	return (*stringVal)(p)
 }
 
