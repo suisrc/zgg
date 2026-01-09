@@ -75,7 +75,8 @@ func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 				MaxSize: aa.Config.MaxSize,
 			})
 		}
-		tpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(time.RFC3339), rc.PodName)
+		// time.RFC3339 ? 缺少微秒， 日志统计到微妙
+		tpre := fmt.Sprintf("[%s]-[%s]: ", date.Format("2006-01-02T15:04:05.999999Z07:00"), rc.PodName)
 		file.(*LoggerFile).Write([]byte(tpre), []byte(rc.Origin), []byte{'\n'})
 	}
 }

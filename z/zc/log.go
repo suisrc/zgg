@@ -22,7 +22,7 @@ var (
 	Log = Std
 
 	LogTrackFile = false
-	InitLogFunc  = func() {}
+	InitLoggerFn = func() {}
 )
 
 func Printl0(v ...any) {

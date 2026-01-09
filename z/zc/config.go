@@ -122,5 +122,5 @@ func LoadConfig(cfs string) {
 		}
 		println("----------------------------------------------")
 	}
-	InitLogFunc()
+	InitLoggerFn()
 }

@@ -22,7 +22,12 @@ import (
 
 // 日志 通过 syslog 发送
 
-func InitLogBySysLog() {
+func init() {
+	// 注册初始化Logger方法
+	zc.InitLoggerFn = InitLoggerBySysLog
+}
+
+func InitLoggerBySysLog() {
 	if zc.C.Syslog == "" {
 		return // 不进行初始化
 	}
