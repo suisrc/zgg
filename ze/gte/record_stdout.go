@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/suisrc/zgg/z/zc"
+	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -18,7 +18,7 @@ import (
 
 func NewRecordToTTY(convert gtw.ConvertFunc) gtw.RecordPool {
 	return gtw.NewRecordPool(func(record gtw.IRecord) {
-		zc.Println(convert(record).ToFmt())
+		z.Println(convert(record).ToFmt())
 	})
 }
 

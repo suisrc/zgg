@@ -152,52 +152,6 @@ func GetAction(uu *url.URL) string {
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
-// 请求数据
-func ReadForm[T any](rr *http.Request, rb T) (T, error) {
-	return Mts(rb, rr.URL.Query(), "form")
-}
-
-// 请求数据
-func ReadBody[T any](rr *http.Request, rb T) (T, error) {
-	return rb, json.NewDecoder(rr.Body).Decode(rb)
-}
-
-// 请求结构体， 特殊的请求体
-type RaData struct {
-	Atyp string `json:"type"`
-	Data string `json:"data"`
-}
-
-// 请求数据
-func ReadData(rr *http.Request) (*RaData, error) {
-	return ReadBody(rr, &RaData{})
-}
-
-// 获取 traceID / 配置 traceID
-func GetTraceID(request *http.Request) string {
-	traceid := request.Header.Get("X-Request-Id")
-	if traceid == "" {
-		traceid = GenStr("r", 32) // 创建请求ID, 用于追踪
-		request.Header.Set("X-Request-Id", traceid)
-	}
-	return traceid
-}
-
-// 获取 reqType / 配置 reqType
-func GetReqType(request *http.Request) string {
-	reqtype := request.Header.Get("X-Request-Rt")
-	if reqtype == "" {
-		reqtype = C.Server.ReqXrtd
-		if reqtype != "" {
-			request.Header.Set("X-Request-Rt", reqtype)
-		}
-	}
-	return reqtype
-}
-
-// ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
-
 // 定义响应结构体
 type Result struct {
 	Success bool   `json:"success"`

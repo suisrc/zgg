@@ -3,6 +3,9 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
+// 通过环境遍历初始化配置参数
+// 通过TAG标签处理格式化参数
+
 package zc
 
 import (

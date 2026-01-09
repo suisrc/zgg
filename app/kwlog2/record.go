@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 )
 
 type Record0 struct {
@@ -45,14 +45,14 @@ func (rc *Record) UnmarshalJSON(data []byte) error {
 				}
 			}
 			// rc.Origin = []byte(str) // 防止 unicode 字符存在
-			rc.Origin, _ = z.UnicodeToRunes([]byte(pre), []byte(str))
+			rc.Origin, _ = zc.UnicodeToRunes([]byte(pre), []byte(str))
 		} else if bts, err := json.Marshal(rc.Message); err == nil {
 			rc.Origin = bts // 重新被json化的数据
 		}
 	}
 	if rc.Origin == nil {
 		// 存在风险，需要转移
-		rc.Origin, err = z.UnicodeToRunes(data)
+		rc.Origin, err = zc.UnicodeToRunes(data)
 	}
 	return err
 }

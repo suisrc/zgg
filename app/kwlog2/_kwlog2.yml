@@ -2,7 +2,7 @@
 # kubectl apply -f k8s.yaml
 # 
 # docker 环境下运行
-# docker run --name kwlog2 -v /opt/kwlog2:/opt/kwlog2 -e KIT_KWLOG2_TOKEN=xxx123456789 -d suisrc/k8skit:1.0.1-kwlog2
+# docker run --name kwlog2 -v /opt/kwlog2:/opt/kwlog2 -e KIT_KWLOG2_TOKEN=xxx123456789 -e TZ=Asia/Shanghai -d suisrc/k8skit:1.0.1-kwlog2
 # kwlog2.default.svc
 
 ---

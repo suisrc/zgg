@@ -3,7 +3,10 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
-package gte
+// 默认系统只提供向 tty 发送日志 和 syslog 发送日志
+// 对于想使用文件保存日志的，可以重置 Log 完成
+
+package logsyslog
 
 import (
 	"log/syslog"
@@ -15,10 +18,23 @@ import (
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/zc"
-	"github.com/suisrc/zgg/ze/gtw"
 )
 
 // 日志 通过 syslog 发送
+
+func InitLogBySysLog() {
+	if zc.C.Syslog == "" {
+		return // 不进行初始化
+	}
+	addr := zc.C.Syslog
+	net := "udp"
+	if idx := strings.Index(addr, "://"); idx > 0 {
+		net = addr[:idx]
+		addr = addr[idx+3:]
+	}
+	zc.Log = NewLoggerSyslog(addr, net, 0, zc.C.LogTty)
+
+}
 
 func NewLoggerSyslog(addr, net string, pir int, tty bool) zc.Logger {
 	return (&lSyslog{
@@ -62,7 +78,7 @@ func (r *lSyslog) Init() *lSyslog {
 	}
 	if r.TagInfo == "" {
 		r.TagInfo = z.AppName
-		ns := gtw.GetNamespace()
+		ns := zc.GetNamespace()
 		if ns != "-" {
 			r.TagInfo += "." + ns
 		}
@@ -103,8 +119,8 @@ func (r *lSyslog) _output(depth int, appbuf func([]byte) []byte) error {
 	defer r.PutBuffer(buf)
 
 	*buf = appbuf(*buf)
-	if len(*buf) == 0 || (*buf)[len(*buf)-1] != '\n' {
-		*buf = append(*buf, '\n')
+	for i := len(*buf) - 1; i >= 0 && (*buf)[i] == '\n'; i-- {
+		*buf = (*buf)[:i]
 	}
 
 	if r._klog == nil {
@@ -132,10 +148,6 @@ func (r *lSyslog) _output(depth int, appbuf func([]byte) []byte) error {
 			}
 		}
 		msg = file + ":" + strconv.Itoa(line) + "] "
-	}
-
-	for i := len(*buf) - 1; i >= 0 && (*buf)[i] == '\n'; i-- {
-		*buf = (*buf)[:i]
 	}
 	msg += string(*buf)
 

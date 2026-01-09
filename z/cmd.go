@@ -6,30 +6,20 @@
 package z
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/suisrc/zgg/z/zc"
 )
 
 // 程序入口
 func Execute(appname, version, appinfo string) {
 	AppName, Version, AppInfo = appname, version, appinfo
-	// 发生错误需要截取到异常， 所以这里忽略 defer 方法
-	// defer func() {
-	// 	if err := recover(); err != nil {
-	// 		fmt.Println("================ exit: panic,", err)
-	// 		os.Exit(1) // exit with panic
-	// 	}
-	// }()
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		CMDR["web"]() // run  def http server
-		return        // wait for server stop
+		CMD["web"]() // run  def http server
+		return       // wait for server stop
 	}
 	cmd := os.Args[1]
-	if command, ok := CMDR[cmd]; ok {
+	if command, ok := CMD[cmd]; ok {
 		// 修改命令参数
 		os.Args = append(os.Args[:1], os.Args[2:]...)
 		command() // run command
@@ -37,34 +27,4 @@ func Execute(appname, version, appinfo string) {
 	} else {
 		fmt.Println("unknown command:", cmd)
 	}
-}
-
-// ----------------------------------------------------------------------------
-
-var (
-	// Command Registry
-	CMDR = map[string]func(){
-		"web":     RunHttpServe,
-		"version": PrintVersion,
-	}
-)
-
-func RunHttpServe() {
-	PrintVersion()
-	Initializ()
-	// parse command line arguments
-	var cfs string
-	flag.StringVar(&cfs, "c", "", "config file path")
-	flag.Parse()
-	// parse config file
-	zc.LoadConfig(cfs)
-	// running server
-	zgg := &Zgg{}
-	if zgg.ServeInit() {
-		zgg.RunServe()
-	}
-}
-
-func PrintVersion() {
-	println(AppName, Version, AppInfo)
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	z.CMDR["hello"] = hello
+	z.CMD["hello"] = hello
 }
 
 func hello() {

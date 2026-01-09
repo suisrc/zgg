@@ -3,6 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
+// 日志处理
+
 package zc
 
 import (
@@ -15,38 +17,20 @@ import (
 	"time"
 )
 
-var _std = NewLogger(os.Stdout)
-
 var (
-	Log = _std
-
-	Printf = func(format string, v ...any) {
-		Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
-	}
-
-	Println = func(v ...any) {
-		Log.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
-	}
-
-	Fatalf = func(format string, v ...any) {
-		Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
-		os.Exit(1)
-	}
-
-	Fatalln = func(v ...any) {
-		Log.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
-		os.Exit(1)
-	}
-
-	Printl3 = func(v ...any) {
-		Log.Output(3, func(b []byte) []byte { return fmt.Appendln(b, v...) })
-	}
+	Std = NewLogger(os.Stdout)
+	Log = Std
 
 	LogTrackFile = false
+	InitLogFunc  = func() {}
 )
 
 func Printl0(v ...any) {
-	_std.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
+	Std.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
+}
+
+func Printf1(format string, v ...any) {
+	Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
 }
 
 // ----------------------------------------------------------------------------

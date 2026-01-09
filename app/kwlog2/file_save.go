@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
@@ -24,7 +23,7 @@ var (
 func (aa *Kwlog2Api) add(zrc *z.Ctx) {
 	logs := []Record{}
 	if err := json.NewDecoder(zrc.Request.Body).Decode(&logs); err != nil {
-		zc.Printf("[logstore]: unmarshal body error, %s", err.Error())
+		z.Printf("[logstore]: unmarshal body error, %s", err.Error())
 		zrc.JSON(ParamBodyErr)
 		return
 	}
@@ -50,6 +49,7 @@ func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 		if rc.Time == 0 {
 			rc.Time = float64(time.Now().UnixMicro()) / 1_000_000
 		}
+		// 转换时区为当前系统时区
 		date := time.UnixMicro(int64(rc.Time * 1_000_000))
 		// ----------------------------------------------------
 		if ktag != "" {
@@ -82,7 +82,7 @@ func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 
 func (aa *Kwlog2Api) del_file(lf *LoggerFile) {
 	aa._files.Delete(lf.FileKey)
-	zc.Printf("[logstore]: recycle handle -> %s%d.txt", lf.FileKey, lf.Index)
+	z.Printf("[logstore]: recycle handle -> %s%d.txt", lf.FileKey, lf.Index)
 }
 
 type LoggerFile struct {
@@ -133,11 +133,11 @@ func (aa *LoggerFile) Write(bts ...[]byte) {
 			aa.Index++
 			continue
 		} else if err == nil && fstat.IsDir() {
-			zc.Printf("[logstore]: check store file error -> %s, %s", fpath, " is dir")
+			z.Printf("[logstore]: check store file error -> %s, %s", fpath, " is dir")
 			aa.DelFunc(aa)
 			return // 跳过，文件名存在同名文件夹
 		} else if err != nil {
-			zc.Printf("[logstore]: check store file error -> %s, %s", fpath, err.Error())
+			z.Printf("[logstore]: check store file error -> %s, %s", fpath, err.Error())
 			aa.DelFunc(aa)
 			return // 跳过，无法处理，遇到不可预知错误
 		} else {
@@ -148,7 +148,7 @@ func (aa *LoggerFile) Write(bts ...[]byte) {
 	var err error // 创建 + 追加 + 只写
 	aa.FileHdl, err = os.OpenFile(fpath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		zc.Printf("[logstore]: open store file error -> %s, %s", fpath, err.Error())
+		z.Printf("[logstore]: open store file error -> %s, %s", fpath, err.Error())
 		aa.DelFunc(aa)
 		return // 跳过，无法处理， 无法打开或者创建文件夹
 	}

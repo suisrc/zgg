@@ -11,16 +11,15 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/crt"
 )
 
 func init() {
-	z.CMDR["cert"] = Cert        // 创建一个证书
-	z.CMDR["certca"] = CertCA    // 创建一个根证书
-	z.CMDR["certsa"] = CertSA    // 创建一个中间证书
-	z.CMDR["certce"] = CertCE    // 通过中间证书创建一个证书
-	z.CMDR["cert-exp"] = CertEXP // 验证生疏的过期时间
+	z.CMD["cert"] = Cert        // 创建一个证书
+	z.CMD["certca"] = CertCA    // 创建一个根证书
+	z.CMD["certsa"] = CertSA    // 创建一个中间证书
+	z.CMD["certce"] = CertCE    // 通过中间证书创建一个证书
+	z.CMD["cert-exp"] = CertEXP // 验证生疏的过期时间
 }
 
 // -------------------------------------------------------------------
@@ -95,7 +94,7 @@ func CertCA() {
 	}
 	crt, err := crt.CreateCA(nil, cname)
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 
 	// ------------------------------------------------------------------------
@@ -142,16 +141,16 @@ func CertSA() {
 
 	crtCaBts, err := os.ReadFile(filepath.Join(path, cacn+".crt"))
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 	keyCaBts, err := os.ReadFile(filepath.Join(path, cacn+".key"))
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 
 	crt, err := crt.CreateSA(nil, cname, crtCaBts, keyCaBts)
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 	// ------------------------------------------------------------------------
 	println("write files: " + filepath.Join(path, cname+".crt | key | b64(crt)"))
@@ -192,11 +191,11 @@ func CertCE() {
 
 	crtSaBts, err := os.ReadFile(filepath.Join(path, sacn+".crt"))
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 	keySaBts, err := os.ReadFile(filepath.Join(path, sacn+".key"))
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 
 	crt, err := crt.CreateCE(nil, cname, domains, nil, crtSaBts, keySaBts)
@@ -229,15 +228,15 @@ func CertEXP() {
 	flag.StringVar(&path, "path", "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "crt file path")
 	pemBts, err := os.ReadFile(path)
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 	pemBlk, _ := pem.Decode(pemBts)
 	if pemBlk == nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
 	pemCrt, err := x509.ParseCertificate(pemBlk.Bytes)
 	if err != nil {
-		zc.Fatalln(err)
+		z.Fatalln(err)
 	}
-	zc.Println("expired: ", pemCrt.NotAfter.Format(time.RFC3339))
+	z.Println("expired: ", pemCrt.NotAfter.Format(time.RFC3339))
 }

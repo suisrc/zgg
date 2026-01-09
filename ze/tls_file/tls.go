@@ -33,10 +33,10 @@ func init() {
 
 	z.Register("10-tlsfile", func(zgg *z.Zgg) z.Closed {
 		if C.Server.CrtFile == "" || C.Server.KeyFile == "" {
-			zc.Println("[_tlsfile]: crtfile or keyfile is empty")
+			z.Println("[_tlsfile]: crtfile or keyfile is empty")
 			return nil
 		}
-		zc.Println("[_tlsfile]: crt=", C.Server.CrtFile, " key=", C.Server.KeyFile)
+		z.Println("[_tlsfile]: crt=", C.Server.CrtFile, " key=", C.Server.KeyFile)
 		var err error
 
 		cfg := &tls.Config{}

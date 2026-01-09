@@ -44,7 +44,7 @@ func (r *rSyslog) Init() *rSyslog {
 	if r.Network == "" {
 		r.Network = "udp"
 	} else if r.Network != "udp" && r.Network != "tcp" {
-		zc.Println("[_rsyslog]:", "invalid network, ", r.Network)
+		z.Println("[_rsyslog]:", "invalid network, ", r.Network)
 		return r
 	}
 	if r.Address == "" {
@@ -55,7 +55,7 @@ func (r *rSyslog) Init() *rSyslog {
 	}
 	if r.TagInfo == "" {
 		r.TagInfo = z.AppName
-		ns := gtw.GetNamespace()
+		ns := zc.GetNamespace()
 		if ns != "-" {
 			r.TagInfo += "." + ns
 		}
@@ -64,9 +64,9 @@ func (r *rSyslog) Init() *rSyslog {
 		var err error
 		r._klog, err = syslog.Dial(r.Network, r.Address, syslog.Priority(r.Priority), r.TagInfo)
 		if err != nil {
-			zc.Println("[_rsyslog]:", "unable to connect to syslog: ", err.Error())
+			z.Println("[_rsyslog]:", "unable to connect to syslog: ", err.Error())
 		} else {
-			zc.Println("[_rsyslog]:", "connect to syslog: ", r.Address)
+			z.Println("[_rsyslog]:", "connect to syslog: ", r.Address)
 		}
 		r._time = time.Now().Unix()
 	}
@@ -76,15 +76,15 @@ func (r *rSyslog) Init() *rSyslog {
 func (r *rSyslog) log(rt gtw.IRecord) {
 	bts, err := r.Convert(rt).ToJson()
 	if err != nil {
-		zc.Println("[_rsyslog]:", "unable to marshal json: ", err.Error())
+		z.Println("[_rsyslog]:", "unable to marshal json: ", err.Error())
 		return
 	}
 	if r._klog == nil {
-		zc.Println(string(bts))
+		z.Println(string(bts))
 		return // 降级到终端输出
 	}
 	if r.PrintTty {
-		zc.Println("[_rsyslog]:", string(bts))
+		z.Println("[_rsyslog]:", string(bts))
 		// 同步在终端输出
 	}
 
@@ -100,7 +100,7 @@ func (r *rSyslog) log(rt gtw.IRecord) {
 		r._time = time.Now().Unix() + 5
 	}
 	if _, err := r._klog.Write(bts); err != nil {
-		zc.Println("[_rsyslog]:", "unable to write to syslog: ", err.Error())
+		z.Println("[_rsyslog]:", "unable to write to syslog: ", err.Error())
 	}
 }
 

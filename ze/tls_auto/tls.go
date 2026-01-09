@@ -37,10 +37,10 @@ func init() {
 
 	z.Register("10-tlsauto", func(zgg *z.Zgg) z.Closed {
 		if C.Server.CrtCA == "" || C.Server.KeyCA == "" {
-			zc.Println("[_tlsauto]: cacrt file or cakey file is empty")
+			z.Println("[_tlsauto]: cacrt file or cakey file is empty")
 			return nil
 		}
-		zc.Println("[_tlsauto]: crt=", C.Server.CrtCA, " key=", C.Server.KeyCA)
+		z.Println("[_tlsauto]: crt=", C.Server.CrtCA, " key=", C.Server.KeyCA)
 
 		caCrtBts, err := os.ReadFile(C.Server.CrtCA)
 		if err != nil {

@@ -4,7 +4,6 @@ package zhe
 
 import (
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 )
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -23,7 +22,7 @@ func Init3(ifn InitializFunc) {
 			ifn(api, zgg) // 初始化方法
 		}
 		return func() {
-			zc.Println("api-hello closed")
+			z.Println("api-hello closed")
 		}
 	})
 	z.Register("zz-world", func(zgg *z.Zgg) z.Closed {

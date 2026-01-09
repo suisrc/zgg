@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 go build -o zgg -ldflags '-w -extldflags "-static"' .
 
 FROM alpine:3.23
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=build /workspace/zgg /usr/local/bin/zgg
 

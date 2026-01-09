@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/crt"
 )
 
@@ -28,7 +27,7 @@ func (p *ForwardProxy) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 
 func (p *ForwardProxy) ServeHTTPS(rw http.ResponseWriter, rr *http.Request) {
 	if p.TLSConfig == nil {
-		zc.Println("[_forward]: tls config is nil")
+		p.Logf("[_forward]: tls config is nil")
 		return
 	}
 
@@ -64,7 +63,7 @@ func (p *ForwardProxy) ServeHTTPS(rw http.ResponseWriter, rr *http.Request) {
 	}
 	ctls := tls.Server(conn, tlsc)
 	if err := ctls.Handshake(); err != nil {
-		zc.Println("[_forward]: tls handshake error:", err.Error())
+		p.Logf("[_forward]: tls handshake error: %s", err.Error())
 		return
 	}
 	defer ctls.Close()
@@ -73,7 +72,7 @@ func (p *ForwardProxy) ServeHTTPS(rw http.ResponseWriter, rr *http.Request) {
 	// 1. 从加密连接中读取客户端的HTTP请求（需用bufio包装以支持HTTP解析）
 	tr, err := http.ReadRequest(bufio.NewReader(ctls))
 	if err != nil {
-		zc.Println("[_forward]: tls read client request error:", err.Error())
+		p.Logf("[_forward]: tls read client request error: %s", err.Error())
 		return
 	}
 	tr.RemoteAddr = rr.RemoteAddr

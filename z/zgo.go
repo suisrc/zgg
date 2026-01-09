@@ -6,12 +6,9 @@
 package z
 
 import (
-	"bytes"
 	"cmp"
-	crand "crypto/rand"
-	"flag"
+	"encoding/json"
 	"fmt"
-	mrand "math/rand"
 	"net"
 	"net/http"
 	"reflect"
@@ -19,52 +16,34 @@ import (
 	"sync"
 	"time"
 	"unsafe"
-
-	"github.com/suisrc/zgg/z/zc"
 )
 
-func IsDebug() bool {
-	return zc.C.Debug
-}
+var (
+	AppName = "zgg"
+	Version = "v0.0.0"
+	AppInfo = "(https://github.com/suisrc/zgg)"
 
-var HttpServeDef = true // 启动默认 http 服务
+	HttpServeDef = true // 启动默认 http 服务?
+)
 
-// 注册默认方法
-func Initializ() {
-	// 注册配置函数
-	zc.Register(C)
-
-	flag.BoolVar(&(zc.C.Debug), "debug", false, "debug mode")
-	flag.BoolVar(&(zc.C.Print), "print", false, "print mode")
-	flag.BoolVar(&(C.Server.Local), "local", false, "http server local mode")
-	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
-	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
-	flag.IntVar(&(C.Server.Ptls), "ptls", 443, "https server Port")
-	flag.BoolVar(&(C.Server.Dual), "dual", false, "running http and https server")
-	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
-	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
-	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
-	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
-
-	//  register default serve
-	if HttpServeDef {
-		Register("90-server", RegisterDefaultHttpServe)
-	}
+func PrintVersion() {
+	println(AppName, Version, AppInfo)
 }
 
 func RegisterDefaultHttpServe(zgg *Zgg) Closed {
+	if !HttpServeDef {
+		return nil // 不启动默认服务
+	}
 	if C.Server.Local {
 		C.Server.Addr = "127.0.0.1"
 	}
 	if C.Server.Ptls > 0 && zgg.TLSConf != nil {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
 		zgg.Servers["(HTTPS)"] = &http.Server{Handler: zgg, Addr: addr, TLSConfig: zgg.TLSConf}
-		// zc.Println("[register]: register http server, (HTTPS)", addr)
 	}
 	if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
 		zgg.Servers["(HTTP1)"] = &http.Server{Handler: zgg, Addr: addr}
-		// zc.Println("[register]: register http server, (HTTP1)", addr)
 	}
 	zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
 	return nil
@@ -87,97 +66,33 @@ func Favicon(ctx *Ctx) {
 
 // -----------------------------------------------------------------------------------
 
-// 创建指针
-func Ptr[T any](v T) *T {
-	return &v
+// 请求数据
+func ReadBody[T any](rr *http.Request, rb T) (T, error) {
+	return rb, json.NewDecoder(rr.Body).Decode(rb)
 }
 
-// 键值对
-type Ref[K cmp.Ordered, T any] struct {
-	Key K
-	Val T
+// 请求结构体， 特殊的请求体
+type RaData struct {
+	Atyp string `json:"type"`
+	Data string `json:"data"`
 }
 
-// map to struct
-func Mts[T any](target T, source map[string][]string, tagkey string) (T, error) {
-	return zc.Map2ToStruct(target, source, tagkey)
+// 请求数据
+func ReadData(rr *http.Request) (*RaData, error) {
+	return ReadBody(rr, &RaData{})
 }
 
-// 随机生成字符串， 0~f, 首字母不是 bb
-// @param bb 首字母
-func GenStr(bb string, ll int) string {
-	str := []byte("0123456789abcdef")
-	buf := make([]byte, ll-len(bb))
-	for i := range buf {
-		buf[i] = str[mrand.Intn(len(str))]
-	}
-	return bb + string(buf)
-}
-
-// 生成UUIDv4
-func GenUUIDv4() (string, error) {
-	// 1. 生成16个随机字节
-	uuid := make([]byte, 16)
-	if _, err := crand.Read(uuid); err != nil {
-		return "", err // 随机数生成失败
-	}
-
-	// 2. 设置UUID版本和变体
-	uuid[6] = (uuid[6] & 0x0F) | 0x40 // 第13位：0100（V4）
-	uuid[8] = (uuid[8] & 0x3F) | 0x80 // 第17位：10xx（变体规范）
-
-	// 3. 格式化为UUID字符串（8-4-4-4-12）
-	return fmt.Sprintf("%x-%x-%x-%x-%x",
-		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16]), nil
-}
-
-func UnicodeToRunes(srs ...[]byte) ([]byte, error) {
-	var rst bytes.Buffer
-	for _, src := range srs {
-		n := len(src)
-		for i := 0; i < n; {
-			// 匹配\u转义序列：检查是否有足够字节，且当前为'\\'、下一个为'u'
-			if i+1 < n && src[i] == '\\' && src[i+1] == '\\' {
-				// 转义序列
-				rst.WriteByte(src[i])
-				rst.WriteByte(src[i+1])
-				i += 2
-			} else if i+5 <= n && src[i] == '\\' && src[i+1] == 'u' {
-				// 提取4位十六进制字节（i+2到i+5）
-				bts := src[i+2 : i+6]
-				// 手动解析十六进制为Unicode码点（uint16范围：0~65535）
-				// code, size := utf8.DecodeRune(bts)
-				// if size == 0 {
-				// 	return nil, fmt.Errorf("invalid unicode, \\u%s", string(bts))
-				// }
-				var code rune
-				for _, b := range bts {
-					code = code << 4
-					if b >= '0' && b <= '9' {
-						code += rune(b - '0')
-					} else if b >= 'a' && b <= 'f' {
-						code += rune(b - 'a' + 10)
-					} else if b >= 'A' && b <= 'F' {
-						code += rune(b - 'A' + 10)
-					} else {
-						return nil, fmt.Errorf("invalid unicode, \\u%s", string(bts))
-					}
-				}
-				// 将码点转为UTF-8字节并写入结果（rune自动转UTF-8）
-				rst.WriteRune(code)
-				// 跳过已处理的6个字节（\uXXXX）
-				i += 6
-			} else {
-				// 普通字节直接写入结果
-				rst.WriteByte(src[i])
-				i++
-			}
+// 获取 reqType / 配置 reqType
+func GetReqType(request *http.Request) string {
+	reqtype := request.Header.Get("X-Request-Rt")
+	if reqtype == "" {
+		reqtype = C.Server.ReqXrtd
+		if reqtype != "" {
+			request.Header.Set("X-Request-Rt", reqtype)
 		}
 	}
-	return rst.Bytes(), nil
+	return reqtype
 }
-
-// -----------------------------------------------------------------------------------
 
 func GetRemoteIP(req *http.Request) string {
 	if ip := req.Header.Get("X-Forwarded-For"); ip != "" {
@@ -249,6 +164,17 @@ func FieldValue_(target any, field string) any {
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
 
+// 创建指针
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+// 键值对
+type Ref[K cmp.Ordered, T any] struct {
+	Key K
+	Val T
+}
+
 type BufferPool interface {
 	Get() []byte
 	Put([]byte)
@@ -319,13 +245,13 @@ func FieldInject(target any, value any, tag string, debug bool) bool {
 			tField.Type.Kind() == reflect.Interface && vType.Implements(tField.Type) {
 			tElem.Field(i).Set(reflect.ValueOf(value))
 			if debug {
-				zc.Printf("[_inject_]: [succ] %s.%s <- %s", tType, tField.Name, vType)
+				Printf("[_inject_]: [succ] %s.%s <- %s", tType, tField.Name, vType)
 			}
 			return true // 注入成功
 		}
 	}
 	if debug {
-		zc.Printf("[_inject_]: [fail] %s not found field.(%s)", tType, vType)
+		Printf("[_inject_]: [fail] %s not found field.(%s)", tType, vType)
 	}
 	return false
 }

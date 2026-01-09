@@ -57,7 +57,7 @@ func Init3(ifn InitializFunc) {
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
 		if C.Kwdog2.Disabled {
-			zc.Println("[_kwdog2_]: disabled")
+			z.Println("[_kwdog2_]: disabled")
 			return nil
 		}
 
@@ -150,24 +150,24 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			if z.IsDebug() {
-				zc.Printf("[_reverse]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
+				z.Printf("[_reverse]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else if proxy, err := aa.NewProxy(kk, vv); err == nil {
 			if z.IsDebug() {
-				zc.Printf("[_reverse]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
+				z.Printf("[_reverse]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else {
 			if z.IsDebug() {
-				zc.Printf("[_reverse]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, vv, err)
+				z.Printf("[_reverse]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, vv, err)
 			}
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		}
 	}
 	// --------------------------------------------------------------
 	if z.IsDebug() {
-		zc.Printf("[_reverse]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, rr.URL.Path, aa.Config.NextAddr)
+		z.Printf("[_reverse]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, rr.URL.Path, aa.Config.NextAddr)
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
 }

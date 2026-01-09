@@ -108,7 +108,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 			continue
 		}
 		if z.IsDebug() {
-			zc.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
+			z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
@@ -122,7 +122,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 	// --------------------------------------------------------------
 	rp := FixPath(rr, aa.Config.RootPath, aa.Config.Folder)
 	if z.IsDebug() {
-		zc.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
+		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
@@ -208,7 +208,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		ipath := aa.Config.Folder + "/" + index
 		file, err = aa.HttpFS.Open(ipath)
 		if err != nil {
-			zc.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
+			z.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
 			http.NotFound(rw, rr) // 没有重定向的 index.html 文件
 			return
 		}

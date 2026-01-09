@@ -3,12 +3,75 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
+// flag 绑定的类型的扩展
+
 package zc
 
 import (
 	"flag"
+	"strconv"
 	"strings"
 )
+
+var _ flag.Value = (*stringVal)(nil)
+
+// -- string Value
+type stringVal string
+
+func NewStrVal(p *string) *stringVal {
+	return (*stringVal)(p)
+}
+
+func (s *stringVal) Set(val string) error {
+	*s = stringVal(val)
+	return nil
+}
+
+func (s *stringVal) Get() any { return string(*s) }
+
+func (s *stringVal) String() string { return string(*s) }
+
+// -----------------------------------------------------
+
+// -- bool Value
+type boolVal bool
+
+func NewBoolVal(p *bool) *boolVal {
+	return (*boolVal)(p)
+}
+
+func (b *boolVal) Set(s string) error {
+	v, err := strconv.ParseBool(s)
+	*b = boolVal(v)
+	return err
+}
+
+func (b *boolVal) Get() any { return bool(*b) }
+
+func (b *boolVal) String() string { return strconv.FormatBool(bool(*b)) }
+
+func (b *boolVal) IsBoolFlag() bool { return true }
+
+// -----------------------------------------------------
+
+// -- int Value
+type intVal int
+
+func NewIntVal(p *int) *intVal {
+	return (*intVal)(p)
+}
+
+func (i *intVal) Set(s string) error {
+	v, err := strconv.ParseInt(s, 0, strconv.IntSize)
+	*i = intVal(v)
+	return err
+}
+
+func (i *intVal) Get() any { return int(*i) }
+
+func (i *intVal) String() string { return strconv.Itoa(int(*i)) }
+
+// -----------------------------------------------------
 
 var _ flag.Value = (*StrArr)(nil)
 

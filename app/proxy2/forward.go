@@ -60,7 +60,7 @@ func Init3(ifn InitializFunc) {
 
 	z.Register("12-proxy2", func(zgg *z.Zgg) z.Closed {
 		if C.Proxy2.Disabled {
-			zc.Println("[_proxy2_]: disabled")
+			z.Println("[_proxy2_]: disabled")
 			return nil
 		}
 
@@ -97,7 +97,7 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 			return err
 		}
 		// 创建根证书
-		zc.Println("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
+		z.Println("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
 		config := crt.CertConfig{"default": {
 			Expiry: "20y",
 			SubjectName: crt.SignSubject{
@@ -151,7 +151,7 @@ func (aa *Proxy2Api) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 
 	if z.IsDebug() {
-		zc.Printf("[_forward]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
+		z.Printf("[_forward]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
 }

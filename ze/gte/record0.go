@@ -90,7 +90,7 @@ func ToRecord0(rt_ gtw.IRecord) gtw.FRecord {
 	return rc
 }
 func ByRecord0(rt *gtw.Record0, rc *Record0) {
-	rc.GatewayName = gtw.GetServeName()
+	rc.GatewayName = zc.GetServeName()
 
 	rc.TraceId = rt.TraceID
 	rc.RemoteIp = rt.RemoteIP
@@ -126,7 +126,7 @@ func ByRecord0(rt *gtw.Record0, rc *Record0) {
 	if strings.HasPrefix(rc.Responder, "127.0.0.1") {
 		// 接受者是自己， kwdog 鉴权系统拦截，需要标记服务名为节点
 		_, port, _ := net.SplitHostPort(rc.ServiceAddr)
-		rc.ServiceAddr = gtw.GetLocAreaIp()
+		rc.ServiceAddr = zc.GetLocAreaIp()
 		if port != "" {
 			rc.ServiceAddr = rc.ServiceAddr + ":" + port
 		}

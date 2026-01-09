@@ -3,7 +3,7 @@ package app
 import (
 	"os"
 
-	"github.com/suisrc/zgg/z/zc"
+	"github.com/suisrc/zgg/z"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 // 			return nil
 // 		}
 // 		// z.RegSvc(zgg.GetSvcKit(), client)
-// 		zc.Println("create k8s client success: local=", z.C.Server.Local)
+// 		z.Println("create k8s client success: local=", z.C.Server.Local)
 // 		zgg.SvcKit.Set("k8sclient", client) // 注册 k8sclient
 // 		return nil
 // 	})
@@ -38,7 +38,7 @@ func K8sNS() string {
 	}
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
-		zc.Printf("unable to read namespace: %s, return 'default'", err.Error())
+		z.Printf("unable to read namespace: %s, return 'default'", err.Error())
 		namespace_ = "default"
 	} else {
 		namespace_ = string(ns)
@@ -58,10 +58,10 @@ func K8sNS() string {
 // // BuildConfig Build the config
 // func BuildConfig(local bool) (*rest.Config, error) {
 // 	if local {
-// 		zc.Println("using local kubeconfig.")
+// 		z.Println("using local kubeconfig.")
 // 		kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 // 		return clientcmd.BuildConfigFromFlags("", kubeconfig)
 // 	}
-// 	zc.Println("using in cluster kubeconfig.")
+// 	z.Println("using in cluster kubeconfig.")
 // 	return rest.InClusterConfig()
 // }

@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 )
 
 type TLSAutoConfig struct {
@@ -35,7 +34,7 @@ func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, erro
 		key, _, err = net.SplitHostPort(ipp)
 		if err != nil {
 			if z.IsDebug() {
-				zc.Println("[_tlsauto]: NewCertificate: ", ipp, " error: ", err)
+				z.Println("[_tlsauto]: NewCertificate: ", ipp, " error: ", err)
 			}
 			return nil, err
 		}
@@ -64,7 +63,7 @@ func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, erro
 	}
 	if err != nil {
 		if z.IsDebug() {
-			zc.Println("[_tlsauto]: NewCertificate: ", key, " error: ", err)
+			z.Println("[_tlsauto]: NewCertificate: ", key, " error: ", err)
 		}
 		return nil, err
 	}
@@ -72,14 +71,14 @@ func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, erro
 		cer.Crt += string(aa.CaCrtBts)
 	}
 	if z.IsDebug() {
-		zc.Println("[_tlsauto]: NewCertificate: ", key)
-		zc.Printf("=============== cert .crt ===============%s\n%s\n", key, cer.Crt)
-		zc.Printf("=============== cert .key ===============%s\n%s\n", key, cer.Key)
-		zc.Println("=========================================")
+		z.Println("[_tlsauto]: NewCertificate: ", key)
+		z.Printf("=============== cert .crt ===============%s\n%s\n", key, cer.Crt)
+		z.Printf("=============== cert .key ===============%s\n%s\n", key, cer.Key)
+		z.Println("=========================================")
 	}
 	ct, err := tls.X509KeyPair([]byte(cer.Crt), []byte(cer.Key))
 	if err != nil {
-		zc.Println("[_tlsauto]: NewCertificate: ", key, " load error: ", err)
+		z.Println("[_tlsauto]: NewCertificate: ", key, " load error: ", err)
 		return nil, err
 	}
 	aa._lmap[key] = &ct

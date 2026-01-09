@@ -3,6 +3,10 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
+// zc 原本是 zgg config 的简写， 只为对 zgg 的应用进行配置的处理
+// 但是随着功能的增多， zc 现在已经成为了 zgg core 层，这属实无奈
+// 之后极可能控制新功能的引入， 已保障 zc 的简洁
+
 package zc
 
 import (
@@ -27,8 +31,10 @@ var (
 
 // Config 配置参数
 type Config struct {
-	Debug bool `default:"false" json:"debug"`
-	Print bool `default:"false" json:"print"`
+	Debug  bool   `default:"false" json:"debug"`
+	Print  bool   `default:"false" json:"print"`
+	Syslog string `json:"syslog"`
+	LogTty bool   `json:"logtty"`
 }
 
 var (
@@ -116,4 +122,5 @@ func LoadConfig(cfs string) {
 		}
 		println("----------------------------------------------")
 	}
+	InitLogFunc()
 }

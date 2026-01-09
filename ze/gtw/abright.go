@@ -15,13 +15,14 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
 	ErrNil = errors.New("<nil>") // 处理业务过程中，用于跳过错误
 
-	GenStr        = z.GenStr
-	GenUUIDv4     = z.GenUUIDv4
+	GenStr        = zc.GenStr
+	GenUUIDv4     = zc.GenUUIDv4
 	GetRemoteIP   = z.GetRemoteIP
 	NewBufferPool = z.NewBufferPool
 	GetAction     = z.GetAction

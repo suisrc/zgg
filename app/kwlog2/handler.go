@@ -60,9 +60,9 @@ func Init3(ifn InitializFunc) {
 		api := &Kwlog2Api{Config: C.Kwlog2}
 		api.Config.RoutePath = "/" + rp
 		api.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
-		zc.Printf("[logstore]: store-path -> %s", api.Config.StorePath)
+		z.Printf("[logstore]: store-path -> %s", api.Config.StorePath)
 		api.HttpFS = http.FS(os.DirFS(api.Config.StorePath))
-		// zc.Println(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
+		// z.Println(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
 
 		zgg.AddRouter("GET "+rp, api.lst)
 		if api.Config.Token != "" { // 增加访问令牌

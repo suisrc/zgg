@@ -9,7 +9,7 @@ import (
 	"log"
 	"testing"
 
-	"github.com/suisrc/zgg/z/zc"
+	"github.com/suisrc/zgg/z"
 )
 
 // go test -v z/zc/log_test.go -run Test_log0
@@ -22,5 +22,5 @@ func Test_log0(t *testing.T) {
 // go test -v z/zc/log_test.go -run Test_log1
 
 func Test_log1(t *testing.T) {
-	zc.Println("test")
+	z.Println("test")
 }
