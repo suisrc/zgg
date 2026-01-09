@@ -4,6 +4,11 @@
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
 // json 序列化， 注意： 暂时没有反序列化处理的想法
+/*
+func (xxx XXX) MarshalJSON() ([]byte, error) {
+	return zc.ToJsonBytes(&rc, "json", zc.LowerFirst, false)
+}
+*/
 
 package zc
 

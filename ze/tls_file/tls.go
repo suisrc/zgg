@@ -12,7 +12,6 @@ import (
 	"flag"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
@@ -27,7 +26,7 @@ type ServerConfig struct {
 }
 
 func init() {
-	zc.Register(&C)
+	z.Config(&C)
 	flag.StringVar(&(C.Server.CrtFile), "crt", "", "http server crt file")
 	flag.StringVar(&(C.Server.KeyFile), "key", "", "http server key file")
 

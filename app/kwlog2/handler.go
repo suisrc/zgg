@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
@@ -35,7 +34,7 @@ type Kwlog2Config struct {
 type InitializFunc func(api *Kwlog2Api, zgg *z.Zgg)
 
 func Init3(ifn InitializFunc) {
-	zc.Register(&C)
+	z.Config(&C)
 
 	flag.StringVar(&C.Kwlog2.StorePath, "logstore", "logs", "日志存储路径")
 	flag.StringVar(&C.Kwlog2.RoutePath, "logroute", "api/logs", "路由访问路径")

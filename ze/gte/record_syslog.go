@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -55,7 +54,7 @@ func (r *rSyslog) Init() *rSyslog {
 	}
 	if r.TagInfo == "" {
 		r.TagInfo = z.AppName
-		ns := zc.GetNamespace()
+		ns := z.GetNamespace()
 		if ns != "-" {
 			r.TagInfo += "." + ns
 		}

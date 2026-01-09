@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gtw"
 )
 
@@ -36,17 +35,17 @@ type Front2Config struct {
 type InitializFunc func(api *IndexApi, zgg *z.Zgg)
 
 func Init3(www fs.FS, ifn InitializFunc) {
-	zc.Register(&C)
+	z.Config(&C)
 
 	flag.StringVar(&C.Front2.Folder, "f2folder", "/www", "static folder")
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
-	flag.Var(zc.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
+	flag.Var(z.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
 	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
-	flag.Var(zc.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
-	flag.Var(zc.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
+	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
+	flag.Var(z.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
 	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
-	flag.Var(zc.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
+	flag.Var(z.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
 
 	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
 		hfs := http.FS(www)

@@ -13,7 +13,6 @@ import (
 	"os"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/crt"
 )
 
@@ -30,7 +29,7 @@ type ServerConfig struct {
 }
 
 func init() {
-	zc.Register(&C)
+	z.Config(&C)
 	flag.StringVar(&(C.Server.CrtCA), "cacrt", "", "http server crt ca file")
 	flag.StringVar(&(C.Server.KeyCA), "cakey", "", "http server key ca file")
 	flag.BoolVar(&C.Server.IsSAA, "casaa", false, "是否是中间证书")

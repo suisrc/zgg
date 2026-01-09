@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/crt"
 	"github.com/suisrc/zgg/ze/gte"
 	"github.com/suisrc/zgg/ze/gtw"
@@ -45,7 +44,7 @@ type Proxy2Config struct {
 type InitializFunc func(api *Proxy2Api, zgg *z.Zgg)
 
 func Init3(ifn InitializFunc) {
-	zc.Register(&C)
+	z.Config(&C)
 
 	flag.BoolVar(&(C.Proxy2.Disabled), "p2disabled", false, "是否禁用proxy2")
 	flag.StringVar(&(C.Proxy2.AddrPort), "p2port", "0.0.0.0:12012", "proxy server addr and port")

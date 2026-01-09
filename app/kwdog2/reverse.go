@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/ze/gte"
 	"github.com/suisrc/zgg/ze/gtw"
 )
@@ -40,16 +39,16 @@ type Kwdog2Config struct {
 type InitializFunc func(api *KwdogApi, zgg *z.Zgg)
 
 func Init3(ifn InitializFunc) {
-	zc.Register(&C)
+	z.Config(&C)
 
 	flag.BoolVar(&C.Kwdog2.Disabled, "k2disabled", false, "是否禁用kwdog2")
 	flag.StringVar(&C.Kwdog2.AddrPort, "k2addr", "0.0.0.0:12006", "监控认证端口")
 	flag.StringVar(&C.Kwdog2.NextAddr, "k2next", "http://127.0.0.1:80", "后端服务地址")
 	flag.StringVar(&C.Kwdog2.AuthAddr, "k2auth", "", "认证服务地址， 默认只支持 f1kin 服务")
 	flag.BoolVar(&C.Kwdog2.AuthSkip, "k2askip", false, "在存在鉴权头部信息时，是否跳过鉴权")
-	flag.Var(zc.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
+	flag.Var(z.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
 	flag.BoolVar(&C.Kwdog2.Rtrack, "k2rlog", false, "是否记录其他路由的日志")
-	flag.Var(zc.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
+	flag.Var(z.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
 	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
 	flag.StringVar(&C.Kwdog2.LogNet, "k2lognet", "udp", "日志发送协议")
 	flag.IntVar(&C.Kwdog2.LogPri, "k2logpri", 0, "日志优先级")

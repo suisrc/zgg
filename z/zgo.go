@@ -82,6 +82,16 @@ func ReadData(rr *http.Request) (*RaData, error) {
 	return ReadBody(rr, &RaData{})
 }
 
+// 获取 traceID / 配置 traceID
+func GetTraceID(request *http.Request) string {
+	traceid := request.Header.Get("X-Request-Id")
+	if traceid == "" {
+		traceid = GenStr("r", 32) // 创建请求ID, 用于追踪
+		request.Header.Set("X-Request-Id", traceid)
+	}
+	return traceid
+}
+
 // 获取 reqType / 配置 reqType
 func GetReqType(request *http.Request) string {
 	reqtype := request.Header.Get("X-Request-Rt")

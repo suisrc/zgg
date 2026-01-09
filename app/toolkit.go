@@ -1,14 +1,6 @@
 package app
 
-import (
-	"os"
-
-	"github.com/suisrc/zgg/z"
-)
-
 var (
-	namespace_ = ""
-
 	C = struct {
 	}{}
 )
@@ -28,23 +20,6 @@ var (
 // 		return nil
 // 	})
 // }
-
-// -----------------------------------------------------------------------
-
-// 获取当前命名空间 k8s namespace
-func K8sNS() string {
-	if namespace_ != "" {
-		return namespace_
-	}
-	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		z.Printf("unable to read namespace: %s, return 'default'", err.Error())
-		namespace_ = "default"
-	} else {
-		namespace_ = string(ns)
-	}
-	return namespace_
-}
 
 // // CreateClient Create the server
 // func CreateClient(local bool) (*kubernetes.Clientset, error) {
