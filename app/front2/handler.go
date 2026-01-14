@@ -1,6 +1,7 @@
 package front2
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"io/fs"
@@ -175,11 +176,9 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		// filename = "-" // 标记为文件夹, 直接跳转到 index.html
 		// redirect = true // 重定向到首页
 	} else if aa.isFixCtx(stat.Name()) {
-		// 需要转换内容 C.RootRout -> C.RootPath
-		text, _ := io.ReadAll(file)
-		tstr := strings.ReplaceAll(string(text), "/"+aa.Config.TmplPath, rp)
-		trdr := strings.NewReader(tstr)
-		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), trdr)
+		tbts, _ := io.ReadAll(file) // 需要转换内容 tp -> rp
+		tbts = bytes.ReplaceAll(tbts, []byte("/"+aa.Config.TmplPath), []byte(rp))
+		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
 	} else {
 		// 正常返回文件
 		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
@@ -213,17 +212,13 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		}
 		defer file.Close()
 		stat, _ := file.Stat()
-		if !aa.isFixCtx(stat.Name()) {
+		if aa.isFixCtx(stat.Name()) {
+			tbts, _ := io.ReadAll(file) // 需要转换内容 tp -> rp
+			tbts = bytes.ReplaceAll(tbts, []byte("/"+aa.Config.TmplPath), []byte(rp))
+			http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
+		} else {
 			http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
-			// rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-			// idata, _ := io.ReadAll(ifile)
-			// rw.Write(idata)
 		}
-		// 需要转换内容 C.RootRout -> C.RootPath
-		text, _ := io.ReadAll(file)
-		tstr := strings.ReplaceAll(string(text), "/"+aa.Config.TmplPath, rp)
-		trdr := strings.NewReader(tstr)
-		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), trdr)
 	}
 }
 
