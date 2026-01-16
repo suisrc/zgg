@@ -207,7 +207,7 @@ type Router struct {
 	// 500 (Internal Server Error).
 	// The handler can be used to keep your server from crashing because of
 	// unrecovered panics.
-	PanicHandler func(http.ResponseWriter, *http.Request, interface{})
+	PanicHandler func(http.ResponseWriter, *http.Request, any)
 }
 
 // Make sure the Router conforms with the http.Handler interface
@@ -333,7 +333,7 @@ func (r *Router) Handle(method, path string, handle Handle) {
 
 	// Lazy-init paramsPool alloc func
 	if r.paramsPool.New == nil && r.maxParams > 0 {
-		r.paramsPool.New = func() interface{} {
+		r.paramsPool.New = func() any {
 			ps := make(Params, 0, r.maxParams)
 			return &ps
 		}
