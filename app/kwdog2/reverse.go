@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/ze/gte"
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gte"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 var (

@@ -13,7 +13,7 @@ import (
 	"os"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/ze/crt"
+	"github.com/suisrc/zgg/z/ze/tlsx"
 )
 
 var (
@@ -51,11 +51,11 @@ func init() {
 			zgg.ServeStop("[_tlsauto]: cakey file error:", err.Error())
 			return nil
 		}
-		certConf := crt.CertConfig{
+		certConf := tlsx.CertConfig{
 			"default": {
 				Expiry:  "10y",
 				KeySize: 2048,
-				SubjectName: crt.SignSubject{
+				SubjectName: tlsx.SignSubject{
 					Organization:     "default",
 					OrganizationUnit: "default",
 				},
@@ -63,7 +63,7 @@ func init() {
 		}
 
 		cfg := &tls.Config{}
-		cfg.GetCertificate = (&crt.TLSAutoConfig{
+		cfg.GetCertificate = (&tlsx.TLSAutoConfig{
 			CaKeyBts: caKeyBts,
 			CaCrtBts: caCrtBts,
 			CertConf: certConf,

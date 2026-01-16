@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
-// 将所以得包补依赖引导到此文件中， 已便于清晰确认核心组件对外部的依赖
-// 所有的依赖，包括项目中非闭包内容的所有依赖
+// zgc, zgg, zgo 中不存在第三方依赖，所有依赖都在此文件中 zgz 引入
+// 包括项目中非闭包内容的所有依赖， 便于清晰确认核心组件对外部的依赖
 
 package z
 

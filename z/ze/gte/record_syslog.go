@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 // 日志 通过 syslog 发送

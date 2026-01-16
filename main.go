@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/suisrc/zgg/z"
-	_ "github.com/suisrc/zgg/ze/log_syslog"
-	_ "github.com/suisrc/zgg/ze/rdx"
+	_ "github.com/suisrc/zgg/z/ze/rdx"
 
-	// _ "github.com/suisrc/zgg/ze/tls_file"
-	// _ "github.com/suisrc/zgg/ze/tls_auto"
+	// _ "github.com/suisrc/zgg/z/ze/log/syslog"
+	// _ "github.com/suisrc/zgg/z/ze/tlsx/auto"
+	// _ "github.com/suisrc/zgg/z/ze/tlsx/file"
 
 	// _ "github.com/suisrc/zgg/app/zhe"
 	_ "github.com/suisrc/zgg/cmd"

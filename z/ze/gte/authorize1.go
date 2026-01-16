@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 // 鉴权器， 为 f1kin 系统定制的验证器

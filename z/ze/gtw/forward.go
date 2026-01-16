@@ -8,13 +8,13 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/suisrc/zgg/ze/crt"
+	"github.com/suisrc/zgg/z/ze/tlsx"
 )
 
 // 中间人攻击（MITM, Man-in-the-Middle）: 流量监控
 type ForwardProxy struct {
 	GatewayProxy
-	TLSConfig *crt.TLSAutoConfig
+	TLSConfig *tlsx.TLSAutoConfig
 }
 
 func (p *ForwardProxy) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {

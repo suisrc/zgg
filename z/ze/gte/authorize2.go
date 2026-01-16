@@ -8,7 +8,7 @@ package gte
 import (
 	"net/http"
 
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 // 鉴权器, 一个简单的例子， 需要扩展后才可使用

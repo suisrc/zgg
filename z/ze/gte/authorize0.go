@@ -10,7 +10,7 @@ package gte
 import (
 	"net/http"
 
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 // 只记录日志， 不进行鉴权

@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 // go test -v ze/pxy/reverse_test.go -run Test_proxy

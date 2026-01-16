@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z/zc"
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 var SensitiveRequestHeaders = []string{

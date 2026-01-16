@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/ze/crt"
+	"github.com/suisrc/zgg/z/ze/tlsx"
 )
 
 func init() {
@@ -45,7 +45,7 @@ func Cert() {
 		println("cert domain is empty")
 		return
 	}
-	crt, err := crt.CreateCE(nil, cname, domains, nil, nil, nil)
+	crt, err := tlsx.CreateCE(nil, cname, domains, nil, nil, nil)
 	if err != nil {
 		println(err.Error())
 		return
@@ -92,7 +92,7 @@ func CertCA() {
 		println("cert path is empty")
 		return
 	}
-	crt, err := crt.CreateCA(nil, cname)
+	crt, err := tlsx.CreateCA(nil, cname)
 	if err != nil {
 		z.Fatalln(err)
 	}
@@ -148,7 +148,7 @@ func CertSA() {
 		z.Fatalln(err)
 	}
 
-	crt, err := crt.CreateSA(nil, cname, crtCaBts, keyCaBts)
+	crt, err := tlsx.CreateSA(nil, cname, crtCaBts, keyCaBts)
 	if err != nil {
 		z.Fatalln(err)
 	}
@@ -198,7 +198,7 @@ func CertCE() {
 		z.Fatalln(err)
 	}
 
-	crt, err := crt.CreateCE(nil, cname, domains, nil, crtSaBts, keySaBts)
+	crt, err := tlsx.CreateCE(nil, cname, domains, nil, crtSaBts, keySaBts)
 	if err != nil {
 		println(err.Error())
 		return

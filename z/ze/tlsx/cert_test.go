@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style license that can be found
 // at https://github.com/suisrc/zgg/blob/main/LICENSE.
 
-package crt_test
+package tlsx_test
 
 import (
 	"crypto/x509"
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/suisrc/zgg/ze/crt"
+	"github.com/suisrc/zgg/z/ze/tlsx"
 )
 
 // go test -v ze/crt/cert_test.go -run Test_cert
@@ -25,24 +25,24 @@ func Test_cert(t *testing.T) {
 
 	// 读取 cert-ca 文件内容给 cert.CertConfig 对象
 	// bts, _ := os.ReadFile("../../_out/cert-ca.json")
-	cfg := crt.CertConfig{
+	cfg := tlsx.CertConfig{
 		"ca": {
 			Expiry: "18282d", // 50年
-			SubjectName: crt.SignSubject{
+			SubjectName: tlsx.SignSubject{
 				Organization:     "ca",
 				OrganizationUnit: "ca",
 			},
 		},
 		"sa": {
 			Expiry: "10y",
-			SubjectName: crt.SignSubject{
+			SubjectName: tlsx.SignSubject{
 				Organization:     "sa",
 				OrganizationUnit: "sa",
 			},
 		},
 		"default": {
 			Expiry: "10y",
-			SubjectName: crt.SignSubject{
+			SubjectName: tlsx.SignSubject{
 				Organization:     "default",
 				OrganizationUnit: "default",
 			},
@@ -51,16 +51,16 @@ func Test_cert(t *testing.T) {
 	// json.Unmarshal(bts, cfg)
 
 	// 生成证书
-	ca, err := crt.CreateCA(cfg, "ca")
+	ca, err := tlsx.CreateCA(cfg, "ca")
 	if err != nil {
 		panic(err)
 	}
-	sa, err := crt.CreateSA(cfg, "sa", []byte(ca.Crt), []byte(ca.Key))
+	sa, err := tlsx.CreateSA(cfg, "sa", []byte(ca.Crt), []byte(ca.Key))
 	if err != nil {
 		panic(err)
 	}
 
-	ct, err := crt.CreateCE(cfg, "dev1", []string{"dev1.com"}, []net.IP{{127, 0, 0, 1}}, []byte(sa.Crt), []byte(sa.Key))
+	ct, err := tlsx.CreateCE(cfg, "dev1", []string{"dev1.com"}, []net.IP{{127, 0, 0, 1}}, []byte(sa.Crt), []byte(sa.Key))
 	if err != nil {
 		panic(err)
 	}
@@ -144,7 +144,7 @@ func Test_verify(t *testing.T) {
 // go test -v ze/crt/cert_test.go -run Test_cer1
 
 func Test_cer1(t *testing.T) {
-	crt, err := crt.CreateCE(nil, "dev1", []string{"dev1.com"}, nil, nil, nil)
+	crt, err := tlsx.CreateCE(nil, "dev1", []string{"dev1.com"}, nil, nil, nil)
 	if err != nil {
 		panic(err)
 	}

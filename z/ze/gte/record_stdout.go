@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
 // 日志转存到控制台上

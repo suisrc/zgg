@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/ze/crt"
-	"github.com/suisrc/zgg/ze/gte"
-	"github.com/suisrc/zgg/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/gte"
+	"github.com/suisrc/zgg/z/ze/gtw"
+	"github.com/suisrc/zgg/z/ze/tlsx"
 )
 
 var (
@@ -97,9 +97,9 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 		}
 		// 创建根证书
 		z.Println("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
-		config := crt.CertConfig{"default": {
+		config := tlsx.CertConfig{"default": {
 			Expiry: "20y",
-			SubjectName: crt.SignSubject{
+			SubjectName: tlsx.SignSubject{
 				Organization:     "default",
 				OrganizationUnit: "default",
 			},
@@ -108,7 +108,7 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 		if err := os.MkdirAll(dir, 0644); err != nil {
 			return err
 		}
-		ca, err := crt.CreateCA(config, "default")
+		ca, err := tlsx.CreateCA(config, "default")
 		if err != nil {
 			return err
 		}
@@ -123,12 +123,12 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	if err != nil {
 		return err
 	}
-	api.GtwDefault.TLSConfig = &crt.TLSAutoConfig{
+	api.GtwDefault.TLSConfig = &tlsx.TLSAutoConfig{
 		CaCrtBts: crtBts,
 		CaKeyBts: keyBts,
-		CertConf: crt.CertConfig{"default": {
+		CertConf: tlsx.CertConfig{"default": {
 			Expiry: "20y",
-			SubjectName: crt.SignSubject{
+			SubjectName: tlsx.SignSubject{
 				Organization:     "default",
 				OrganizationUnit: "default",
 			},
