@@ -26,7 +26,8 @@ var (
 	// C 全局配置(需要先执行MustLoad，否则拿不到配置)
 	C = new(Config)
 	// cs 配置对象集合
-	cs = map[string]any{}
+	CS = map[string]any{}    // 需要初始化配置
+	FS = map[string]func(){} // 配置初始化函数
 )
 
 // Config 配置参数
@@ -49,12 +50,21 @@ type ILoader interface {
 
 // --------------------------------------------------------------------------------
 
+// Register 注册配置对象， Pointer or Func[func()] 函数，如果有异常，使用 panic/os.Exit(2) 终止
 func Register(c any) {
 	ctype := reflect.TypeOf(c)
+	if ctype.Kind() == reflect.Func {
+		fn, ok := c.(func())
+		if !ok {
+			panic("z/zc: Register f(arg) must be [func()]")
+		}
+		FS[fmt.Sprintf("%p", c)] = fn
+		return
+	}
 	if ctype.Kind() != reflect.Pointer {
 		panic("z/zc: Register c(arg) must be pointer")
 	}
-	cs[fmt.Sprintf("%v.%p", ctype.Elem(), c)] = c
+	CS[fmt.Sprintf("%v.%p", ctype.Elem(), c)] = c
 }
 
 func LoadConfig(cfs string) {
@@ -106,7 +116,7 @@ func LoadConfig(cfs string) {
 
 		// ---------------------------------------------------------------
 		// load config
-		for _, conf := range cs {
+		for _, conf := range CS {
 			for _, loader := range loaders {
 				if err := loader.Load(conf); err != nil {
 					fmt.Fprintln(os.Stderr, err)
@@ -114,9 +124,12 @@ func LoadConfig(cfs string) {
 				}
 			}
 		}
+		for _, fn := range FS {
+			fn()
+		}
 	})
 	if C.Print {
-		for name, conf := range cs {
+		for name, conf := range CS {
 			println("--------" + name)
 			println(ToStr2(conf))
 		}

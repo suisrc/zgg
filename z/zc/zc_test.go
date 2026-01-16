@@ -18,8 +18,14 @@ import (
 // ZGG_S_C_A_E_2_N=12 go test -v z/zc/zc_test.go -run Test_config
 // ZGG_DEBUG=1 go test -v z/zc/zc_test.go -run Test_config
 
+func load() {
+	println("init load")
+}
+
 func Test_config(t *testing.T) {
 	zc.Register(&Data{})
+	zc.Register(func() { println("init other") })
+	zc.Register(load)
 	log.Println("===========================loading")
 	zc.LoadConfig("zc_test.toml,zc_test1.toml")
 	log.Println("===========================loading")

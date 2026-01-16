@@ -2,7 +2,7 @@
 runmode = "debug"
 
 # 启动时是否打印配置参数
-printconfig = true
+print = true
 
 [s.a.b.c]
 a = "1"
