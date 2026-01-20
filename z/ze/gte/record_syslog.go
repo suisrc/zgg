@@ -16,14 +16,14 @@ import (
 
 // 日志 通过 syslog 发送
 
-func NewRecordSyslog(addr, net string, pir int, tty bool, convert gtw.ConvertFunc) gtw.RecordPool {
+func NewRecordSyslog(addr, net string, pir int, tty, body bool, convert gtw.ConvertFunc) gtw.RecordPool {
 	return gtw.NewRecordPool((&rSyslog{
 		Network:  net,
 		Address:  addr,
 		Priority: pir,
 		PrintTty: tty,
 		Convert:  convert,
-	}).Init().log)
+	}).Init().log, body)
 }
 
 type rSyslog struct {

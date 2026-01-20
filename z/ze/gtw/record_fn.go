@@ -44,6 +44,10 @@ func (t *Record0) LogRequest(req *http.Request) {
 		req.ContentLength == 0 || req.Header == nil {
 		return // Issue 16036: nil Body for http.Transport retries
 	}
+
+	if t.IgnoreBody {
+		return // ignore
+	}
 	ct := t.ReqHeader.Get("Content-Type")
 	if !strings.HasPrefix(ct, "application/json") &&
 		!strings.HasPrefix(ct, "application/xml") {
@@ -81,7 +85,7 @@ func (t *Record0) LogResponse(res *http.Response) {
 // 记录请求body内容
 func (t *Record0) LogRespBody(bsz int64, err error, buf []byte) {
 	t.RespSize = bsz
-	if t.RespHeader == nil || bsz == 0 {
+	if t.RespHeader == nil || bsz == 0 || t.IgnoreBody {
 		return // ignore
 	}
 	ct := t.RespHeader.Get("Content-Type")

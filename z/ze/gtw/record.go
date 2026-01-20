@@ -72,9 +72,10 @@ type Record0 struct {
 	Expand map[string]any          // 扩展字段
 	Cookie map[string]*http.Cookie // cookie
 
-	StartTime int64 // 开始时间, 毫秒
-	ServeTime int64 // 服务时间, 毫秒, 请求处理时间
-	_abort    bool  // 是否终止
+	StartTime  int64 // 开始时间, 毫秒
+	ServeTime  int64 // 服务时间, 毫秒, 请求处理时间
+	_abort     bool  // 是否终止
+	IgnoreBody bool  `json:"-"` // 是否忽略 body
 }
 
 func (rt *Record0) Cleanup() IRecord {
@@ -131,13 +132,15 @@ func (rc *Record0) SetSrvAuthz(addr string) {
 // ----------------------------------------------------------------------------
 
 // NewRecordPool 初始化缓冲池
-func NewRecordPool(save RecordSave) RecordPool {
+func NewRecordPool(save RecordSave, body bool) RecordPool {
 	pool := &RecordPool0{
 		pool: &sync.Pool{},
 		save: save,
 	}
 	pool.pool.New = func() any {
 		return &Record0{
+			IgnoreBody: !body,
+
 			Pool:   pool,
 			Save:   save,
 			Expand: make(map[string]any),

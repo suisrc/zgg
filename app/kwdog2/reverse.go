@@ -33,6 +33,8 @@ type Kwdog2Config struct {
 	LogNet   string            `json:"logudp"`  // 日志发送协议
 	LogPri   int               `json:"logpri"`  // 日志优先级
 	LogTty   bool              `json:"logtty"`  // 是否打印日志
+	LogBody  bool              `json:"logBody"` // 记录日志中的Body
+	Record   int               `json:"record"`
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -49,10 +51,12 @@ func Init3(ifn InitializFunc) {
 	flag.Var(z.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
 	flag.BoolVar(&C.Kwdog2.Rtrack, "k2rlog", false, "是否记录其他路由的日志")
 	flag.Var(z.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
-	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址")
+	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址， none: 表示不记录日志")
 	flag.StringVar(&C.Kwdog2.LogNet, "k2lognet", "udp", "日志发送协议")
 	flag.IntVar(&C.Kwdog2.LogPri, "k2logpri", 0, "日志优先级")
 	flag.BoolVar(&C.Kwdog2.LogTty, "k2logtty", false, "是否打印日志")
+	flag.BoolVar(&C.Kwdog2.LogBody, "k2logbody", false, "记录日志中的Body")
+	flag.IntVar(&C.Kwdog2.Record, "k2record", 0, "记录级别")
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
 		if C.Kwdog2.Disabled {
@@ -60,15 +64,25 @@ func Init3(ifn InitializFunc) {
 			return nil
 		}
 
+		// ...
+		switch C.Kwdog2.Record {
+		case 1:
+			RecordFunc = gte.ToRecord1
+		}
+
 		var err error
 		api := &KwdogApi{Config: C.Kwdog2}
-		api.RecordPool = gte.NewRecordSyslog(
-			api.Config.Syslog,
-			api.Config.LogNet,
-			api.Config.LogPri,
-			api.Config.LogTty,
-			RecordFunc,
-		)
+
+		if api.Config.Syslog == "none" {
+			api.RecordPool = gte.NewRecordSyslog(
+				api.Config.Syslog,
+				api.Config.LogNet,
+				api.Config.LogPri,
+				api.Config.LogTty,
+				api.Config.LogBody,
+				RecordFunc,
+			)
+		}
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
 		api.GtwDefault, err = gtw.NewTargetGateway(
 			api.Config.NextAddr,

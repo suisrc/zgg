@@ -33,7 +33,6 @@ func main() {
 	// zc.CFG_ENV, zc.LogTrackFile = "KIT", false
 	// zc.C.Syslog, zc.C.LogTty = "udp://klog.default.svc:5141", false
 	// z.HttpServeDef = false // 标记是否启动默认 HTTP 服务， z.RegisterDefaultHttpServe
-	// kwdog2.RecordFunc = gte.ToRecord1
 
 	// front2.Init3(www_, "/www", nil) // 前端应用，由于需要 wwwFS参数，必须人工初始化
 	// front2.Init3(os.DirFS("www"), "/", nil) // 前端应用, 使用系统文件夹中的文件

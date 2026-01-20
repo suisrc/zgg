@@ -22,10 +22,10 @@ import (
 )
 
 type IGateway interface {
-	ServeHTTP(rw http.ResponseWriter, req *http.Request)
+	ServeHTTP(res http.ResponseWriter, req *http.Request)
 	GetProxyName() string
 	Logf(format string, args ...any)
-	GetErrorHandler() func(rw http.ResponseWriter, req *http.Request, err error)
+	GetErrorHandler() func(res http.ResponseWriter, req *http.Request, err error)
 }
 
 type GatewayProxy struct {

@@ -30,10 +30,12 @@ type Proxy2Config struct {
 	KeyCA    string `json:"cakey"`
 	IsSAA    bool   `json:"casaa"`
 	Expiry   string `json:"expiry" default:"20y"`
-	Syslog   string `json:"syslog"` // 日志发送地址
-	LogNet   string `json:"logudp"` // 日志发送协议
-	LogPri   int    `json:"logpri"` // 日志优先级
-	LogTty   bool   `json:"logtty"` // 是否打印日志
+	Syslog   string `json:"syslog"`  // 日志发送地址
+	LogNet   string `json:"logudp"`  // 日志发送协议
+	LogPri   int    `json:"logpri"`  // 日志优先级
+	LogTty   bool   `json:"logtty"`  // 是否打印日志
+	LogBody  bool   `json:"logBody"` // 是否打印请求体
+	Record   int    `json:"record"`
 }
 
 // 不可使用， 考虑使用 eBPF 无侵入的方式
@@ -52,15 +54,23 @@ func Init3(ifn InitializFunc) {
 	flag.StringVar(&(C.Proxy2.KeyCA), "p2key", "", "CA私钥文件")
 	flag.BoolVar(&(C.Proxy2.IsSAA), "p2saa", false, "是否为中间证书")
 	flag.StringVar(&(C.Proxy2.Expiry), "p2exp", "20y", "创建根证书的有效期")
-	flag.StringVar(&C.Proxy2.Syslog, "p2syslog", "", "日志发送地址")
+	flag.StringVar(&C.Proxy2.Syslog, "p2syslog", "", "日志发送地址, none: 表示不记录日志")
 	flag.StringVar(&C.Proxy2.LogNet, "p2lognet", "udp", "日志发送协议")
 	flag.IntVar(&C.Proxy2.LogPri, "p2logpri", 0, "日志优先级")
 	flag.BoolVar(&C.Proxy2.LogTty, "p2logtty", false, "是否打印日志")
+	flag.BoolVar(&C.Proxy2.LogBody, "p2logbody", false, "记录日志中的Body")
+	flag.IntVar(&C.Proxy2.Record, "p2record", 0, "记录级别")
 
 	z.Register("12-proxy2", func(zgg *z.Zgg) z.Closed {
 		if C.Proxy2.Disabled {
 			z.Println("[_proxy2_]: disabled")
 			return nil
+		}
+
+		// ...
+		switch C.Proxy2.Record {
+		case 1:
+			RecordFunc = gte.ToRecord1
 		}
 
 		api := new(Proxy2Api)
@@ -84,8 +94,11 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	api.GtwDefault.BufferPool = abp
 	api.GtwDefault.Rewrite = func(r *gtw.ProxyRequest) {}
 	api.GtwDefault.ProxyName = "proxy2-gateway"
-	api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, cfg.LogNet, cfg.LogPri, cfg.LogTty, RecordFunc)
-	// api.GtwDefault.RecordPool = gte.NewRecordPrint()
+
+	if cfg.Syslog == "none" {
+		api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, cfg.LogNet, cfg.LogPri, //
+			cfg.LogTty, cfg.LogBody, RecordFunc)
+	}
 
 	if cfg.CrtCA == "" || cfg.KeyCA == "" {
 		return nil // 忽略 https

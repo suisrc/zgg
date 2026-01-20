@@ -16,17 +16,17 @@ import (
 
 // 日志转存到控制台上
 
-func NewRecordToTTY(convert gtw.ConvertFunc) gtw.RecordPool {
+func NewRecordToTTY(body bool, convert gtw.ConvertFunc) gtw.RecordPool {
 	return gtw.NewRecordPool(func(record gtw.IRecord) {
 		z.Println(convert(record).ToFmt())
-	})
+	}, body)
 }
 
 // -----------------------------------
 // 日志转存到文件, 简单参考，不要用于生产
 
-func NewRecordSimpleFile(file string, convert gtw.ConvertFunc) gtw.RecordPool {
-	return gtw.NewRecordPool((&rSimpleFile{file: file}).Init().log)
+func NewRecordSimpleFile(file string, body bool, convert gtw.ConvertFunc) gtw.RecordPool {
+	return gtw.NewRecordPool((&rSimpleFile{file: file}).Init().log, body)
 }
 
 type rSimpleFile struct {
