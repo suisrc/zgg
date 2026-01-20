@@ -163,7 +163,7 @@ func (aa *Proxy2Api) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 
 	if z.IsDebug() {
-		z.Printf("[_forward]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
+		z.Printf("[_proxy2_]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
 }

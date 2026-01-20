@@ -11,6 +11,7 @@ package zc
 import (
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -34,12 +35,39 @@ func (aa *ENV) Decode(val any, tag string) error {
 	tags := ToTagVal(val, tag)
 	for _, tag := range tags {
 		// log.Println(tag.Keys)
-
-		key := strings.Join(tag.Keys, "_")
-		key = strings.ToUpper(aa.Prefix + "_" + key)
-		venv := os.Getenv(key)
+		vkey := strings.ToUpper(aa.Prefix + "_" + strings.Join(tag.Keys, "_"))
+		venv := os.Getenv(vkey)
 		if val, err := StrToBV(tag.Field.Type, venv); err == nil {
 			tag.Value.Set(reflect.ValueOf(val))
+		} else if vkey[len(vkey)-1] == 'S' {
+			idx := -1
+			arr := []string{}
+			for {
+				idx++
+				if venv = os.Getenv(vkey + "_" + strconv.Itoa(idx)); venv == "" {
+					break
+				}
+				arr = append(arr, venv)
+			}
+			if len(arr) > 0 {
+				if tag.Field.Type.Kind() == reflect.Map && //
+					tag.Field.Type.Key().Kind() == reflect.String && //
+					tag.Field.Type.Elem().Kind() == reflect.String {
+					// tag.Field.Type = map[string]string
+					vvv := map[string]string{}
+					for _, vv := range arr {
+						kv := strings.SplitN(vv, "=", 2)
+						if len(kv) != 2 {
+							continue
+						}
+						vvv[kv[0]] = kv[1]
+					}
+					tag.Value.Set(reflect.ValueOf(vvv))
+
+				} else if val, err := ToBasicValue(tag.Field.Type, arr); err == nil {
+					tag.Value.Set(reflect.ValueOf(val))
+				}
+			}
 		}
 	}
 	return nil

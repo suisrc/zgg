@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -54,6 +55,13 @@ func Init3(www fs.FS, dir string, ifn InitializFunc) {
 		if C.Front2.IsNative {
 			api.ServeFS = http.FileServer(hfs)
 		}
+		for kk := range api.Config.Routers {
+			api.RoutersKey = append(api.RoutersKey, kk)
+		}
+		// api.RoutersKey 按字符串长度倒序
+		slices.SortFunc(api.RoutersKey, func(l string, r string) int { return -len(l) + len(r) })
+		z.Println("[_front2_]: routers", api.RoutersKey)
+
 		zgg.AddRouter("", api.ServeHTTP)
 		if C.Front2.ShowPath != "" {
 			zgg.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
@@ -70,32 +78,34 @@ func Init3(www fs.FS, dir string, ifn InitializFunc) {
 type IndexApi struct {
 	Config Front2Config
 
-	ServeFS   http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
-	HttpFS    http.FileSystem // 文件系统, http.FS(wwwFS)
-	_end_rmap map[string]http.Handler
-	_end_lock sync.RWMutex
+	ServeFS    http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
+	HttpFS     http.FileSystem // 文件系统, http.FS(wwwFS)
+	RoutersEnd map[string]http.Handler
+	RoutersKey []string
+	_end_lock  sync.RWMutex
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
-	if aa._end_rmap == nil {
+	if aa.RoutersEnd == nil {
 		return nil
 	}
 	aa._end_lock.RLock()
 	defer aa._end_lock.RUnlock()
-	return aa._end_rmap[kk]
+	return aa.RoutersEnd[kk]
 }
 
-func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
+func (aa *IndexApi) NewProxy(kk string) (http.Handler, error) {
 	aa._end_lock.Lock()
 	defer aa._end_lock.Unlock()
+	vv := aa.Config.Routers[kk]
 	proxy, err := gtw.NewTargetProxy(vv) // 创建目标URL
 	if err != nil {
 		return nil, err
 	}
-	if aa._end_rmap == nil {
-		aa._end_rmap = make(map[string]http.Handler)
+	if aa.RoutersEnd == nil {
+		aa.RoutersEnd = make(map[string]http.Handler)
 	}
-	aa._end_rmap[kk] = proxy
+	aa.RoutersEnd[kk] = proxy
 	return proxy, nil
 }
 
@@ -103,16 +113,17 @@ func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
 func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
-	for kk, vv := range aa.Config.Routers {
+	for _, kk := range aa.RoutersKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
 		if z.IsDebug() {
-			z.Printf("[_routing]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
+			vv := aa.Config.Routers[kk]
+			z.Printf("[_front2_]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
-		} else if proxy, err := aa.NewProxy(kk, vv); err != nil {
+		} else if proxy, err := aa.NewProxy(kk); err != nil {
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		} else {
 			proxy.ServeHTTP(rw, rr) // next
@@ -122,7 +133,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 	// --------------------------------------------------------------
 	rp := FixPath(rr, aa.Config.RootPath, aa.Config.Folder)
 	if z.IsDebug() {
-		z.Printf("[_request]: { path: '%s', raw: '%s', root: '%s'}\n", //
+		z.Printf("[_front2_]: { path: '%s', raw: '%s', root: '%s'}\n", //
 			rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
@@ -206,7 +217,7 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		ipath := filepath.Join(aa.Config.Folder, index)
 		file, err = aa.HttpFS.Open(ipath)
 		if err != nil {
-			z.Printf("[_index__]: [%s] %s\n", ipath, err.Error())
+			z.Printf("[_front2_]: [%s] %s\n", ipath, err.Error())
 			http.NotFound(rw, rr) // 没有重定向的 index.html 文件
 			return
 		}

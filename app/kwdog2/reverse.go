@@ -3,6 +3,7 @@ package kwdog2
 import (
 	"flag"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -100,6 +101,12 @@ func Init3(ifn InitializFunc) {
 			api.Config.AuthSkip,
 		)
 		// api.Authorizer = gte.NewLoggerOnly(api.Sites)
+		for kk := range api.Config.Routers {
+			api.RoutersKey = append(api.RoutersKey, kk)
+		}
+		// api.RoutersKey 按字符串长度倒序
+		slices.SortFunc(api.RoutersKey, func(l string, r string) int { return -len(l) + len(r) })
+		z.Println("[_kwdog2_]: routers", api.RoutersKey)
 
 		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}
 
@@ -118,35 +125,37 @@ type KwdogApi struct {
 	BufferPool gtw.BufferPool          // 缓存池
 	GtwDefault *gtw.GatewayProxy       // 默认网关
 	Authorizer gtw.Authorizer          // 默认记录
-	_end_rmap  map[string]gtw.IGateway // 路由网关
+	RoutersEnd map[string]gtw.IGateway // 路由网关
+	RoutersKey []string
 	_end_lock  sync.RWMutex
 }
 
 func (aa *KwdogApi) GetProxy(kk string) gtw.IGateway {
-	if aa._end_rmap == nil {
+	if aa.RoutersEnd == nil {
 		return nil
 	}
 	aa._end_lock.RLock()
 	defer aa._end_lock.RUnlock()
-	return aa._end_rmap[kk]
+	return aa.RoutersEnd[kk]
 }
 
-func (aa *KwdogApi) NewProxy(kk, vv string) (gtw.IGateway, error) {
+func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	aa._end_lock.Lock()
 	defer aa._end_lock.Unlock()
+	vv := aa.Config.Routers[kk]
 	gw, err := gtw.NewTargetGateway(vv, aa.BufferPool) // 创建目标URL
 	if err != nil {
 		return nil, err
 	}
-	if aa._end_rmap == nil {
-		aa._end_rmap = make(map[string]gtw.IGateway)
+	if aa.RoutersEnd == nil {
+		aa.RoutersEnd = make(map[string]gtw.IGateway)
 	}
 	gw.ProxyName = strings.ReplaceAll(kk, "/", "_") + "-gateway"
 	if aa.Config.Rtrack {
 		gw.RecordPool = aa.RecordPool
 		gw.Authorizer = aa.Authorizer
 	}
-	aa._end_rmap[kk] = gw
+	aa.RoutersEnd[kk] = gw
 	return gw, nil
 }
 
@@ -157,30 +166,33 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		return
 	}
 
-	for kk, vv := range aa.Config.Routers {
+	for _, kk := range aa.RoutersKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			if z.IsDebug() {
-				z.Printf("[_reverse]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
+				vv := aa.Config.Routers[kk]
+				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
-		} else if proxy, err := aa.NewProxy(kk, vv); err == nil {
+		} else if proxy, err := aa.NewProxy(kk); err == nil {
 			if z.IsDebug() {
-				z.Printf("[_reverse]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
+				vv := aa.Config.Routers[kk]
+				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else {
 			if z.IsDebug() {
-				z.Printf("[_reverse]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, vv, err)
+				vv := aa.Config.Routers[kk]
+				z.Printf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, vv, err)
 			}
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		}
 	}
 	// --------------------------------------------------------------
 	if z.IsDebug() {
-		z.Printf("[_reverse]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, rr.URL.Path, aa.Config.NextAddr)
+		z.Printf("[_kwdog2_]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, rr.URL.Path, aa.Config.NextAddr)
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
 }
