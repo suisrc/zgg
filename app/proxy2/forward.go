@@ -48,7 +48,7 @@ type InitializFunc func(api *Proxy2Api, zgg *z.Zgg)
 func Init3(ifn InitializFunc) {
 	z.Config(&C)
 
-	flag.BoolVar(&(C.Proxy2.Disabled), "p2disabled", false, "是否禁用proxy2")
+	flag.BoolVar(&(C.Proxy2.Disabled), "p2disabled", true, "是否禁用proxy2")
 	flag.StringVar(&(C.Proxy2.AddrPort), "p2port", "0.0.0.0:12012", "proxy server addr and port")
 	flag.StringVar(&(C.Proxy2.CrtCA), "p2crt", "", "CA证书文件")
 	flag.StringVar(&(C.Proxy2.KeyCA), "p2key", "", "CA私钥文件")
