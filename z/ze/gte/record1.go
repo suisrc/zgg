@@ -94,25 +94,44 @@ func ToRecord1(rt_ gtw.IRecord) gtw.FRecord {
 	// -------------------------------------------------------------------
 	if rc.Result2 != "success" || rc.RespBody == nil {
 		// 请求异常或响应体为空，PASS
-	} else if data, ok := rc.RespBody.(map[string]any); ok {
-		// 解析 json 响应体
-		if succ, _ := data["success"]; succ != nil && !succ.(bool) {
-			if showType, _ := data["showType"]; showType != nil {
-				if showType.(int) == 9 {
+	} else if res, ok := rc.RespBody.(string); ok {
+		// 基于字符串解析响应体， 不再使用基于json解析解析方式
+		if idx := strings.Index(res, "\"success\":"); idx > 0 && idx+11 < len(res) {
+			idx += 10
+			if res[idx] == 'f' {
+				if strings.Contains(res, "\"showType\":9") || strings.Contains(res, "\"errshow\":9") {
 					rc.Result2 = "redirect"
 				} else {
 					rc.Result2 = "abnormal"
 				}
-			} else if errshow, _ := data["errshow"]; errshow != nil {
-				if errshow.(int) == 9 {
+			} else if res[idx] == ' ' && res[idx+1] == 'f' {
+				if strings.Contains(res, "\"showType\": 9") || strings.Contains(res, "\"errshow\": 9") {
 					rc.Result2 = "redirect"
 				} else {
 					rc.Result2 = "abnormal"
 				}
-			} else {
-				rc.Result2 = "abnormal"
 			}
 		}
 	}
+	// else if data, ok := rc.RespBody.(map[string]any); ok {
+	// 	// 解析 json 响应体
+	// 	if succ, _ := data["success"]; succ != nil && !succ.(bool) {
+	// 		if showType, _ := data["showType"]; showType != nil {
+	// 			if showType.(int) == 9 {
+	// 				rc.Result2 = "redirect"
+	// 			} else {
+	// 				rc.Result2 = "abnormal"
+	// 			}
+	// 		} else if errshow, _ := data["errshow"]; errshow != nil {
+	// 			if errshow.(int) == 9 {
+	// 				rc.Result2 = "redirect"
+	// 			} else {
+	// 				rc.Result2 = "abnormal"
+	// 			}
+	// 		} else {
+	// 			rc.Result2 = "abnormal"
+	// 		}
+	// 	}
+	// }
 	return rc
 }

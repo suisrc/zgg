@@ -6,7 +6,6 @@
 package gte
 
 import (
-	"encoding/json"
 	"net"
 	"net/url"
 	"strings"
@@ -56,7 +55,7 @@ type Record0 struct {
 	ReqHeader2s string
 	RespHeaders string
 
-	ReqBody  string
+	ReqBody  any
 	RespBody any
 	RespSize int64
 	Result2  string
@@ -164,6 +163,7 @@ func ByRecord0(rt *gtw.Record0, rc *Record0) {
 			}
 		}
 	}
+	// 请求体信息
 	if len(rt.ReqBody) > 0 {
 		rc.ReqBody = string(rt.ReqBody)
 	}
@@ -178,18 +178,20 @@ func ByRecord0(rt *gtw.Record0, rc *Record0) {
 			}
 		}
 	}
-	// 响应体信息尝试解析
+	// 响应体信息
 	if len(rt.RespBody) > 0 {
-		if rt.RespBody[0] == '{' {
-			// json 响应体，解析内容， 如果解析失败，跳过，这里需要消耗大量资源
-			map_ := map[string]any{}
-			if err := json.Unmarshal(rt.RespBody, &map_); err == nil {
-				rc.RespBody = map_
-			}
-		}
-		if rc.RespBody == nil {
-			rc.RespBody = string(rt.RespBody)
-		}
+		rc.RespBody = string(rt.RespBody)
+		// 日志部分，默认基础层，不在对内容进行解析
+		// if rt.RespBody[0] == '{' {
+		// 	// json 响应体，解析内容， 如果解析失败，跳过，这里需要消耗大量资源
+		// 	map_ := map[string]any{}
+		// 	if err := json.Unmarshal(rt.RespBody, &map_); err == nil {
+		// 		rc.RespBody = map_
+		// 	}
+		// }
+		// if rc.RespBody == nil {
+		// 	rc.RespBody = string(rt.RespBody)
+		// }
 	}
 	rc.RespSize = rt.RespSize
 	// -------------------------------------------------------------------
