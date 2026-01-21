@@ -95,7 +95,7 @@ func (api *Proxy2Api) Init(cfg Proxy2Config) error {
 	api.GtwDefault.Rewrite = func(r *gtw.ProxyRequest) {}
 	api.GtwDefault.ProxyName = "proxy2-gateway"
 
-	if cfg.Syslog == "none" {
+	if cfg.Syslog != "none" {
 		api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, cfg.LogNet, cfg.LogPri, //
 			cfg.LogTty, cfg.LogBody, RecordFunc)
 	}

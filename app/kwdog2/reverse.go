@@ -74,7 +74,7 @@ func Init3(ifn InitializFunc) {
 		var err error
 		api := &KwdogApi{Config: C.Kwdog2}
 
-		if api.Config.Syslog == "none" {
+		if api.Config.Syslog != "none" {
 			api.RecordPool = gte.NewRecordSyslog(
 				api.Config.Syslog,
 				api.Config.LogNet,
