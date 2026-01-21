@@ -209,9 +209,9 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			clear(h)
 			return nil
 		},
-		ConnectStart: func(network, addr string) {
+		GotConn: func(info httptrace.GotConnInfo) {
 			if record != nil {
-				record.SetUpstream(addr) // record upstream address
+				record.SetUpstream(info.Conn.RemoteAddr().String()) // record upstream address
 			}
 		},
 	}
