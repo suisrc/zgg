@@ -2,7 +2,6 @@ package front2
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -43,19 +42,24 @@ func _GetFixFile(hf http.File, fp, tp, rp string, fm map[string]fs.FileInfo) ([]
 	} else if tp != "/" {
 		return bytes.ReplaceAll(tbts, []byte(tp), []byte(rp)), nil
 	}
+	if tp[len(tp)-1] == '/' {
+		tp = tp[:len(tp)-1]
+	}
 	// 备用替换方式
 	if strings.HasSuffix(fp, ".html") || strings.HasSuffix(fp, ".htm") {
 		for k := range fm {
 			// 执行内容替换
-			tp_ := []byte("\"" + tp + k)
-			rp_ := []byte("\"" + rp + k)
-			if bytes.Contains(tbts, fmt.Append(tp_, '"')) {
+			tp_ := []byte("\"" + tp + "/" + k + "\"")
+			rp_ := []byte("\"" + rp + "/" + k + "\"")
+			if bytes.Contains(tbts, tp_) {
 				// 确认文件需要执行替换操作
-				return bytes.ReplaceAll(tbts, fmt.Append(tp_, '"'), fmt.Append(rp_, '"')), nil
+				tbts = bytes.ReplaceAll(tbts, tp_, rp_)
 			}
-			if bytes.Contains(tbts, fmt.Append(tp_, '?')) {
+			tp_[len(tp_)-1] = '?'
+			rp_[len(rp_)-1] = '?'
+			if bytes.Contains(tbts, tp_) {
 				// 链接可能存在带有参数情况，一并处理
-				return bytes.ReplaceAll(tbts, fmt.Append(tp_, '?'), fmt.Append(rp_, '?')), nil
+				tbts = bytes.ReplaceAll(tbts, tp_, rp_)
 			}
 		}
 		return tbts, nil
