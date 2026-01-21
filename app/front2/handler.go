@@ -3,7 +3,6 @@ package front2
 import (
 	"bytes"
 	"flag"
-	"io"
 	"io/fs"
 	"net/http"
 	"path/filepath"
@@ -22,32 +21,34 @@ var (
 )
 
 type Front2Config struct {
-	Folder   string            `json:"folder"`   // 文件系统文件夹， 比如 /www, 必须是 / 开头
-	ShowPath string            `json:"f2show"`   // 显示 www 文件夹资源
-	IsNative bool              `json:"native"`   // 使用原生文件服务
-	RootPath []string          `json:"rootpath"` // 访问根目录, 访问根目录， 删除根目录后才是文件目录
-	Index    string            `json:"index"`    // 默认首页文件名, index.html
-	Indexs   map[string]string `json:"indexs"`   // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
-	Routers  map[string]string `json:"routers"`  // 路由表
-	TmplPath string            `json:"tmpl"`     // 模版根目录, ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
-	TmplSuff []string          `json:"suff"`     // 替换文件后缀, .html .htm .css .map .js
+	ShowPath   string            `json:"f2show"`  // 显示 www 文件夹资源
+	IsNative   bool              `json:"native"`  // 使用原生文件服务
+	Index      string            `json:"index"`   // 默认首页文件名, index.html
+	Indexs     map[string]string `json:"indexs"`  // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
+	Roots      []string          `json:"roots"`   // 访问根目录, 访问根目录， 删除根目录后才是文件目录
+	Routers    map[string]string `json:"routers"` // 路由表
+	TmplRoot   string            `json:"tproot"`  // 根目录, /ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
+	TmplSuffix []string          `json:"suffix"`  // 替换文件后缀, .html .htm .css .map .js
+	TmplPrefix []string          `json:"prefix"`  // 替换文件前缀, app. umi. runtime.
+	ChangeFile bool              `json:"change"`  // 支持文件变动
 }
 
 // 初始化方法， 处理 api 的而外配置接口
 type InitializFunc func(api *IndexApi, zgg *z.Zgg)
 
-func Init3(www fs.FS, dir string, ifn InitializFunc) {
+func Init3(www fs.FS, ifn InitializFunc) {
 	z.Config(&C)
 
-	flag.Var(z.NewStrVal(&C.Front2.Folder, dir), "f2folder", "static folder")
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
-	flag.BoolVar(&C.Front2.IsNative, "native", false, "use native file server")
-	flag.Var(z.NewStrArr(&C.Front2.RootPath, []string{"/zgg", "/demo1/demo2"}), "f2rp", "root dir parts list")
-	flag.StringVar(&C.Front2.Index, "index", "index.html", "index file name")
-	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "indexs", "index file name")
+	flag.BoolVar(&C.Front2.IsNative, "f2native", false, "use native file server")
+	flag.StringVar(&C.Front2.Index, "f2index", "index.html", "index file name")
+	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file name")
+	flag.Var(z.NewStrArr(&C.Front2.Roots, []string{"/zgg", "/demo1/demo2"}), "f2root", "root dir parts list")
 	flag.Var(z.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
-	flag.StringVar(&C.Front2.TmplPath, "tmpl", "ROOT_PATH", "root router path")
-	flag.Var(z.NewStrArr(&C.Front2.TmplSuff, []string{".html", ".htm", ".css", ".map", ".js"}), "suff", "replace tmpl file suffix")
+	flag.StringVar(&C.Front2.TmplRoot, "f2trpath", "/ROOT_PATH", "root path, empty is disabled")
+	flag.Var(z.NewStrArr(&C.Front2.TmplSuffix, []string{".html", ".htm", ".css", ".map", ".js"}), "f2suffix", "replace tmpl file suffix")
+	flag.Var(z.NewStrArr(&C.Front2.TmplPrefix, []string{"app.", "umi.", "runtime."}), "f2prefix", "replace tmpl file prefix")
+	flag.BoolVar(&C.Front2.ChangeFile, "f2change", false, "change file when file change")
 
 	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
 		hfs := http.FS(www)
@@ -55,13 +56,18 @@ func Init3(www fs.FS, dir string, ifn InitializFunc) {
 		if C.Front2.IsNative {
 			api.ServeFS = http.FileServer(hfs)
 		}
+		api.FileFS, _ = GetFileMap(www)
+		// 按字符串长度倒序
 		for kk := range api.Config.Routers {
 			api.RoutersKey = append(api.RoutersKey, kk)
 		}
-		// api.RoutersKey 按字符串长度倒序
 		slices.SortFunc(api.RoutersKey, func(l string, r string) int { return -len(l) + len(r) })
+		for kk := range api.Config.Indexs {
+			api.IndexsKey = append(api.IndexsKey, kk)
+		}
+		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
 		z.Println("[_front2_]: routers", api.RoutersKey)
-
+		// 增加路由
 		zgg.AddRouter("", api.ServeHTTP)
 		if C.Front2.ShowPath != "" {
 			zgg.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
@@ -80,6 +86,8 @@ type IndexApi struct {
 
 	ServeFS    http.Handler    // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
 	HttpFS     http.FileSystem // 文件系统, http.FS(wwwFS)
+	FileFS     map[string]fs.FileInfo
+	IndexsKey  []string
 	RoutersEnd map[string]http.Handler
 	RoutersKey []string
 	_end_lock  sync.RWMutex
@@ -131,30 +139,17 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 		return
 	}
 	// --------------------------------------------------------------
-	rp := FixPath(rr, aa.Config.RootPath, aa.Config.Folder)
+	rp := FixReqPath(rr, aa.Config.Roots, "")
 	if z.IsDebug() {
-		z.Printf("[_front2_]: { path: '%s', raw: '%s', root: '%s'}\n", //
-			rr.URL.Path, rr.URL.RawPath, rp)
+		z.Printf("[_front2_]: { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
 		aa.ServeFS.ServeHTTP(rw, rr)
+	} else if aa.Config.ChangeFile {
+		aa.ChgIndex(rw, rr, rp)
 	} else {
 		aa.TryIndex(rw, rr, rp)
 	}
-}
-
-// 判断是否需要转换内容
-func (aa *IndexApi) isFixCtx(name string) bool {
-	if aa.Config.TmplPath == "" {
-		return false
-	}
-	for _, suff := range aa.Config.TmplSuff {
-		if strings.HasSuffix(name, suff) {
-			return true
-		}
-	}
-	return false
-
 }
 
 // 获取 index.html 文件名
@@ -165,30 +160,76 @@ func (aa *IndexApi) getIndex(rp string) string {
 	return aa.Config.Index
 }
 
-// try index
+// try index，依赖FileFS，不支持文件变动
 func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string) {
+	fpath := rr.URL.Path
+	if fpath == "" {
+		fpath = "/"
+	}
+	_, exist := aa.FileFS[fpath[1:]]
+	if !exist {
+		// 确定是否有文件后缀，如果有文件后缀，直接返回 404
+		if ext := filepath.Ext(fpath); ext != "" {
+			z.Println("[_front2_]:", fpath, "file ext", ext)
+			http.NotFound(rw, rr)
+			return
+		}
+		// 重定向到 index.html（支持前端路由的history模式）
+		fpath = aa.getIndex(rp)
+		if len(fpath) > 0 && fpath[0] != '/' {
+			fpath = "/" + fpath
+		}
+		_, exist = aa.FileFS[fpath[1:]]
+	}
+	// 文件不存在
+	if !exist {
+		http.NotFound(rw, rr)
+		return
+	}
+	// 处理文件
+	file, err := aa.HttpFS.Open(fpath)
+	if err != nil {
+		z.Printf("[_front2_]: [%s] %s\n", fpath, err.Error())
+		http.NotFound(rw, rr)
+		return // 没有重定向的 index.html 文件
+	}
+	defer file.Close()
+	if stat, err := file.Stat(); err != nil {
+		z.Printf("[_front2_]: [%s] %s\n", fpath, err.Error())
+		http.Error(rw, "500 Internal Server Error: "+err.Error(), http.StatusInternalServerError)
+		return // 读取文件信息错误
+	} else if IsFixFile(stat.Name(), &aa.Config) {
+		// 判断文件是否需要修复内容， 一般是依赖文件的引用问题
+		tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
+		if err != nil {
+			z.Printf("[_front2_]: [%s] %s\n", fpath, err.Error())
+			http.NotFound(rw, rr)
+			return // 处理文件内容错误
+		}
+		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
+	} else {
+		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
+	}
+}
+
+// chg index, 不依赖FileFS，支持文件变动
+func (aa *IndexApi) ChgIndex(rw http.ResponseWriter, rr *http.Request, rp string) {
 	redirect := false
-	filename := ""
 	file, err := aa.HttpFS.Open(rr.URL.Path)
 	if err != nil {
 		redirect = true // 重定向到首页
 	} else if stat, err := file.Stat(); err != nil {
 		redirect = true // 重定向到首页
 	} else if stat.IsDir() {
-		// 尝试当前目录的 index.html 文件， 如果没有在重定向到根目录
-		index := aa.getIndex(rp)
-		rr.URL.Path = filepath.Join(rr.URL.Path, index)
-		if rr.URL.RawPath != "" {
-			rr.URL.RawPath = filepath.Join(rr.URL.RawPath, index)
+		redirect = true // 重定向到首页
+	} else if IsFixFile(stat.Name(), &aa.Config) {
+		// 文件的内容需要修复， 一般是依赖文件的引用问题
+		tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
+		if err != nil { // 内部异常
+			z.Printf("[_front2_]: [%s] %s\n", rr.URL.Path, err.Error())
+			http.Error(rw, "500 Internal Server Error: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
-		aa.TryIndex(rw, rr, rp) // 重定向到当前路径的 index.html
-		return
-		// 直接重定向到根目录的 index.html
-		// filename = "-" // 标记为文件夹, 直接跳转到 index.html
-		// redirect = true // 重定向到首页
-	} else if aa.isFixCtx(stat.Name()) {
-		tbts, _ := io.ReadAll(file) // 需要转换内容 tp -> rp
-		tbts = bytes.ReplaceAll(tbts, []byte("/"+aa.Config.TmplPath), []byte(rp))
 		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
 	} else {
 		// 正常返回文件
@@ -198,57 +239,34 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 		file.Close() // 释放文件
 	}
 	if redirect {
-		if filename == "" {
-			// 文件不存在， 如果有文件后缀，且后缀不是 .html, .html 则返回 404
-			if idx := strings.LastIndex(rr.URL.Path, "/"); idx > 0 {
-				filename = rr.URL.Path[idx+1:]
-			} else {
-				filename = rr.URL.Path
-			}
-			if idx := strings.LastIndex(filename, "."); idx < 0 {
-				// 文件没有后缀，可能是文件夹，需要重定向到 index.html
-			} else if suff := filename[idx:]; suff != ".html" && suff != ".htm" {
-				http.NotFound(rw, rr)
-				return // 后缀不是 .html, .html 则返回 404
-			}
+		// 确定是否有文件后缀，如果有文件后缀，直接返回 404
+		if ext := filepath.Ext(rr.URL.Path); ext != "" {
+			http.NotFound(rw, rr)
+			return // 文件类型错误
 		}
 		// 重定向到 index.html（支持前端路由的history模式）
 		index := aa.getIndex(rp)
-		ipath := filepath.Join(aa.Config.Folder, index)
-		file, err = aa.HttpFS.Open(ipath)
+		file, err = aa.HttpFS.Open(index)
 		if err != nil {
-			z.Printf("[_front2_]: [%s] %s\n", ipath, err.Error())
+			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
 			http.NotFound(rw, rr) // 没有重定向的 index.html 文件
 			return
 		}
 		defer file.Close()
-		stat, _ := file.Stat()
-		if aa.isFixCtx(stat.Name()) {
-			tbts, _ := io.ReadAll(file) // 需要转换内容 tp -> rp
-			tbts = bytes.ReplaceAll(tbts, []byte("/"+aa.Config.TmplPath), []byte(rp))
+		if stat, err := file.Stat(); err != nil {
+			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
+			http.Error(rw, "500 Internal Server Error: "+err.Error(), http.StatusInternalServerError)
+			return
+		} else if IsFixFile(stat.Name(), &aa.Config) {
+			tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
+			if err != nil {
+				z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
+				http.NotFound(rw, rr)
+				return
+			}
 			http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
 		} else {
 			http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
 		}
 	}
-}
-
-// 修正路径
-func FixPath(rr *http.Request, paths []string, folder string) string {
-	rp := ""
-	for _, path := range paths {
-		if strings.HasPrefix(rr.URL.Path, path) {
-			rp = path
-			rr.URL.Path = rr.URL.Path[len(rp):]
-			rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, rp)
-			break
-		}
-	}
-	if folder != "" {
-		rr.URL.Path = filepath.Join(folder, rr.URL.Path)
-		if rr.URL.RawPath != "" {
-			rr.URL.RawPath = filepath.Join(folder, rr.URL.RawPath)
-		}
-	}
-	return rp
 }

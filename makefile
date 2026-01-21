@@ -30,7 +30,7 @@ main:
 	go run main.go -eng map -local -dual -c __zgg.toml
 # -tpl ./tmpl
 tenv:
-	ZGG_KWDOG2_ROUTERS_0=/api/v1/=http://127.0.0.1 ZGG_KWDOG2_ROUTERS_1=/api/v1/1=http://127.0.0.2 go run main.go -local -debug -print -port 81
+	ZGG_KWDOG2_ROUTERS_0=/api/v1/=http://127.0.0.1 ZGG_FRONT2_TPROOT="none"  go run main.go -local -debug -print -port 81
 
 test:
 	_out/$(APP) version

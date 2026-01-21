@@ -30,10 +30,10 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 	// query参数，path: 文件路径
 	queryPath := rr.URL.Query().Get("path")
 	if queryPath == "" {
-		queryPath = aa.Config.Folder
+		queryPath = "/"
 	}
-	if !strings.HasPrefix(queryPath, aa.Config.Folder) {
-		queryPath = aa.Config.Folder
+	if queryPath[0] != '/' {
+		queryPath = "/"
 	}
 	// 兑换为 http fs 系统的文件
 	httpFile, err := aa.HttpFS.Open(queryPath)
@@ -77,9 +77,6 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 		// ----------------------------------------------------
 		var html_body strings.Builder
 		parentPath := filepath.Dir(queryPath)
-		if !strings.HasPrefix(parentPath, aa.Config.Folder) {
-			parentPath = aa.Config.Folder
-		}
 		// ----------------------------------------------------
 		fmt.Fprintf(&html_body, "<a href=\"%s?path=%s\">../</a>\n", aa.Config.ShowPath, parentPath)
 		for _, path := range dirPaths {
