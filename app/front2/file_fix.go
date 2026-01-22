@@ -39,6 +39,8 @@ func _GetFixFile(hf http.File, fp, tp, rp string, fm map[string]fs.FileInfo) ([]
 		return nil, err
 	} else if tp == "" {
 		return tbts, nil
+	} else if tp[0] == '@' {
+		tp = tp[1:] // 忽略开头的 @, 跳过， 使用基础处理
 	} else if tp != "/" {
 		return bytes.ReplaceAll(tbts, []byte(tp), []byte(rp)), nil
 	}
