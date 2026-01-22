@@ -65,6 +65,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 			api.IndexsKey = append(api.IndexsKey, kk)
 		}
 		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
+		z.Println("[_front2_]: indexs", api.IndexsKey)
 
 		// 增加路由
 		zgg.AddRouter("", api.ServeHTTP)

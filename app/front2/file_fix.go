@@ -92,7 +92,13 @@ func _IsFixFile(name string, conf *Front2Config) bool {
 func _FixReqPath(rr *http.Request, roots []string, dir string) string {
 	rp := ""
 	for _, path := range roots {
-		if strings.HasPrefix(rr.URL.Path, path) {
+		if path == "" {
+			continue
+		}
+		if path[len(path)-1] == '/' {
+			path = path[:len(path)-1]
+		}
+		if rr.URL.Path == path || strings.HasPrefix(rr.URL.Path, path+"/") {
 			rp = path
 			rr.URL.Path = rr.URL.Path[len(rp):]
 			rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, rp)
