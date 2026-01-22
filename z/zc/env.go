@@ -56,13 +56,37 @@ func (aa *ENV) Decode(val any, tag string) error {
 					// tag.Field.Type = map[string]string
 					vvv := map[string]string{}
 					for _, vv := range arr {
-						kv := strings.SplitN(vv, "=", 2)
-						if len(kv) != 2 {
+						vv = strings.TrimSpace(vv)
+						if vv == "" {
 							continue
 						}
-						vvv[kv[0]] = kv[1]
+						kv := strings.SplitN(vv, "=", 2)
+						if len(kv) == 2 {
+							vvv[kv[0]] = kv[1]
+						} else {
+							vvv[kv[0]] = ""
+						}
 					}
 					tag.Value.Set(reflect.ValueOf(vvv))
+
+					// } else if tag.Field.Type.Kind() == reflect.Slice && //
+					// 	tag.Field.Type.Elem().Len() == 2 && //
+					// 	tag.Field.Type.Elem().Elem().Kind() == reflect.String {
+					// 	// tag.Field.Type = [][2]string
+					// 	vvv := [][2]string{}
+					// 	for _, vv := range arr {
+					// 		vv = strings.TrimSpace(vv)
+					// 		if vv == "" {
+					// 			continue
+					// 		}
+					// 		kv := strings.SplitN(vv, "=", 2)
+					// 		if len(kv) == 2 {
+					// 			vvv = append(vvv, [2]string{kv[0], kv[1]})
+					// 		} else {
+					// 			vvv = append(vvv, [2]string{vv, ""})
+					// 		}
+					// 	}
+					// 	tag.Value.Set(reflect.ValueOf(vvv))
 
 				} else if val, err := ToBasicValue(tag.Field.Type, arr); err == nil {
 					tag.Value.Set(reflect.ValueOf(val))

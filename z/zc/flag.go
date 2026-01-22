@@ -131,3 +131,39 @@ func NewStrMap(p *map[string]string, val map[string]string) *StrMap {
 	*p = val
 	return (*StrMap)(p)
 }
+
+// -----------------------------------------------------
+
+// type StrKvs [][2]string
+
+// var _ flag.Value = (*StrKvs)(nil)
+
+// func (aa *StrKvs) Set(value string) error {
+// 	if value != "" {
+// 		for vv := range strings.SplitSeq(value, ",") {
+// 			kv := strings.SplitN(vv, "=", 2)
+// 			if len(kv) == 2 {
+// 				(*aa) = append((*aa), [2]string{kv[0], kv[1]})
+// 			} else {
+// 				(*aa) = append((*aa), [2]string{kv[0], ""})
+// 			}
+// 		}
+// 	}
+// 	return nil
+// }
+
+// func (aa *StrKvs) String() string {
+// 	var str string
+// 	for _, kv := range *aa {
+// 		str += "," + kv[0] + "=" + kv[1]
+// 	}
+// 	if str != "" {
+// 		str = str[1:]
+// 	}
+// 	return str
+// }
+
+// func NewStrKvs(p *[][2]string, val [][2]string) *StrKvs {
+// 	*p = val
+// 	return (*StrKvs)(p)
+// }

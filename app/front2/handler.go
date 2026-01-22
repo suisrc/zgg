@@ -25,7 +25,6 @@ type Front2Config struct {
 	IsNative   bool              `json:"native"`  // 使用原生文件服务
 	Index      string            `json:"index"`   // 默认首页文件名, index.html
 	Indexs     map[string]string `json:"indexs"`  // index map, 用于多个 index 系统中，不同 rootpath 对应不同的 index.html
-	Roots      []string          `json:"roots"`   // 访问根目录, 访问根目录， 删除根目录后才是文件目录
 	Routers    map[string]string `json:"routers"` // 路由表
 	TmplRoot   string            `json:"tproot"`  // 根目录, /ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
 	TmplSuffix []string          `json:"suffix"`  // 替换文件后缀, .html .htm .css .map .js
@@ -42,8 +41,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
 	flag.BoolVar(&C.Front2.IsNative, "f2native", false, "use native file server")
 	flag.StringVar(&C.Front2.Index, "f2index", "index.html", "index file name")
-	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file name")
-	flag.Var(z.NewStrArr(&C.Front2.Roots, []string{"/zgg", "/demo1/demo2"}), "f2root", "root dir parts list")
+	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file map")
 	flag.Var(z.NewStrMap(&C.Front2.Routers, z.HM{"/api1/": "http://127.0.0.1:8081/api2/"}), "f2rmap", "router path replace")
 	flag.StringVar(&C.Front2.TmplRoot, "f2trpath", "/ROOT_PATH", "root path, empty is disabled")
 	flag.Var(z.NewStrArr(&C.Front2.TmplSuffix, []string{".html", ".htm", ".css", ".map", ".js"}), "f2suffix", "replace tmpl file suffix")
@@ -62,11 +60,12 @@ func Init3(www fs.FS, ifn InitializFunc) {
 			api.RoutersKey = append(api.RoutersKey, kk)
 		}
 		slices.SortFunc(api.RoutersKey, func(l string, r string) int { return -len(l) + len(r) })
+		z.Println("[_front2_]: routers", api.RoutersKey)
 		for kk := range api.Config.Indexs {
 			api.IndexsKey = append(api.IndexsKey, kk)
 		}
 		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
-		z.Println("[_front2_]: routers", api.RoutersKey)
+
 		// 增加路由
 		zgg.AddRouter("", api.ServeHTTP)
 		if C.Front2.ShowPath != "" {
@@ -139,7 +138,7 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 		return
 	}
 	// --------------------------------------------------------------
-	rp := FixReqPath(rr, aa.Config.Roots, "")
+	rp := FixReqPath(rr, aa.IndexsKey, "")
 	if z.IsDebug() {
 		z.Printf("[_front2_]: { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
@@ -150,14 +149,6 @@ func (aa *IndexApi) ServeHTTP(zrc *z.Ctx) {
 	} else {
 		aa.TryIndex(rw, rr, rp)
 	}
-}
-
-// 获取 index.html 文件名
-func (aa *IndexApi) getIndex(rp string) string {
-	if index, ok := aa.Config.Indexs[rp]; ok {
-		return index
-	}
-	return aa.Config.Index
 }
 
 // try index，依赖FileFS，不支持文件变动
@@ -175,7 +166,10 @@ func (aa *IndexApi) TryIndex(rw http.ResponseWriter, rr *http.Request, rp string
 			return
 		}
 		// 重定向到 index.html（支持前端路由的history模式）
-		fpath = aa.getIndex(rp)
+		fpath = aa.Config.Indexs[rp]
+		if fpath == "" {
+			fpath = aa.Config.Index
+		}
 		if len(fpath) > 0 && fpath[0] != '/' {
 			fpath = "/" + fpath
 		}
@@ -245,7 +239,10 @@ func (aa *IndexApi) ChgIndex(rw http.ResponseWriter, rr *http.Request, rp string
 			return // 文件类型错误
 		}
 		// 重定向到 index.html（支持前端路由的history模式）
-		index := aa.getIndex(rp)
+		index, _ := aa.Config.Indexs[rp]
+		if index == "" {
+			index = aa.Config.Index
+		}
 		file, err = aa.HttpFS.Open(index)
 		if err != nil {
 			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
