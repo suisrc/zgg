@@ -1,11 +1,9 @@
 package front2
 
 import (
-	"bytes"
 	"flag"
 	"io/fs"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -97,6 +95,7 @@ type IndexApi struct {
 	RouterKey []string
 	_svc_lock sync.RWMutex
 	ServeFS   http.Handler // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
+	RouterMap sync.Map
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
@@ -129,6 +128,15 @@ func (aa *IndexApi) Serve(zrc *z.Ctx) {
 }
 
 // ServeHTTP
+// 这里为什么选择 List 作为路由遍历， 而不是 TrieTree ？
+// 1. 优先选择 List 遍历的场景
+// 路由数量少（如 ≤20 个）：List 遍历的性能更高，实现更简单。
+// 路由规则简单：无动态参数、通配符或前缀匹配需求。
+// 对性能要求极高：如高频请求的边缘服务或嵌入式系统。
+// 2. 优先选择 TrieTree 的场景
+// 路由数量多（如 ≥50 个）：TrieTree 的时间复杂度为 O(k)，性能优势明显。
+// 路由规则复杂：需要支持动态参数、通配符或前缀匹配。
+// 路由频繁更新：TrieTree 的插入和删除操作效率更高（O(k) vs O(n)）
 func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	for _, kk := range aa.RouterKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
@@ -159,121 +167,5 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		aa.ChgIndexContent(rw, rr, rp)
 	} else {
 		aa.TryIndexContent(rw, rr, rp)
-	}
-}
-
-// TryIndexContent，依赖FileFS，不支持文件变动
-func (aa *IndexApi) TryIndexContent(rw http.ResponseWriter, rr *http.Request, rp string) {
-	fpath := rr.URL.Path
-	if fpath == "" {
-		fpath = "/"
-	}
-	_, exist := aa.FileFS[fpath[1:]]
-	if !exist {
-		// 确定是否有文件后缀，如果有文件后缀，直接返回 404
-		if ext := filepath.Ext(fpath); ext != "" {
-			http.NotFound(rw, rr)
-			return
-		}
-		// 重定向到 index.html（支持前端路由的history模式）
-		fpath = aa.Config.Indexs[rp]
-		if fpath == "" {
-			fpath = aa.Config.Index
-		}
-		if len(fpath) > 0 && fpath[0] != '/' {
-			fpath = "/" + fpath
-		}
-		_, exist = aa.FileFS[fpath[1:]]
-	}
-	// 文件不存在
-	if !exist {
-		http.NotFound(rw, rr)
-		return
-	}
-	// 处理文件
-	file, err := aa.HttpFS.Open(fpath)
-	if err != nil {
-		z.Printf("[_front2_]: [%s] %s\n", fpath, err.Error())
-		http.NotFound(rw, rr)
-		return // 没有重定向的 index.html 文件
-	}
-	defer file.Close()
-	if stat, err := file.Stat(); err != nil {
-		z.Printf("[_front2_]: [%s] %s\n", fpath, err.Error())
-		http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
-		return // 读取文件信息错误
-	} else if IsFixFile(stat.Name(), &aa.Config) {
-		// 判断文件是否需要修复内容， 一般是依赖文件的引用问题
-		tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
-		if err != nil {
-			z.Printf("[_front2_]: [%s] %s\n", fpath, err.Error())
-			http.NotFound(rw, rr)
-			return // 处理文件内容错误
-		}
-		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
-	} else {
-		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
-	}
-}
-
-// ChgIndexContent, 不依赖FileFS，支持文件变动
-func (aa *IndexApi) ChgIndexContent(rw http.ResponseWriter, rr *http.Request, rp string) {
-	redirect := false
-	file, err := aa.HttpFS.Open(rr.URL.Path)
-	if err != nil {
-		redirect = true // 重定向到首页
-	} else if stat, err := file.Stat(); err != nil {
-		redirect = true // 重定向到首页
-	} else if stat.IsDir() {
-		redirect = true // 重定向到首页
-	} else if IsFixFile(stat.Name(), &aa.Config) {
-		// 文件的内容需要修复， 一般是依赖文件的引用问题
-		tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
-		if err != nil { // 内部异常
-			z.Printf("[_front2_]: [%s] %s\n", rr.URL.Path, err.Error())
-			http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
-	} else {
-		// 正常返回文件
-		http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
-	}
-	if file != nil {
-		file.Close() // 释放文件
-	}
-	if redirect {
-		// 确定是否有文件后缀，如果有文件后缀，直接返回 404
-		if ext := filepath.Ext(rr.URL.Path); ext != "" {
-			http.NotFound(rw, rr)
-			return // 文件类型错误
-		}
-		// 重定向到 index.html（支持前端路由的history模式）
-		index, _ := aa.Config.Indexs[rp]
-		if index == "" {
-			index = aa.Config.Index
-		}
-		file, err = aa.HttpFS.Open(index)
-		if err != nil {
-			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
-			http.NotFound(rw, rr) // 没有重定向的 index.html 文件
-			return
-		}
-		defer file.Close()
-		if stat, err := file.Stat(); err != nil {
-			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
-			http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
-			return
-		} else if IsFixFile(stat.Name(), &aa.Config) {
-			tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
-			if err != nil {
-				z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
-				http.NotFound(rw, rr)
-				return
-			}
-			http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), bytes.NewReader(tbts))
-		} else {
-			http.ServeContent(rw, rr, stat.Name(), stat.ModTime(), file)
-		}
 	}
 }
