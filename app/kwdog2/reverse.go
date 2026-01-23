@@ -102,11 +102,11 @@ func Init3(ifn InitializFunc) {
 		)
 		// api.Authorizer = gte.NewLoggerOnly(api.Sites)
 		for kk := range api.Config.Routers {
-			api.RoutersKey = append(api.RoutersKey, kk)
+			api.RouterKey = append(api.RouterKey, kk)
 		}
 		// api.RoutersKey 按字符串长度倒序
-		slices.SortFunc(api.RoutersKey, func(l string, r string) int { return -len(l) + len(r) })
-		z.Println("[_kwdog2_]: routers", api.RoutersKey)
+		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
+		z.Println("[_kwdog2_]: routers", api.RouterKey)
 
 		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}
 
@@ -125,37 +125,37 @@ type KwdogApi struct {
 	BufferPool gtw.BufferPool          // 缓存池
 	GtwDefault *gtw.GatewayProxy       // 默认网关
 	Authorizer gtw.Authorizer          // 默认记录
-	RoutersEnd map[string]gtw.IGateway // 路由网关
-	RoutersKey []string
-	_end_lock  sync.RWMutex
+	RouterSvc  map[string]gtw.IGateway // 路由网关
+	RouterKey  []string
+	_svc_lock  sync.RWMutex
 }
 
 func (aa *KwdogApi) GetProxy(kk string) gtw.IGateway {
-	if aa.RoutersEnd == nil {
+	if aa.RouterSvc == nil {
 		return nil
 	}
-	aa._end_lock.RLock()
-	defer aa._end_lock.RUnlock()
-	return aa.RoutersEnd[kk]
+	aa._svc_lock.RLock()
+	defer aa._svc_lock.RUnlock()
+	return aa.RouterSvc[kk]
 }
 
 func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
-	aa._end_lock.Lock()
-	defer aa._end_lock.Unlock()
+	aa._svc_lock.Lock()
+	defer aa._svc_lock.Unlock()
 	vv := aa.Config.Routers[kk]
 	gw, err := gtw.NewTargetGateway(vv, aa.BufferPool) // 创建目标URL
 	if err != nil {
 		return nil, err
 	}
-	if aa.RoutersEnd == nil {
-		aa.RoutersEnd = make(map[string]gtw.IGateway)
+	if aa.RouterSvc == nil {
+		aa.RouterSvc = make(map[string]gtw.IGateway)
 	}
 	gw.ProxyName = strings.ReplaceAll(kk, "/", "_") + "-gateway"
 	if aa.Config.Rtrack {
 		gw.RecordPool = aa.RecordPool
 		gw.Authorizer = aa.Authorizer
 	}
-	aa.RoutersEnd[kk] = gw
+	aa.RouterSvc[kk] = gw
 	return gw, nil
 }
 
@@ -166,7 +166,7 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		return
 	}
 
-	for _, kk := range aa.RoutersKey {
+	for _, kk := range aa.RouterKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}

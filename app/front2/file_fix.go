@@ -47,8 +47,11 @@ func _GetFixFile(hf http.File, fp, tp, rp string, fm map[string]fs.FileInfo) ([]
 	if tp[len(tp)-1] == '/' {
 		tp = tp[:len(tp)-1]
 	}
+	if len(rp) > 0 && rp[len(rp)-1] == '/' {
+		rp = rp[:len(rp)-1]
+	}
 	// 备用替换方式
-	if strings.HasSuffix(fp, ".html") || strings.HasSuffix(fp, ".htm") {
+	if fm != nil && (strings.HasSuffix(fp, ".html") || strings.HasSuffix(fp, ".htm")) {
 		for k := range fm {
 			// 执行内容替换
 			tp_ := []byte("\"" + tp + "/" + k + "\"")
@@ -95,10 +98,12 @@ func _FixReqPath(rr *http.Request, roots []string, dir string) string {
 		if path == "" {
 			continue
 		}
-		if path[len(path)-1] == '/' {
-			path = path[:len(path)-1]
-		}
-		if rr.URL.Path == path || strings.HasPrefix(rr.URL.Path, path+"/") {
+		if path[len(path)-1] == '/' && strings.HasPrefix(rr.URL.Path, path) {
+			rp = path
+			rr.URL.Path = rr.URL.Path[len(rp)-1:]
+			rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, rp[:len(rp)-1])
+			break
+		} else if rr.URL.Path == path || strings.HasPrefix(rr.URL.Path, path+"/") {
 			rp = path
 			rr.URL.Path = rr.URL.Path[len(rp):]
 			rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, rp)
