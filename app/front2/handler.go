@@ -153,6 +153,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		z.Printf("[_front2_]: { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
+		rr.Header.Set("X-Req-RootPath", rp) // 标记请求根路径
 		aa.ServeFS.ServeHTTP(rw, rr)
 	} else if aa.Config.ChangeFile {
 		aa.ChgIndexContent(rw, rr, rp)
