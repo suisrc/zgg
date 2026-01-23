@@ -82,7 +82,7 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
 	// 输出日志
 	if log != "" {
-		z.Println(log+": indexs", api.IndexsKey)
+		z.Println(log+":  indexs", api.IndexsKey)
 		z.Println(log+": routers", api.RouterKey)
 	}
 	return api
@@ -172,7 +172,6 @@ func (aa *IndexApi) TryIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 	if !exist {
 		// 确定是否有文件后缀，如果有文件后缀，直接返回 404
 		if ext := filepath.Ext(fpath); ext != "" {
-			z.Println("[_front2_]:", fpath, "file ext", ext)
 			http.NotFound(rw, rr)
 			return
 		}
