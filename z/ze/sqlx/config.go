@@ -32,7 +32,7 @@ func ConnectDatabase(cfg *DatabaseConfig) (*DB, error) {
 				cfg.DBName, cfg.Params, //
 			)
 		} else {
-			return nil, errors.New("database dsn is empty, disable confx")
+			return nil, errors.New("database dsn is empty")
 		}
 	}
 	// dbs, err := sql.Open("mysql", "")
