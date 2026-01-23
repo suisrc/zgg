@@ -17,13 +17,13 @@ import (
 
 var (
 	C = struct {
-		Proxy2 Proxy2Config
+		Proxy2 Config
 	}{}
 
 	RecordFunc = gte.ToRecord0
 )
 
-type Proxy2Config struct {
+type Config struct {
 	Disabled bool   `json:"disabled"`
 	AddrPort string `json:"port" default:"0.0.0.0:12012"`
 	CrtCA    string `json:"cacrt"`
@@ -88,7 +88,7 @@ func Init3(ifn InitializFunc) {
 
 }
 
-func (api *Proxy2Api) Init(cfg Proxy2Config) error {
+func (api *Proxy2Api) Init(cfg Config) error {
 	abp := gtw.NewBufferPool(32*1024, 0)
 	api.GtwDefault = &gtw.ForwardProxy{}
 	api.GtwDefault.BufferPool = abp

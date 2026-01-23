@@ -15,13 +15,13 @@ import (
 
 var (
 	C = struct {
-		Kwdog2 Kwdog2Config
+		Kwdog2 Config
 	}{}
 
 	RecordFunc = gte.ToRecord0
 )
 
-type Kwdog2Config struct {
+type Config struct {
 	Disabled bool              `json:"disabled"`
 	AddrPort string            `json:"addr" default:"0.0.0.0:12006"`
 	NextAddr string            `json:"next"`    // 默认 127.0.0.1:80
@@ -119,7 +119,7 @@ func Init3(ifn InitializFunc) {
 }
 
 type KwdogApi struct {
-	Config Kwdog2Config
+	Config Config
 	// ----------------------------------------
 	RecordPool gtw.RecordPool          // 记录池
 	BufferPool gtw.BufferPool          // 缓存池

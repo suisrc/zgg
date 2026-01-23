@@ -16,11 +16,11 @@ import (
 
 var (
 	C = struct {
-		Front2 Front2Config
+		Front2 Config
 	}{}
 )
 
-type Front2Config struct {
+type Config struct {
 	ShowPath   string            `json:"f2show"`  // 显示 www 文件夹资源
 	IsNative   bool              `json:"native"`  // 使用原生文件服务
 	Index      string            `json:"index"`   // 默认首页文件名, index.html
@@ -62,7 +62,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	})
 }
 
-func NewApi(www fs.FS, cfg Front2Config, log string) *IndexApi {
+func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	hfs := http.FS(www)
 	api := &IndexApi{Config: cfg, HttpFS: hfs}
 	api.Config = cfg
@@ -89,7 +89,7 @@ func NewApi(www fs.FS, cfg Front2Config, log string) *IndexApi {
 }
 
 type IndexApi struct {
-	Config    Front2Config
+	Config    Config
 	IndexsKey []string
 	HttpFS    http.FileSystem // 文件系统, http.FS(wwwFS)
 	FileFS    map[string]fs.FileInfo

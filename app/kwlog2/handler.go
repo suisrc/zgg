@@ -19,11 +19,11 @@ import (
 
 var (
 	C = struct {
-		Kwlog2 Kwlog2Config
+		Kwlog2 Config
 	}{}
 )
 
-type Kwlog2Config struct {
+type Config struct {
 	Token     string `json:"token"` // 上次日志令牌
 	StorePath string `json:"store"` // 文件系统文件夹， 比如 /www, 必须是 / 开头
 	RoutePath string `json:"route"` // 访问跟路径
@@ -80,8 +80,7 @@ func Init3(ifn InitializFunc) {
 }
 
 type Kwlog2Api struct {
-	Config Kwlog2Config
-
+	Config Config
 	HttpFS http.FileSystem // 文件系统, http.FS(wwwFS)
 	_files sync.Map
 }

@@ -75,7 +75,7 @@ func _GetFixFile(hf http.File, fp, tp, rp string, fm map[string]fs.FileInfo) ([]
 	return bytes.ReplaceAll(tbts, tp_, rp_), nil
 }
 
-func _IsFixFile(name string, conf *Front2Config) bool {
+func _IsFixFile(name string, conf *Config) bool {
 	if conf.TmplRoot == "" || conf.TmplRoot == "none" {
 		return false
 	}
