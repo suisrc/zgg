@@ -22,11 +22,11 @@ func (aa *IndexApi) TryIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 			return
 		}
 		// 重定向到 index.html（支持前端路由的history模式）
-		fpath = aa.Config.Indexs[rp]
-		if fpath == "" {
+		fpath, _ = aa.Config.Indexs[rp]
+		if fpath == "" && aa.Config.Index != "" {
 			fpath = aa.Config.Index
 		}
-		if len(fpath) > 0 && fpath[0] != '/' {
+		if len(fpath) == 0 || fpath[0] != '/' {
 			fpath = "/" + fpath
 		}
 		_, exist = aa.FileFS[fpath[1:]]
