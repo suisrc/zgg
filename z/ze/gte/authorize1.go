@@ -117,9 +117,11 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		// 验证失败，返回结果
 		body, _ := io.ReadAll(resp.Body)
 		// 记录返回日志
-		rt.LogOutRequest(rr) // 带有的请求信息，用于记录
-		rt.LogResponse(resp) // 带有的响应信息，用于记录
-		rt.LogRespBody(int64(len(body)), nil, body)
+		if rt != nil {
+			rt.LogOutRequest(rr) // 带有的请求信息，用于记录
+			rt.LogResponse(resp) // 带有的响应信息，用于记录
+			rt.LogRespBody(int64(len(body)), nil, body)
+		}
 		// 认证结果返回
 		dst := rw.Header()
 		// 过滤 X-Request- , 其他的传递给 rw
