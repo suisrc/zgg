@@ -1,12 +1,14 @@
 package front2
 
 import (
+	"bytes"
 	"flag"
 	"io/fs"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/gtw"
@@ -142,9 +144,17 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
 		}
-		if z.IsDebug() {
+		if kk == rr.URL.Path {
+			// 确定验证文件， 如果是验证文件， 直接返回 vv 内容
 			vv := aa.Config.Routers[kk]
-			z.Printf("[_front2_]: %s[%s] -> %s\n", kk, rr.URL.Path, vv)
+			if strings.HasPrefix(vv, "@") {
+				rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
+				return
+			}
+		}
+		if z.IsDebug() {
+			z.Printf("[_front2_]: %s[%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
