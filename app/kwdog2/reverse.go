@@ -172,23 +172,21 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			if z.IsDebug() {
-				vv := aa.Config.Routers[kk]
-				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
+				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else if proxy, err := aa.NewProxy(kk); err == nil {
 			if z.IsDebug() {
-				vv := aa.Config.Routers[kk]
-				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, vv)
+				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else {
 			if z.IsDebug() {
-				vv := aa.Config.Routers[kk]
-				z.Printf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, vv, err)
+				z.Printf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, aa.Config.Routers[kk], err)
 			}
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		}
+		return
 	}
 	// --------------------------------------------------------------
 	if z.IsDebug() {
