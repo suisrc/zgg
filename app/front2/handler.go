@@ -146,8 +146,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		}
 		if kk == rr.URL.Path {
 			// 确定验证文件， 如果是验证文件， 直接返回 vv 内容
-			vv := aa.Config.Routers[kk]
-			if strings.HasPrefix(vv, "@") {
+			if vv := aa.Config.Routers[kk]; strings.HasPrefix(vv, "@") {
 				rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 				http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
 				return
