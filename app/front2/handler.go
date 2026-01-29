@@ -65,13 +65,11 @@ func Init3(www fs.FS, ifn InitializFunc) {
 func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	api := &IndexApi{LogKey: log, Config: cfg}
 	if www != nil {
-		hfs := http.FS(www)
-		api.Config = cfg
-		api.HttpFS = hfs
-		if cfg.IsNative {
-			api.ServeFS = http.FileServer(hfs)
-		}
 		api.FileFS, _ = GetFileMap(www)
+		api.HttpFS = http.FS(www)
+		if cfg.IsNative {
+			api.ServeFS = http.FileServer(api.HttpFS)
+		}
 	}
 	// 按字符串长度倒序
 	api.RouterKey = []string{}
