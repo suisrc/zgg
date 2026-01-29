@@ -63,50 +63,54 @@ func Init3(www fs.FS, ifn InitializFunc) {
 }
 
 func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
-	hfs := http.FS(www)
-	api := &IndexApi{Config: cfg, HttpFS: hfs}
-	api.Config = cfg
-	api.HttpFS = hfs
-	if cfg.IsNative {
-		api.ServeFS = http.FileServer(hfs)
+	api := &IndexApi{LogKey: log, Config: cfg}
+	if www != nil {
+		hfs := http.FS(www)
+		api.Config = cfg
+		api.HttpFS = hfs
+		if cfg.IsNative {
+			api.ServeFS = http.FileServer(hfs)
+		}
+		api.FileFS, _ = GetFileMap(www)
 	}
-	api.FileFS, _ = GetFileMap(www)
 	// 按字符串长度倒序
+	api.RouterKey = []string{}
 	for kk := range api.Config.Routers {
 		api.RouterKey = append(api.RouterKey, kk)
 	}
 	slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
+	api.IndexsKey = []string{}
 	for kk := range api.Config.Indexs {
 		api.IndexsKey = append(api.IndexsKey, kk)
 	}
 	slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
 	// 输出日志
 	if log != "" {
-		z.Println(log+":  indexs", api.IndexsKey)
-		z.Println(log+": routers", api.RouterKey)
+		z.Println(api.LogKey+":  indexs", api.IndexsKey)
+		z.Println(api.LogKey+": routers", api.RouterKey)
 	}
 	return api
 }
 
 type IndexApi struct {
+	LogKey    string
 	Config    Config
 	IndexsKey []string
 	HttpFS    http.FileSystem // 文件系统, http.FS(wwwFS)
 	FileFS    map[string]fs.FileInfo
-	RouterSvc map[string]http.Handler
+	RouterMap map[string]http.Handler
 	RouterKey []string
 	_svc_lock sync.RWMutex
-	ServeFS   http.Handler // 文件服务, 优先级高，存在优先使用，不存使用HttpFS弥补
-	RouterMap sync.Map
+	ServeFS   http.Handler // 直接服务, 优先级高，用于自定义配置
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
-	if aa.RouterSvc == nil {
+	if aa.RouterMap == nil {
 		return nil
 	}
 	aa._svc_lock.RLock()
 	defer aa._svc_lock.RUnlock()
-	return aa.RouterSvc[kk]
+	return aa.RouterMap[kk]
 }
 
 func (aa *IndexApi) NewProxy(kk string) (http.Handler, error) {
@@ -117,10 +121,10 @@ func (aa *IndexApi) NewProxy(kk string) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	if aa.RouterSvc == nil {
-		aa.RouterSvc = make(map[string]http.Handler)
+	if aa.RouterMap == nil {
+		aa.RouterMap = make(map[string]http.Handler)
 	}
-	aa.RouterSvc[kk] = proxy
+	aa.RouterMap[kk] = proxy
 	return proxy, nil
 }
 
@@ -153,7 +157,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 			}
 		}
 		if z.IsDebug() {
-			z.Printf("[_front2_]: %s[%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
+			z.Printf(aa.LogKey+": %s[%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
@@ -167,12 +171,18 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	// --------------------------------------------------------------
 	rp := FixReqPath(rr, aa.IndexsKey, "")
 	if z.IsDebug() {
-		z.Printf("[_front2_]: { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
+		z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	if aa.ServeFS != nil {
 		rr.Header.Set("X-Req-RootPath", rp) // 标记请求根路径
 		aa.ServeFS.ServeHTTP(rw, rr)
-	} else if aa.Config.ChangeFile {
+		return
+	}
+	if aa.HttpFS == nil {
+		http.Error(rw, "404 Not Found", http.StatusNotFound)
+		return
+	}
+	if aa.Config.ChangeFile {
 		aa.ChgIndexContent(rw, rr, rp)
 	} else {
 		aa.TryIndexContent(rw, rr, rp)

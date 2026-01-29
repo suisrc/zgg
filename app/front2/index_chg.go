@@ -22,7 +22,7 @@ func (aa *IndexApi) ChgIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 		// 文件的内容需要修复， 一般是依赖文件的引用问题
 		tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
 		if err != nil { // 内部异常
-			z.Printf("[_front2_]: [%s] %s\n", rr.URL.Path, err.Error())
+			z.Printf(aa.LogKey+": [%s] %s\n", rr.URL.Path, err.Error())
 			http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -47,19 +47,19 @@ func (aa *IndexApi) ChgIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 		}
 		file, err = aa.HttpFS.Open(index)
 		if err != nil {
-			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
+			z.Printf(aa.LogKey+": [%s] %s\n", index, err.Error())
 			http.NotFound(rw, rr) // 没有重定向的 index.html 文件
 			return
 		}
 		defer file.Close()
 		if stat, err := file.Stat(); err != nil {
-			z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
+			z.Printf(aa.LogKey+": [%s] %s\n", index, err.Error())
 			http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
 			return
 		} else if IsFixFile(stat.Name(), &aa.Config) {
 			tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
 			if err != nil {
-				z.Printf("[_front2_]: [%s] %s\n", index, err.Error())
+				z.Printf(aa.LogKey+": [%s] %s\n", index, err.Error())
 				http.NotFound(rw, rr)
 				return
 			}

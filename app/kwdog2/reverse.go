@@ -125,18 +125,18 @@ type KwdogApi struct {
 	BufferPool gtw.BufferPool          // 缓存池
 	GtwDefault *gtw.GatewayProxy       // 默认网关
 	Authorizer gtw.Authorizer          // 默认记录
-	RouterSvc  map[string]gtw.IGateway // 路由网关
+	RouterMap  map[string]gtw.IGateway // 路由网关
 	RouterKey  []string
 	_svc_lock  sync.RWMutex
 }
 
 func (aa *KwdogApi) GetProxy(kk string) gtw.IGateway {
-	if aa.RouterSvc == nil {
+	if aa.RouterMap == nil {
 		return nil
 	}
 	aa._svc_lock.RLock()
 	defer aa._svc_lock.RUnlock()
-	return aa.RouterSvc[kk]
+	return aa.RouterMap[kk]
 }
 
 func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
@@ -147,15 +147,15 @@ func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	if err != nil {
 		return nil, err
 	}
-	if aa.RouterSvc == nil {
-		aa.RouterSvc = make(map[string]gtw.IGateway)
+	if aa.RouterMap == nil {
+		aa.RouterMap = make(map[string]gtw.IGateway)
 	}
 	gw.ProxyName = strings.ReplaceAll(kk, "/", "_") + "-gateway"
 	if aa.Config.Rtrack {
 		gw.RecordPool = aa.RecordPool
 		gw.Authorizer = aa.Authorizer
 	}
-	aa.RouterSvc[kk] = gw
+	aa.RouterMap[kk] = gw
 	return gw, nil
 }
 
