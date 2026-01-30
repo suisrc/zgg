@@ -110,7 +110,9 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if (p.Director != nil) == (p.Rewrite != nil) {
 		err := errors.New("ReverseProxy must have exactly one of Director or Rewrite set")
-		record.SetRespBody([]byte("###error gateway, " + err.Error()))
+		if record != nil {
+			record.SetRespBody([]byte("###error gateway, " + err.Error()))
+		}
 		p.GetErrorHandler()(rw, req, err)
 		return
 	}
@@ -126,7 +128,9 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	reqUpType := upgradeType(outreq.Header)
 	if !IsPrint(reqUpType) {
 		err := fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType)
-		record.SetRespBody([]byte("###error gateway, " + err.Error()))
+		if record != nil {
+			record.SetRespBody([]byte("###error gateway, " + err.Error()))
+		}
 		p.GetErrorHandler()(rw, req, err)
 		return
 	}
@@ -232,7 +236,9 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	roundTripDone = true
 	roundTripMutex.Unlock()
 	if err != nil {
-		record.SetRespBody([]byte("###error gateway, " + err.Error()))
+		if record != nil {
+			record.SetRespBody([]byte("###error gateway, " + err.Error()))
+		}
 		p.GetErrorHandler()(rw, outreq, err)
 		return
 	}
