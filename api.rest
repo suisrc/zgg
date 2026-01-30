@@ -67,6 +67,22 @@ GET {{BASE}}/api1/test
 
 // -----------------------------------------------
 // kwdog2
+@BASE=http://127.0.0.1:12006
+### 其他服务
+GET {{BASE}}/get/?x=123
+Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
+Referer: https://xxx.xxx.com/
+
+### 其他服务
+GET {{BASE}}/123/xxx/zzz?x=123
+Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
+Referer: https://xxx.xxx.com/
+
+### 其他服务
+GET {{BASE}}/456/qwe/get?x=123
+Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
+Referer: https://xxx.xxx.com/
+
 
 ### 其他服务
 GET {{BASE}}/api/iam/v1/a/odic/user_info

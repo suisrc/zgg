@@ -85,7 +85,7 @@ func Init3(ifn InitializFunc) {
 			)
 		}
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
-		api.GtwDefault, err = gtw.NewTargetGateway(
+		api.GtwDefault, err = gtw.NewTargetGateway2(
 			api.Config.NextAddr,
 			api.BufferPool,
 		)
@@ -143,7 +143,7 @@ func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	aa._svc_lock.Lock()
 	defer aa._svc_lock.Unlock()
 	vv := aa.Config.Routers[kk]
-	gw, err := gtw.NewTargetGateway(vv, aa.BufferPool) // 创建目标URL
+	gw, err := gtw.NewTargetGateway2(vv, aa.BufferPool) // 创建目标URL
 	if err != nil {
 		return nil, err
 	}
