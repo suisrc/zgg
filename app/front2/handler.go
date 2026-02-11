@@ -169,7 +169,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 	// 一个特殊接口， 解决 cdn 场景下， base url 动态识别问题， 默认返回 /， 基于 Referer 识别
 	// 由于该接口执行在 Router 之后，所以可以通过 Router 配置，来屏蔽该接口
-	if rr.URL.Path == "_getbasepath.txt" {
+	if rr.URL.Path == "/_getbasepath.txt" {
 		referer := rr.URL.Query().Get("referer") // query 参数优先
 		if referer == "" {
 			referer = rr.Referer() // header 参数备选
