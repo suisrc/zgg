@@ -113,3 +113,16 @@ func RunHttpServe() {
 func ReadForm[T any](rr *http.Request, rb T) (T, error) {
 	return zc.Map2ToStruct(rb, rr.URL.Query(), "form")
 }
+
+// 响应数据
+func WriteRespBytes(rw http.ResponseWriter, ctype string, code int, data []byte) {
+	h := rw.Header()
+	// See https://go.dev/issue/66343.
+	h.Del("Content-Length")
+	// 设置 X-Content-Type-Options: nosniff 后，浏览器会严格遵循服务器返回的 Content-Type，不会尝试猜测资源类型。
+	h.Set("X-Content-Type-Options", "nosniff")
+	// 响应数据
+	h.Set("Content-Type", ctype)
+	rw.WriteHeader(code)
+	rw.Write(data)
+}

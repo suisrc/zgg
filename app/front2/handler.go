@@ -1,14 +1,14 @@
 package front2
 
 import (
-	"bytes"
+	"errors"
 	"flag"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/gtw"
@@ -142,6 +142,7 @@ func (aa *IndexApi) Serve(zrc *z.Ctx) {
 // 路由规则复杂：需要支持动态参数、通配符或前缀匹配。
 // 路由频繁更新：TrieTree 的插入和删除操作效率更高（O(k) vs O(n)）
 func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
+	// 后端路由代理
 	for _, kk := range aa.RouterKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
@@ -149,8 +150,8 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		if kk == rr.URL.Path {
 			// 确定验证文件， 如果是验证文件， 直接返回 vv 内容
 			if vv := aa.Config.Routers[kk]; strings.HasPrefix(vv, "@") {
-				rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
-				http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
+				z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(vv[1:]))
+				// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
 				return
 			}
 		}
@@ -166,7 +167,35 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		}
 		return
 	}
+	// 一个特殊接口， 解决 cdn 场景下， base url 动态识别问题， 默认返回 /， 基于 Referer 识别
+	// 由于该接口执行在 Router 之后，所以可以通过 Router 配置，来屏蔽该接口
+	if rr.URL.Path == "_getbasepath.txt" {
+		referer := rr.URL.Query().Get("referer") // query 参数优先
+		if referer == "" {
+			referer = rr.Referer() // header 参数备选
+		}
+		var rerr error
+		basepath := ""
+		if referer == "" {
+			rerr = errors.New("no referer")
+		} else if refurl, err := url.Parse(referer); err != nil {
+			rerr = errors.New("parse referer error: " + err.Error())
+		} else {
+			rr.URL.Path = refurl.Path // 替换请求路径， 使用工具函数处理
+			basepath = FixReqPath(rr, aa.IndexsKey, "")
+		}
+		if rerr != nil {
+			z.Println(aa.LogKey+":", "_getbasepath.txt error,", rerr.Error())
+		}
+		if basepath == "" {
+			basepath = "/" // 默认根路径
+		}
+		z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(basepath))
+		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(basepath)))
+		return
+	}
 	// --------------------------------------------------------------
+	// 前端资源文件访问
 	rp := FixReqPath(rr, aa.IndexsKey, "")
 	if z.IsDebug() {
 		z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
