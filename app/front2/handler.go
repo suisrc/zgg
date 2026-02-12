@@ -1,7 +1,6 @@
 package front2
 
 import (
-	"errors"
 	"flag"
 	"io/fs"
 	"net/http"
@@ -167,30 +166,27 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		}
 		return
 	}
-	// 一个特殊接口， 解决 cdn 场景下， base url 动态识别问题， 默认返回 /， 基于 Referer 识别
+	// 一个特殊接口， 解决 cdn 场景下， base url 动态识别问题， 默认返回 /， 优先基于 Referer 识别
 	// 由于该接口执行在 Router 之后，所以可以通过 Router 配置，来屏蔽该接口
-	if rr.URL.Path == "/_getbasepath.txt" {
-		referer := rr.URL.Query().Get("referer") // query 参数优先
-		if referer == "" {
-			referer = rr.Referer() // header 参数备选
-		}
-		var rerr error
-		basepath := ""
-		if referer == "" {
-			rerr = errors.New("no referer")
+	if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
+		if referer := rr.Referer(); referer == "" {
+			// z.Println(aa.LogKey+": (", rr.URL.Path, ") referer is empty,")
 		} else if refurl, err := url.Parse(referer); err != nil {
-			rerr = errors.New("parse referer error: " + err.Error())
+			z.Println(aa.LogKey+": (", rr.URL.Path, ") parse referer error,", err.Error())
 		} else {
 			rr.URL.Path = refurl.Path // 替换请求路径， 使用工具函数处理
-			basepath = FixReqPath(rr, aa.IndexsKey, "")
 		}
-		if rerr != nil {
-			z.Println(aa.LogKey+":", "_getbasepath.txt error,", rerr.Error())
-		}
+		basepath := FixReqPath(rr, aa.IndexsKey, "")
 		if basepath == "" {
 			basepath = "/" // 默认根路径
 		}
-		z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(basepath))
+		if accept := rr.Header.Get("Accept"); accept != "" && strings.HasPrefix(accept, "application/json") {
+			// HasPrefix or Contains
+			data := `{"success":true,"data":"` + basepath + `"}`
+			z.WriteRespBytes(rw, "application/json; charset=utf-8", http.StatusOK, []byte(data))
+		} else {
+			z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(basepath))
+		}
 		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(basepath)))
 		return
 	}
