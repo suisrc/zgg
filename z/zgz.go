@@ -9,6 +9,7 @@
 package z
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"net/http"
@@ -47,6 +48,7 @@ var (
 	Config    = zc.Register
 	ToStr     = zc.ToStr
 	ToStr2    = zc.ToStr2
+	HexStr    = hex.EncodeToString
 	GenStr    = zc.GenStr
 	GenUUIDv4 = zc.GenUUIDv4
 	UnicodeTo = zc.UnicodeToRunes
