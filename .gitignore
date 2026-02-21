@@ -22,3 +22,6 @@ _out
 *.log
 www
 __zgg.toml
+
+sqlk
+model_test.go

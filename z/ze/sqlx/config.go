@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+var (
+	C = struct {
+		Sqlx Config
+	}{}
+)
+
+type Config struct {
+	ShowSQL bool `json:"showsql"`
+}
+
 type DatabaseConfig struct {
 	Driver       string `json:"driver"` // mysql
 	DataSource   string `json:"dsn"`    // user:pass@tcp(host:port)/dbname?params

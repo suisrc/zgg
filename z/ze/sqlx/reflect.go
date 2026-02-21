@@ -34,6 +34,8 @@ type StructMap struct {
 	Index []*FieldInfo
 	Paths map[string]*FieldInfo
 	Names map[string]*FieldInfo
+
+	Fields map[string]*FieldInfo
 }
 
 // GetByPath returns a *FieldInfo for a given string path.
@@ -429,7 +431,7 @@ QueueLoop:
 		}
 	}
 
-	flds := &StructMap{Index: m, Tree: root, Paths: map[string]*FieldInfo{}, Names: map[string]*FieldInfo{}}
+	flds := &StructMap{Index: m, Tree: root, Paths: map[string]*FieldInfo{}, Names: map[string]*FieldInfo{}, Fields: map[string]*FieldInfo{}}
 	for _, fi := range flds.Index {
 		// check if nothing has already been pushed with the same path
 		// sometimes you can choose to override a type using embedded struct
@@ -440,7 +442,15 @@ QueueLoop:
 				flds.Names[fi.Path] = fi
 			}
 		}
+		flds.Fields[fi.GetFieldName()] = fi
 	}
 
 	return flds
+}
+
+func (f *FieldInfo) GetFieldName() string {
+	if f.Parent != nil && f.Parent.Field.Name != "" {
+		return f.Parent.GetFieldName() + "." + f.Field.Name
+	}
+	return f.Field.Name
 }
