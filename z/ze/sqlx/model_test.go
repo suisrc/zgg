@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	// _ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/sqlx"
 )
 
 type BaseDO struct {
-	Disable bool           `db:"disable"`
-	Deleted bool           `db:"deleted"`
+	Disable sql.NullBool   `db:"disable"`
+	Deleted sql.NullBool   `db:"deleted"`
 	Updated sql.NullTime   `db:"updated"`
 	Updater sql.NullString `db:"updater"`
 	Created sql.NullTime   `db:"created"`
@@ -264,4 +264,19 @@ func TestTx2(t *testing.T) {
 	data.Name.String = ""
 	repo.Get(&sqlx.Dsx{Ex: ds, Cx: cx}, &data, 13)
 	z.Println(z.ToStr2(data))
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelectAll2
+func TestSelectAll2(t *testing.T) {
+
+	repo := sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(2, 3)
+	datas, err := repo.SelectAll(dsc)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println(z.ToStr2(datas))
+	}
 }

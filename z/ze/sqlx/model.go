@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 )
 
 func WithTx(dsc *DB, fn func(tx *Tx) error) error {
@@ -58,6 +59,9 @@ type Dsx struct {
 		ExtContext
 	}
 	Cx context.Context
+
+	First int
+	Limit int
 }
 
 func (r *Dsx) Ctx() context.Context {
@@ -72,10 +76,58 @@ func (r *Dsx) Exc() ExtContext {
 	return r.Ex
 }
 
+// 小于 0 是禁用分页， 等于 0 是使用默认值
+func (r *Dsx) Page(page, size int) {
+	if size < 0 || page < 0 {
+		// 禁用分页，需要查询全部
+		r.First = 0
+		r.Limit = 0
+		return
+	}
+	if size == 0 {
+		size = 10
+	}
+	r.Limit = size
+	if page == 0 {
+		r.First = 0
+	} else {
+		r.First = (page - 1) * size
+	}
+}
+
+func (r *Dsx) Fix(stmt string) string {
+	if r.First <= 0 && r.Limit <= 0 || !zc.HasPrefixFold(stmt, SQL_SELECT) {
+		return stmt
+	}
+	// 分页, 只针对 select 语句
+	switch r.Ex.DriverName() {
+	case "mysql", "sqlite3", "sqlite", "postgres", "pgx", "pg": // LIMIT ... OFFSET 是数据库扩展语法，仅在部分数据库中支持
+		// 大偏移量场景下都建议使用键值分页替代：
+		// SELECT * FROM users  WHERE id < (SELECT id FROM users ORDER BY id DESC LIMIT 1 OFFSET 10) ORDER BY id DESC LIMIT 10;
+		if r.First > 0 && r.Limit > 0 {
+			return stmt + fmt.Sprintf(" LIMIT %d OFFSET %d", r.Limit, r.First)
+		} else if r.Limit > 0 {
+			return stmt + fmt.Sprintf(" LIMIT %d", r.Limit)
+		} else if r.First > 0 {
+			return stmt + fmt.Sprintf(" OFFSET %d", r.First)
+		}
+	case "sqlserver", "ibmdb", "ora", "godror", "dm": // postgres, OFFSET ... FETCH NEXT 是 SQL:2008 标准语法
+		if r.First > 0 && r.Limit > 0 {
+			return stmt + fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", r.First, r.Limit)
+		} else if r.Limit > 0 {
+			return stmt + fmt.Sprintf(" OFFSET 0 ROWS FETCH NEXT %d ROWS ONLY", r.Limit)
+		} else if r.First > 0 {
+			return stmt + fmt.Sprintf(" OFFSET %d", r.First)
+		}
+	}
+	return stmt
+}
+
 type Dsc interface {
 	Ext() Ext        // 默认上下文执行器
 	Exc() ExtContext // 指定上下文执行器
 	Ctx() context.Context
+	Fix(string) string // 修复sql文，如增加增强内容或分页
 }
 
 // repo 初始化方法
@@ -190,6 +242,7 @@ func (r *Repo[T]) Get(dsc Dsc, data *T, id int64, flds ...string) (*T, error) {
 		data = new(T)
 	}
 	stmt := SQL_SELECT + r.ColsByInf(flds...).Select() + SQL_FROM + r.TN(data) + SQL_WHERE + fmt.Sprintf("id=%d", id)
+	stmt = dsc.Fix(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s", stmt)
 	}
@@ -204,6 +257,7 @@ func (r *Repo[T]) GetBy(dsc Dsc, data *T, cond string, args ...any) (*T, error) 
 		data = new(T)
 	}
 	stmt := SQL_SELECT + r.ColsByExf().Select() + SQL_FROM + r.TN(data) + SQL_WHERE + cond
+	stmt = dsc.Fix(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
@@ -223,6 +277,7 @@ func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]
 		// 条件
 		stmt += SQL_WHERE + cond
 	}
+	stmt = dsc.Fix(stmt)
 	if C.Sqlx.ShowSQL {
 		// 显示SQL
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
@@ -296,6 +351,7 @@ func (r *Repo[T]) InsertBy(dsc Dsc, data *T, setid func(int64)) error {
 	cols := r.ColsByExc("id")
 	stmt, args := cols.InsertArgs(data, true)
 	stmt = SQL_INSERT + r.TN(data) + stmt
+	stmt = dsc.Fix(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
@@ -345,6 +401,7 @@ func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Columns, cond string, args ..
 	stmt, argv := cols.UpdateArgs(data, true)
 	stmt = SQL_UPDATE + r.TN(data) + stmt + SQL_WHERE + cond
 	argv = append(argv, args...)
+	stmt = dsc.Fix(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(argv))
 	}
@@ -398,6 +455,7 @@ func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
 
 func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
 	stmt := SQL_DELETE + SQL_FROM + r.TN(new(T)) + SQL_WHERE + cond
+	stmt = dsc.Fix(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
