@@ -454,3 +454,13 @@ func (f *FieldInfo) GetFieldName() string {
 	}
 	return f.Field.Name
 }
+
+func (s *StructMap) GetIndexName() []*FieldInfo {
+	fis := []*FieldInfo{}
+	for _, fi := range s.Index {
+		if _, ok := s.Names[fi.Name]; ok {
+			fis = append(fis, fi)
+		}
+	}
+	return fis
+}

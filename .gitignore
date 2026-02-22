@@ -22,6 +22,7 @@ _out
 *.log
 www
 __zgg.toml
+__zmy.txt
 
 ksql
 # model_test.go

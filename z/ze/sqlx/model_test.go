@@ -2,14 +2,24 @@ package sqlx_test
 
 import (
 	"database/sql"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/sqlx"
-
-	_ "github.com/go-sql-driver/mysql"
+	// _ "github.com/go-sql-driver/mysql"
 )
+
+type BaseDO struct {
+	Disable bool           `db:"disable"`
+	Deleted bool           `db:"deleted"`
+	Updated sql.NullTime   `db:"updated"`
+	Updater sql.NullString `db:"updater"`
+	Created sql.NullTime   `db:"created"`
+	Creater sql.NullString `db:"creater"`
+	Version sql.NullInt64  `db:"version"`
+}
 
 // authz data object
 type AuthzDO struct {
@@ -20,13 +30,7 @@ type AuthzDO struct {
 	Permiss sql.NullString `db:"permiss"`
 	Remarks sql.NullString `db:"remarks"`
 
-	Disable bool           `db:"disable"`
-	Deleted bool           `db:"deleted"`
-	Updated sql.NullTime   `db:"updated"`
-	Updater sql.NullString `db:"updater"`
-	Created sql.NullTime   `db:"created"`
-	Creater sql.NullString `db:"creater"`
-	Version sql.NullInt64  `db:"version"`
+	BaseDO
 
 	Expired sql.NullTime   `db:"expired"`
 	String1 sql.NullString `db:"string1"`
@@ -45,9 +49,14 @@ type AuthzRepo struct {
 func genDB() *sqlx.DB {
 	sqlx.C.Sqlx.ShowSQL = true
 	cfg := sqlx.DatabaseConfig{
-		Driver:     "mysql",
-		DataSource: "cfg:xxx@tcp(mysql.base.svc:3306)/cfg?charset=utf8&parseTime=True&loc=Asia%2FShanghai",
+		Driver: "mysql",
+		// DataSource: "xxx:xxx@tcp(mysql.base.svc:3306)/cfg?charset=utf8&parseTime=True&loc=Asia%2FShanghai",
 	}
+	dss, err := os.ReadFile("../../../__zmy.txt")
+	if err != nil {
+		panic(err)
+	}
+	cfg.DataSource = string(dss)
 	dsc, err := sqlx.ConnectDatabase(&cfg)
 	if err != nil {
 		panic(err)
@@ -64,17 +73,17 @@ func genDB() *sqlx.DB {
 
 // go test -v z/ze/sqlx/model_test.go -run TestSelectAll
 func TestSelectAll(t *testing.T) {
-	dsc := genDB()
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 	z.Println(repo.ColsBy(nil).Select())
 
-	datas, err := repo.SelectAll(dsc)
-	if err != nil {
-		z.Println(err.Error())
-	} else {
-		z.Println(z.ToStr2(datas))
-	}
+	// dsc := genDB()
+	// datas, err := repo.SelectAll(dsc)
+	// if err != nil {
+	// 	z.Println(err.Error())
+	// } else {
+	// 	z.Println(z.ToStr2(datas))
+	// }
 }
 
 // go test -v z/ze/sqlx/model_test.go -run TestSelectGet
@@ -216,6 +225,7 @@ func TestTx1(t *testing.T) {
 		ID:   13,
 		Name: sqlx.NewString("test123456"),
 	}
+	// data.Version = sqlx.NewInt64(3)
 
 	err := sqlx.WithTx(dsc, func(tx *sqlx.Tx) error {
 		err := repo.Update(tx, &data)

@@ -33,9 +33,6 @@ func WithTx(dsc *DB, fn func(tx *Tx) error) error {
 	return err
 }
 
-// 忽略 没有被 "db" 标记的属性, 即 Repo 对应的 DO 必须具有 "db" 标签
-var RepoMpr = NewMapperFunc("db", func(s string) string { return "-" })
-
 // repo 初始化方法
 type RepoInf interface {
 	InitRepo()
@@ -65,9 +62,12 @@ type Repo[T any] struct {
 	Stm *StructMap   // struct map
 }
 
+// 忽略 没有被 "db" 标记的属性, 即 Repo 对应的 DO 必须具有 "db" 标签
+// var RepoMpr = NewMapperFunc("db", func(s string) string { return "-" })
+
 func (r *Repo[T]) InitRepo() {
 	r.Typ = reflect.TypeFor[T]()
-	r.Stm = RepoMpr.TypeMap(r.Typ)
+	r.Stm = mapper().TypeMap(r.Typ)
 }
 
 // 获取 Table Name， 这样的优势在于，可以通过 obj 的值进行分表操作
@@ -90,14 +90,14 @@ func (r *Repo[T]) ColsBy(chk func(map[string]int, *FieldInfo) bool, cols ...stri
 	}
 	if len(cols) == 0 || chk == nil {
 		rst := NewColumns(alias, r.Stm)
-		for _, val := range r.Stm.Index {
+		for _, val := range r.Stm.GetIndexName() {
 			rst.Append(Column{CName: val.Name, Field: val.GetFieldName()})
 		}
 		return rst
 	}
 	rst := NewColumns(alias, r.Stm)
 	emap := ExistMap(cols...)
-	for _, val := range r.Stm.Index {
+	for _, val := range r.Stm.GetIndexName() {
 		if chk(emap, val) {
 			rst.Append(Column{CName: val.Name, Field: val.GetFieldName()})
 		}

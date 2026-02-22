@@ -223,8 +223,11 @@ func (s *Columns) EachArgs(obj any, ign bool, fn func(Column, any)) {
 				// col 值优先使用
 				value = col.Value
 			} else {
-				field := s.Stm.Names[col.CName]
-				value = ref.FieldByIndex(field.Field.Index).Interface()
+				field, _ := s.Stm.Names[col.CName]
+				if field == nil {
+					continue
+				}
+				value = ref.FieldByIndex(field.Index).Interface()
 				if val, ok := value.(driver.Valuer); ok {
 					value, _ = val.Value()
 				}
@@ -238,7 +241,7 @@ func (s *Columns) EachArgs(obj any, ign bool, fn func(Column, any)) {
 
 }
 
-// 效率不高，不建议使用，但是推荐在 Create or Update 上使用, sep 默认为 " AND ", update 默认为 ","
+// 效率不高，sep 默认为 " AND ", update 默认为 ","
 func (s *Columns) NamedArgs(obj any, rst map[string]any, ign bool, sep string) (string, map[string]any) {
 	sbr := strings.Builder{}
 	if rst == nil {
@@ -259,6 +262,7 @@ func (s *Columns) NamedArgs(obj any, rst map[string]any, ign bool, sep string) (
 	// rst = ref.Convert(reflect.TypeOf(rst)).Interface().(map[string]any)
 }
 
+// 效率不高，sep 默认为 " AND ", update 默认为 ","
 func (s *Columns) ArrayArgs(obj any, ign bool, sep string) (string, []any) {
 	sbr := strings.Builder{}
 	rst := []any{}
