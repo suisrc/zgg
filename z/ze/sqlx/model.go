@@ -1,6 +1,7 @@
 package sqlx
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
@@ -10,9 +11,6 @@ import (
 
 	"github.com/suisrc/zgg/z"
 )
-
-// datasource connect
-type DSC Ext
 
 func WithTx(dsc *DB, fn func(tx *Tx) error) error {
 	tx, err := dsc.Beginx()
@@ -33,14 +31,61 @@ func WithTx(dsc *DB, fn func(tx *Tx) error) error {
 	return err
 }
 
+func WithTxCtx(dsc *DB, ctx context.Context, opt *sql.TxOptions, fn func(tx *Tx) error) error {
+	tx, err := dsc.BeginTxx(ctx, opt)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p) // 重新抛出 panic
+		} else if err != nil {
+			tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}()
+	err = fn(tx)
+	return err
+}
+
+// datasource connect
+
+type Dsx struct {
+	Ex interface {
+		Ext
+		ExtContext
+	}
+	Cx context.Context
+}
+
+func (r *Dsx) Ctx() context.Context {
+	return r.Cx
+}
+
+func (r *Dsx) Ext() Ext {
+	return r.Ex
+}
+
+func (r *Dsx) Exc() ExtContext {
+	return r.Ex
+}
+
+type Dsc interface {
+	Ext() Ext        // 默认上下文执行器
+	Exc() ExtContext // 指定上下文执行器
+	Ctx() context.Context
+}
+
 // repo 初始化方法
-type RepoInf interface {
+type RepoInit interface {
 	InitRepo()
 }
 
 func NewRepo[T any]() *T {
 	repo := new(T)
-	if ri, ok := any(repo).(RepoInf); ok {
+	if ri, ok := any(repo).(RepoInit); ok {
 		ri.InitRepo()
 	}
 	return repo
@@ -105,6 +150,10 @@ func (r *Repo[T]) ColsBy(chk func(map[string]int, *FieldInfo) bool, cols ...stri
 	return rst
 }
 
+func (r *Repo[T]) Cols() *Columns {
+	return r.ColsBy(nil)
+}
+
 func (r *Repo[T]) ColsByExc(cols ...string) *Columns {
 	return r.ColsBy(func(emap map[string]int, val *FieldInfo) bool {
 		_, ok := emap[val.Name]
@@ -136,7 +185,7 @@ func (r *Repo[T]) ColsByInf(flds ...string) *Columns {
 // =============================================================================
 // Select
 
-func (r *Repo[T]) Get(dsc DSC, data *T, id int64, flds ...string) (*T, error) {
+func (r *Repo[T]) Get(dsc Dsc, data *T, id int64, flds ...string) (*T, error) {
 	if data == nil {
 		data = new(T)
 	}
@@ -144,10 +193,13 @@ func (r *Repo[T]) Get(dsc DSC, data *T, id int64, flds ...string) (*T, error) {
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s", stmt)
 	}
-	return data, Get(dsc, data, stmt)
+	if ctx := dsc.Ctx(); ctx != nil {
+		return data, GetContext(ctx, dsc.Exc(), data, stmt)
+	}
+	return data, Get(dsc.Ext(), data, stmt)
 }
 
-func (r *Repo[T]) GetBy(dsc DSC, data *T, cond string, args ...any) (*T, error) {
+func (r *Repo[T]) GetBy(dsc Dsc, data *T, cond string, args ...any) (*T, error) {
 	if data == nil {
 		data = new(T)
 	}
@@ -155,10 +207,13 @@ func (r *Repo[T]) GetBy(dsc DSC, data *T, cond string, args ...any) (*T, error) 
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
-	return data, Get(dsc, data, stmt, args...)
+	if ctx := dsc.Ctx(); ctx != nil {
+		return data, GetContext(ctx, dsc.Exc(), data, stmt, args...)
+	}
+	return data, Get(dsc.Ext(), data, stmt, args...)
 }
 
-func (r *Repo[T]) SelectBy(dsc DSC, cols *Columns, cond string, args ...any) ([]T, error) {
+func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]T, error) {
 	stmt := SQL_SELECT + cols.Select() + SQL_FROM + r.TN(new(T))
 	if cols.As != "" {
 		// 别名
@@ -176,13 +231,25 @@ func (r *Repo[T]) SelectBy(dsc DSC, cols *Columns, cond string, args ...any) ([]
 	var rerr error
 	if len(args) == 0 {
 		// 无参数
-		rows, rerr = dsc.Queryx(stmt)
+		if ctx := dsc.Ctx(); ctx != nil {
+			rows, rerr = dsc.Exc().QueryxContext(ctx, stmt)
+		} else {
+			rows, rerr = dsc.Ext().Queryx(stmt)
+		}
 	} else if emap, ok := args[0].(map[string]any); ok {
 		// 命名参数
-		rows, rerr = NamedQuery(dsc, stmt, emap)
+		if ctx := dsc.Ctx(); ctx != nil {
+			rows, rerr = NamedQueryContext(ctx, dsc.Exc(), stmt, emap)
+		} else {
+			rows, rerr = NamedQuery(dsc.Ext(), stmt, emap)
+		}
 	} else {
 		// 数组参数， 暂时不支持 sql.Named 命名参数
-		rows, rerr = dsc.Queryx(stmt, args...)
+		if ctx := dsc.Ctx(); ctx != nil {
+			rows, rerr = dsc.Exc().QueryxContext(ctx, stmt, args...)
+		} else {
+			rows, rerr = dsc.Ext().Queryx(stmt, args...)
+		}
 	}
 	if rerr != nil {
 		return nil, rerr
@@ -195,34 +262,34 @@ func (r *Repo[T]) SelectBy(dsc DSC, cols *Columns, cond string, args ...any) ([]
 	return dest, nil
 }
 
-func (r *Repo[T]) SelectAll(dsc DSC) ([]T, error) {
-	return r.SelectBy(dsc, r.ColsBy(nil), "")
+func (r *Repo[T]) SelectAll(dsc Dsc) ([]T, error) {
+	return r.SelectBy(dsc, r.Cols(), "")
 }
 
-func (r *Repo[T]) Select(dsc DSC, cond string, args ...any) ([]T, error) {
-	return r.SelectBy(dsc, r.ColsBy(nil), cond, args...)
+func (r *Repo[T]) Select(dsc Dsc, cond string, args ...any) ([]T, error) {
+	return r.SelectBy(dsc, r.Cols(), cond, args...)
 }
 
-func (r *Repo[T]) SelectByExc(dsc DSC, cols []string, cond string, args ...any) ([]T, error) {
+func (r *Repo[T]) SelectByExc(dsc Dsc, cols []string, cond string, args ...any) ([]T, error) {
 	return r.SelectBy(dsc, r.ColsByExc(cols...), cond, args...)
 }
 
-func (r *Repo[T]) SelectByInc(dsc DSC, cols []string, cond string, args ...any) ([]T, error) {
+func (r *Repo[T]) SelectByInc(dsc Dsc, cols []string, cond string, args ...any) ([]T, error) {
 	return r.SelectBy(dsc, r.ColsByInc(cols...), cond, args...)
 }
 
-func (r *Repo[T]) SelectByExf(dsc DSC, flds []string, cond string, args ...any) ([]T, error) {
+func (r *Repo[T]) SelectByExf(dsc Dsc, flds []string, cond string, args ...any) ([]T, error) {
 	return r.SelectBy(dsc, r.ColsByExf(flds...), cond, args...)
 }
 
-func (r *Repo[T]) SelectByInf(dsc DSC, flds []string, cond string, args ...any) ([]T, error) {
+func (r *Repo[T]) SelectByInf(dsc Dsc, flds []string, cond string, args ...any) ([]T, error) {
 	return r.SelectBy(dsc, r.ColsByInf(flds...), cond, args...)
 }
 
 // =============================================================================
 // Insert
 
-func (r *Repo[T]) InsertBy(dsc DSC, data *T, setid func(int64)) error {
+func (r *Repo[T]) InsertBy(dsc Dsc, data *T, setid func(int64)) error {
 	if data == nil {
 		return errors.New("data is nil")
 	}
@@ -232,7 +299,13 @@ func (r *Repo[T]) InsertBy(dsc DSC, data *T, setid func(int64)) error {
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
-	rst, err := dsc.Exec(stmt, args...)
+	var rst sql.Result
+	var err error
+	if ctx := dsc.Ctx(); ctx != nil {
+		rst, err = dsc.Exc().ExecContext(ctx, stmt, args...)
+	} else {
+		rst, err = dsc.Ext().Exec(stmt, args...)
+	}
 	var iid int64
 	if err != nil {
 	} else if setid == nil {
@@ -243,7 +316,7 @@ func (r *Repo[T]) InsertBy(dsc DSC, data *T, setid func(int64)) error {
 	return err
 }
 
-func (r *Repo[T]) Insert(dsc DSC, data *T) error {
+func (r *Repo[T]) Insert(dsc Dsc, data *T) error {
 	fid, _ := r.Stm.Names["id"]
 	if fid == nil {
 		return r.InsertBy(dsc, data, nil)
@@ -257,7 +330,7 @@ func (r *Repo[T]) Insert(dsc DSC, data *T) error {
 // =============================================================================
 // Update
 
-func (r *Repo[T]) UpdateBy(dsc DSC, data *T, cols *Columns, cond string, args ...any) error {
+func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Columns, cond string, args ...any) error {
 	if data == nil {
 		return errors.New("data is nil")
 	}
@@ -275,38 +348,43 @@ func (r *Repo[T]) UpdateBy(dsc DSC, data *T, cols *Columns, cond string, args ..
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(argv))
 	}
-	_, err := dsc.Exec(stmt, argv...)
+	var err error
+	if ctx := dsc.Ctx(); ctx != nil {
+		_, err = dsc.Exc().ExecContext(ctx, stmt, argv...)
+	} else {
+		_, err = dsc.Ext().Exec(stmt, argv...)
+	}
 	return err
 }
 
-func (r *Repo[T]) Update(dsc DSC, data *T) error {
+func (r *Repo[T]) Update(dsc Dsc, data *T) error {
 	return r.UpdateBy(dsc, data, r.ColsByExc("id", "created", "creater"), "")
 }
 
-func (r *Repo[T]) UpdateByExc(dsc DSC, data *T, cols ...string) error {
+func (r *Repo[T]) UpdateByExc(dsc Dsc, data *T, cols ...string) error {
 	keys := cols[:]
 	keys = append(keys, "id", "created", "creater")
 	return r.UpdateBy(dsc, data, r.ColsByExc(keys...), "")
 }
 
-func (r *Repo[T]) UpdateByInc(dsc DSC, data *T, cols ...string) error {
+func (r *Repo[T]) UpdateByInc(dsc Dsc, data *T, cols ...string) error {
 	return r.UpdateBy(dsc, data, r.ColsByInc(cols...), "")
 }
 
-func (r *Repo[T]) UpdateByExf(dsc DSC, data *T, flds ...string) error {
+func (r *Repo[T]) UpdateByExf(dsc Dsc, data *T, flds ...string) error {
 	keys := flds[:]
 	keys = append(keys, "ID", "Created", "Creater")
 	return r.UpdateBy(dsc, data, r.ColsByExf(keys...), "")
 }
 
-func (r *Repo[T]) UpdateByInf(dsc DSC, data *T, flds ...string) error {
+func (r *Repo[T]) UpdateByInf(dsc Dsc, data *T, flds ...string) error {
 	return r.UpdateBy(dsc, data, r.ColsByInf(flds...), "")
 }
 
 // =============================================================================
 // Delete
 
-func (r *Repo[T]) Delete(dsc DSC, data *T) error {
+func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
 	if data == nil {
 		return errors.New("data is nil")
 	}
@@ -318,12 +396,17 @@ func (r *Repo[T]) Delete(dsc DSC, data *T) error {
 	return r.DeleteBy(dsc, fmt.Sprintf("id=%v", id))
 }
 
-func (r *Repo[T]) DeleteBy(dsc DSC, cond string, args ...any) error {
+func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
 	stmt := SQL_DELETE + SQL_FROM + r.TN(new(T)) + SQL_WHERE + cond
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
-	_, err := dsc.Exec(stmt, args...)
+	var err error
+	if ctx := dsc.Ctx(); ctx != nil {
+		_, err = dsc.Exc().ExecContext(ctx, stmt, args...)
+	} else {
+		_, err = dsc.Ext().Exec(stmt, args...)
+	}
 	return err
 }
 

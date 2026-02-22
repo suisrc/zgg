@@ -1,14 +1,15 @@
 package sqlx_test
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"strings"
 	"testing"
 
+	// _ "github.com/go-sql-driver/mysql"
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/sqlx"
-	// _ "github.com/go-sql-driver/mysql"
 )
 
 type BaseDO struct {
@@ -75,9 +76,9 @@ func genDB() *sqlx.DB {
 func TestSelectAll(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
-	z.Println(repo.ColsBy(nil).Select())
+	z.Println(repo.Cols().Select())
 
-	// dsc := genDB()
+	// dsc := &sqlx.Dsx{Ex: genDB()}
 	// datas, err := repo.SelectAll(dsc)
 	// if err != nil {
 	// 	z.Println(err.Error())
@@ -88,7 +89,7 @@ func TestSelectAll(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestSelectGet
 func TestSelectGet(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 
@@ -102,7 +103,7 @@ func TestSelectGet(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestSelectGet2
 func TestSelectGet2(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 
@@ -116,7 +117,7 @@ func TestSelectGet2(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestSelect
 func TestSelect(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 
@@ -130,7 +131,7 @@ func TestSelect(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestSelect1
 func TestSelect1(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 
@@ -144,7 +145,7 @@ func TestSelect1(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestInsert1
 func TestInsert1(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 	data := AuthzDO{
@@ -161,7 +162,7 @@ func TestInsert1(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestUpdate1
 func TestUpdate1(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 	data := AuthzDO{
@@ -179,7 +180,7 @@ func TestUpdate1(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestUpdate2
 func TestUpdate2(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 	data := AuthzDO{
@@ -200,7 +201,7 @@ func TestUpdate2(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestDelete1
 func TestDelete1(t *testing.T) {
-	dsc := genDB()
+	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 	data := AuthzDO{
@@ -218,7 +219,6 @@ func TestDelete1(t *testing.T) {
 
 // go test -v z/ze/sqlx/model_test.go -run TestTx1
 func TestTx1(t *testing.T) {
-	dsc := genDB()
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 	data := AuthzDO{
@@ -226,9 +226,10 @@ func TestTx1(t *testing.T) {
 		Name: sqlx.NewString("test123456"),
 	}
 	// data.Version = sqlx.NewInt64(3)
+	ds := genDB()
 
-	err := sqlx.WithTx(dsc, func(tx *sqlx.Tx) error {
-		err := repo.Update(tx, &data)
+	err := sqlx.WithTx(ds, func(tx *sqlx.Tx) error {
+		err := repo.Update(&sqlx.Dsx{Ex: tx}, &data)
 		return err
 	})
 	if err != nil {
@@ -236,6 +237,31 @@ func TestTx1(t *testing.T) {
 		return
 	}
 	data.Name.String = ""
-	repo.Get(dsc, &data, 13)
+	repo.Get(&sqlx.Dsx{Ex: ds}, &data, 13)
+	z.Println(z.ToStr2(data))
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestTx2
+func TestTx2(t *testing.T) {
+
+	repo := sqlx.NewRepo[AuthzRepo]()
+	data := AuthzDO{
+		ID:   13,
+		Name: sqlx.NewString("test123456"),
+	}
+	data.Version = sqlx.NewInt64(4)
+	ds := genDB()
+	cx := context.TODO()
+
+	err := sqlx.WithTxCtx(ds, cx, nil, func(tx *sqlx.Tx) error {
+		err := repo.Update(&sqlx.Dsx{Ex: tx, Cx: cx}, &data)
+		return err
+	})
+	if err != nil {
+		z.Println(err.Error())
+		return
+	}
+	data.Name.String = ""
+	repo.Get(&sqlx.Dsx{Ex: ds, Cx: cx}, &data, 13)
 	z.Println(z.ToStr2(data))
 }
