@@ -7,10 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/zc"
+)
+
+var (
+	reNamedStm = regexp.MustCompile(`:\w+`) // `[:@]\w+`
 )
 
 func WithTx(dsc *DB, fn func(tx *Tx) error) error {
@@ -278,28 +283,34 @@ func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]
 		stmt += SQL_WHERE + cond
 	}
 	stmt = dsc.Fix(stmt)
-	if C.Sqlx.ShowSQL {
-		// 显示SQL
-		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
-	}
 	var rows *Rows
 	var rerr error
-	if len(args) == 0 {
-		// 无参数
-		if ctx := dsc.Ctx(); ctx != nil {
-			rows, rerr = dsc.Exc().QueryxContext(ctx, stmt)
-		} else {
-			rows, rerr = dsc.Ext().Queryx(stmt)
+	if len(args) != 1 || !reNamedStm.MatchString(stmt) {
+		// ignore index parameters 忽略索引参数
+	} else if typ := Deref(reflect.TypeOf(args[0])); typ.Kind() == reflect.Struct || //
+		typ.Kind() == reflect.Map && typ.Key().Kind() == reflect.String {
+		// 命名参数, 处理逻辑本身来自 NamedQuery 函数
+		e := dsc.Ext() // Ext & Exc 来自同一个 DB | TX
+		stm, arg, err := bindNamedMapper(BindType(e.DriverName()), stmt, args[0], mapperFor(e))
+		if err != nil {
+			return nil, err
 		}
-	} else if emap, ok := args[0].(map[string]any); ok {
-		// 命名参数
-		if ctx := dsc.Ctx(); ctx != nil {
-			rows, rerr = NamedQueryContext(ctx, dsc.Exc(), stmt, emap)
-		} else {
-			rows, rerr = NamedQuery(dsc.Ext(), stmt, emap)
+		if C.Sqlx.ShowSQL {
+			z.Printf("[_showsql]: %s -------- %s | %s", stmt, stm, z.ToStr(arg))
 		}
-	} else {
-		// 数组参数， 暂时不支持 sql.Named 命名参数
+		if ctx := dsc.Ctx(); ctx != nil {
+			// rows, rerr = NamedQueryContext(ctx, dsc.Exc(), stmt, args[0])
+			rows, rerr = dsc.Exc().QueryxContext(ctx, stm, arg...)
+		} else {
+			// rows, rerr = NamedQuery(dsc.Ext(), stmt, args[0])
+			rows, rerr = dsc.Ext().Queryx(stm, arg...)
+		}
+	}
+	if rows == nil && rerr == nil {
+		// 未执行任何查询， 使用索引参数
+		if C.Sqlx.ShowSQL {
+			z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+		}
 		if ctx := dsc.Ctx(); ctx != nil {
 			rows, rerr = dsc.Exc().QueryxContext(ctx, stmt, args...)
 		} else {

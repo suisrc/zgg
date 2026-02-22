@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql"
+	// _ "github.com/go-sql-driver/mysql"
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/sqlx"
 )
@@ -274,6 +274,67 @@ func TestSelectAll2(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 	dsc.Page(2, 3)
 	datas, err := repo.SelectAll(dsc)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println(z.ToStr2(datas))
+	}
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect3
+func TestSelect3(t *testing.T) {
+
+	repo := sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(2, 3)
+
+	data := AuthzDO{
+		ID:   13,
+		Name: sqlx.NewString("test123456"),
+	}
+
+	datas, err := repo.Select(dsc, "id = :id", &data)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println(z.ToStr2(datas))
+	}
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect4
+func TestSelect4(t *testing.T) {
+
+	repo := sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(2, 3)
+
+	data := map[string]any{
+		"id": 13,
+	}
+
+	datas, err := repo.Select(dsc, "id = :id", data)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println(z.ToStr2(datas))
+	}
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect5
+func TestSelect5(t *testing.T) {
+
+	repo := sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(2, 3)
+
+	data := map[string]any{
+		"id": 13,
+	}
+
+	datas, err := repo.Select(dsc, "id = @id", data)
 	if err != nil {
 		z.Println(err.Error())
 	} else {

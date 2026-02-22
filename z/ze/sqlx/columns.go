@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var ( // separator
+const ( // separator
 	SQL_INSERT = "INSERT INTO "
 	SQL_UPDATE = "UPDATE "
 	SQL_DELETE = "DELETE "
