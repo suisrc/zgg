@@ -36,6 +36,8 @@ type Column struct {
 	Alias string // 对应结构体字段
 	Condi string // 条件condition
 	Value any    // 值
+
+	// Chind []Column // 针对 where 嵌套， 预留字段
 }
 
 func (c *Column) VName(alias string) string {

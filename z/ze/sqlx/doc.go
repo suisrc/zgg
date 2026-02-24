@@ -11,4 +11,7 @@
 
 // https://github.com/jmoiron/sqlx
 
+// columns, config, model, nulls is news
+// ksql is sql ext language, supports dynamic parameters
+
 package sqlx

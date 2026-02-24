@@ -33,6 +33,9 @@ func (aa *ENV) Load(val any) error {
 func (aa *ENV) Decode(val any, tag string) error {
 	tags := ToTagVal(val, tag)
 	for _, tag := range tags {
+		if vcache != nil {
+			vcache[strings.Join(tag.Keys, ".")] = tag.Value
+		}
 		// log.Println(tag.Keys)
 		vkey := strings.ToUpper(aa.Prefix + "_" + strings.Join(tag.Keys, "_"))
 		venv := os.Getenv(vkey)

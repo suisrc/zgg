@@ -5,16 +5,27 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
 	C = struct {
-		Sqlx Config
+		Sqlx Config `json:"sqlx"`
 	}{}
 )
 
+func init() {
+	zc.Register(&C)
+}
+
 type Config struct {
 	ShowSQL bool `json:"showsql"`
+	KsqlTbl bool `json:"ksqltbl"` // 默认 false， 是否支持 ksql 收集 table type 和 table name 的映射关系
+	TblName struct {
+		Prefix  string            `json:"prefix"`
+		Mapping map[string]string `json:"mapping"`
+	} `json:"namex"` // 表名映射，可以在 DO 的 TableName 方法中调用 GetTableByEnv("XxxDO", "xxxxx") 方法
 }
 
 type DatabaseConfig struct {
@@ -68,4 +79,12 @@ func ConnectDatabase(cfg *DatabaseConfig) (*DB, error) {
 		cds.SetConnMaxLifetime(time.Duration(cfg.MaxLifetime) * time.Second)
 	}
 	return cds, nil
+}
+
+func GetTableByEnv(typ, def string) string {
+	if C.Sqlx.TblName.Mapping == nil {
+	} else if tbl, ok := C.Sqlx.TblName.Mapping[typ]; ok {
+		return C.Sqlx.TblName.Prefix + tbl
+	}
+	return C.Sqlx.TblName.Prefix + def
 }

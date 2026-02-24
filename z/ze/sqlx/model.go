@@ -65,8 +65,8 @@ type Dsx struct {
 	}
 	Cx context.Context
 
-	First int
-	Limit int
+	First int64
+	Limit int64
 }
 
 func (r *Dsx) Ctx() context.Context {
@@ -82,7 +82,7 @@ func (r *Dsx) Exc() ExtContext {
 }
 
 // 小于 0 是禁用分页， 等于 0 是使用默认值
-func (r *Dsx) Page(page, size int) {
+func (r *Dsx) Page(page, size int64) {
 	if size < 0 || page < 0 {
 		// 禁用分页，需要查询全部
 		r.First = 0
@@ -100,7 +100,11 @@ func (r *Dsx) Page(page, size int) {
 	}
 }
 
-func (r *Dsx) Fix(stmt string) string {
+func (r *Dsx) Offset() int64 {
+	return r.First
+}
+
+func (r *Dsx) Prepro(stmt string) string {
 	if r.First <= 0 && r.Limit <= 0 || !zc.HasPrefixFold(stmt, SQL_SELECT) {
 		return stmt
 	}
@@ -132,7 +136,9 @@ type Dsc interface {
 	Ext() Ext        // 默认上下文执行器
 	Exc() ExtContext // 指定上下文执行器
 	Ctx() context.Context
-	Fix(string) string // 修复sql文，如增加增强内容或分页
+
+	Offset() int64        // 用于快速判断是否还需要继续查询
+	Prepro(string) string // 修复sql文，如增加增强内容或分页
 }
 
 // repo 初始化方法
@@ -170,16 +176,20 @@ type Repo[T any] struct {
 func (r *Repo[T]) InitRepo() {
 	r.Typ = reflect.TypeFor[T]()
 	r.Stm = mapper().TypeMap(r.Typ)
+	RegKsqlEnt(r.Typ.Name(), r.Table(new(T)))
 }
 
 // 获取 Table Name， 这样的优势在于，可以通过 obj 的值进行分表操作
-func (r *Repo[T]) TN(obj any) string {
+func (r *Repo[T]) Table(obj any) string {
 	if tabler, ok := obj.(Tabler); ok {
 		return tabler.TableName()
 	} else {
 		return strings.ToLower(r.Typ.Name())
 	}
 }
+
+// func (r *Repo[T]) Entity() *T { return new(T) }
+// func (r *Repo[T]) Arrays() []T { return []T{} }
 
 // =============================================================================
 
@@ -246,8 +256,8 @@ func (r *Repo[T]) Get(dsc Dsc, data *T, id int64, flds ...string) (*T, error) {
 	if data == nil {
 		data = new(T)
 	}
-	stmt := SQL_SELECT + r.ColsByInf(flds...).Select() + SQL_FROM + r.TN(data) + SQL_WHERE + fmt.Sprintf("id=%d", id)
-	stmt = dsc.Fix(stmt)
+	stmt := SQL_SELECT + r.ColsByInf(flds...).Select() + SQL_FROM + r.Table(data) + SQL_WHERE + fmt.Sprintf("id=%d", id)
+	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s", stmt)
 	}
@@ -261,8 +271,8 @@ func (r *Repo[T]) GetBy(dsc Dsc, data *T, cond string, args ...any) (*T, error) 
 	if data == nil {
 		data = new(T)
 	}
-	stmt := SQL_SELECT + r.ColsByExf().Select() + SQL_FROM + r.TN(data) + SQL_WHERE + cond
-	stmt = dsc.Fix(stmt)
+	stmt := SQL_SELECT + r.ColsByExf().Select() + SQL_FROM + r.Table(data) + SQL_WHERE + cond
+	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
@@ -273,7 +283,7 @@ func (r *Repo[T]) GetBy(dsc Dsc, data *T, cond string, args ...any) (*T, error) 
 }
 
 func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]T, error) {
-	stmt := SQL_SELECT + cols.Select() + SQL_FROM + r.TN(new(T))
+	stmt := SQL_SELECT + cols.Select() + SQL_FROM + r.Table(new(T))
 	if cols.As != "" {
 		// 别名
 		stmt += " " + cols.As
@@ -282,7 +292,7 @@ func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]
 		// 条件
 		stmt += SQL_WHERE + cond
 	}
-	stmt = dsc.Fix(stmt)
+	stmt = dsc.Prepro(stmt)
 	var rows *Rows
 	var rerr error
 	if len(args) != 1 || !reNamedStm.MatchString(stmt) {
@@ -361,8 +371,8 @@ func (r *Repo[T]) InsertBy(dsc Dsc, data *T, setid func(int64)) error {
 	}
 	cols := r.ColsByExc("id")
 	stmt, args := cols.InsertArgs(data, true)
-	stmt = SQL_INSERT + r.TN(data) + stmt
-	stmt = dsc.Fix(stmt)
+	stmt = SQL_INSERT + r.Table(data) + stmt
+	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}
@@ -410,9 +420,9 @@ func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Columns, cond string, args ..
 	}
 	// cols.DelByCName("id") // id 必须删除
 	stmt, argv := cols.UpdateArgs(data, true)
-	stmt = SQL_UPDATE + r.TN(data) + stmt + SQL_WHERE + cond
+	stmt = SQL_UPDATE + r.Table(data) + stmt + SQL_WHERE + cond
 	argv = append(argv, args...)
-	stmt = dsc.Fix(stmt)
+	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(argv))
 	}
@@ -465,8 +475,8 @@ func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
 }
 
 func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
-	stmt := SQL_DELETE + SQL_FROM + r.TN(new(T)) + SQL_WHERE + cond
-	stmt = dsc.Fix(stmt)
+	stmt := SQL_DELETE + SQL_FROM + r.Table(new(T)) + SQL_WHERE + cond
+	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 	}

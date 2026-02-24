@@ -28,20 +28,23 @@ var (
 	// cs 配置对象集合
 	CS = map[string]any{}    // 需要初始化配置
 	FS = map[string]func(){} // 配置初始化函数
+
 )
 
 // Config 配置参数
 type Config struct {
 	Debug  bool   `default:"false" json:"debug"`
-	Print  bool   `default:"false" json:"print"`
-	Syslog string `json:"syslog"`
-	LogTty bool   `json:"logtty"`
+	Print  bool   `json:"print"`  // 用于调试，打印所有的的参数
+	Cache  bool   `json:"cache"`  // 是否启用缓存, 如果启用，可以通过 GetByKey 获取已有的配置
+	Syslog string `json:"syslog"` // udp://klog.default.svc:514, syslog 输出地址
+	LogTty bool   `json:"logtty"` // 启用 syslog 同步打印日志到控制台
 }
 
 var (
 	CFG_TAG = "json" // 自定义标签配置名称
 	CFG_ENV = "zgg"  // 自定义环境变量前缀
 	load    sync.Once
+	vcache  = map[string]reflect.Value{} // 变了缓存
 )
 
 type ILoader interface {
@@ -135,5 +138,29 @@ func LoadConfig(cfs string) {
 		}
 		println("----------------------------------------------")
 	}
+	if !C.Cache {
+		vcache = nil // 禁用缓存， 缓存是在 Env 中完成初始化的
+	}
 	InitLoggerFn()
+}
+
+// 获取配置文件中指定的字段值， 可能存在 key 相同的覆盖情况， PS: 由于使用的是 reflect.Value，因此原始值改变时，缓存也会改变
+func GetByKey[T any](key string, def T) T {
+	if vcache == nil {
+	} else if vc, ok := vcache[key]; !ok {
+	} else if vv, ok := vc.Interface().(T); !ok {
+	} else {
+		return vv
+	}
+	return def // 缓存未命中， 返回默认值
+}
+
+func GetByPre(pre string) map[string]any {
+	rst := map[string]any{}
+	for k, v := range vcache {
+		if pre == "" || strings.HasPrefix(k, pre) {
+			rst[k] = v.Interface()
+		}
+	}
+	return rst
 }
