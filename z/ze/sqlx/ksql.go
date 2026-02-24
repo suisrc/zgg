@@ -31,12 +31,12 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
-// ExtByKsql KSQL 语句执行函数
+// KSQL 语句执行函数
 // argm = zc.ToMap(any, "db", false)， 可以将任何结构体转换为 map[string]any 形式
 // 待优化： 1. ksql 语句没好缓存器， 2. 不提供查询单个对象， 3. select 内容需要一对一指定
 // dsc: 数据库链接， ksql: 语句， argm: 参数, size: 是否统计所有行数（只有在 select 语句中有效）
 // 这是一个复杂的处理逻辑，简单的调用可以使用 sqlx.KsqlParserSimple 完成
-func ExtByKsql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int64, error) {
+func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int64, error) {
 	if argm == nil {
 		argm = make(map[string]any)
 	}

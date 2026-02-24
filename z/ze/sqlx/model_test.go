@@ -360,7 +360,7 @@ SELECT /*+ xxx */ * FROM {::entity.AuthzDO} WHERE 1=1
 		"id": 13,
 	}
 
-	dst, cnt, err := sqlx.ExtByKsql[AuthzDO](dsc, stmt, argv, true)
+	dst, cnt, err := sqlx.Ksql[AuthzDO](dsc, stmt, argv, true)
 	if err != nil {
 		z.Println(err.Error())
 	} else {
@@ -390,7 +390,7 @@ SELECT
 		"id": 13,
 	}
 
-	dst, cnt, err := sqlx.ExtByKsql[AuthzDO](dsc, stmt, argv, true)
+	dst, cnt, err := sqlx.Ksql[AuthzDO](dsc, stmt, argv, true)
 	if err != nil {
 		z.Println(err.Error())
 	} else {
@@ -420,7 +420,7 @@ ORDER BY id
 		// "id": 13,
 	}
 
-	dst, cnt, err := sqlx.ExtByKsql[int](dsc, stmt, argv, true)
+	dst, cnt, err := sqlx.Ksql[int](dsc, stmt, argv, true)
 	if err != nil {
 		z.Println(err.Error())
 	} else {
@@ -446,7 +446,7 @@ func TestSelect9(t *testing.T) {
 	z.Println("[__test__]:", z.ToStr(argv))
 
 	stmt := `update {::entity.AuthzDO} set name=:name {:string1 string1=:string1} where id=:id`
-	dst, cnt, err := sqlx.ExtByKsql[int](dsc, stmt, argv, true)
+	dst, cnt, err := sqlx.Ksql[int](dsc, stmt, argv, true)
 	if err != nil {
 		z.Println("[__test__]:", err.Error())
 	} else {
