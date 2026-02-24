@@ -341,3 +341,117 @@ func TestSelect5(t *testing.T) {
 		z.Println(z.ToStr2(datas))
 	}
 }
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect6
+func TestSelect6(t *testing.T) {
+	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
+	sqlx.C.Sqlx.KsqlTbl = true
+
+	_ = sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(1, 3)
+
+	stmt := `
+SELECT /*+ xxx */ * FROM {::entity.AuthzDO} WHERE 1=1
+{:id AND id=:id}
+`
+	argv := map[string]any{
+		"id": 13,
+	}
+
+	dst, cnt, err := sqlx.ExtByKsql[AuthzDO](dsc, stmt, argv, true)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println("count:", cnt, ", items:", z.ToStr2(dst))
+	}
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect7
+func TestSelect7(t *testing.T) {
+	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
+	sqlx.C.Sqlx.KsqlTbl = true
+
+	_ = sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(1, 3)
+
+	stmt := `
+SELECT 
+/** count(id) */
+/*+ INDEX(id) */
+* FROM {::entity.AuthzDO} WHERE 1=1
+{:id AND id=:id}
+{:xx AND xx=:xx}
+`
+	argv := map[string]any{
+		"id": 13,
+	}
+
+	dst, cnt, err := sqlx.ExtByKsql[AuthzDO](dsc, stmt, argv, true)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println("count:", cnt, ", items:", z.ToStr2(dst))
+	}
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect8
+func TestSelect8(t *testing.T) {
+	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
+	sqlx.C.Sqlx.KsqlTbl = true
+
+	_ = sqlx.NewRepo[AuthzRepo]()
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+	dsc.Page(2, 3)
+
+	stmt := `
+SELECT 
+/** count(id) */
+id FROM {::entity.AuthzDO} WHERE 1=1
+{:id AND id=:id}
+{:xx AND xx=:xx}
+ORDER BY id
+`
+	argv := map[string]any{
+		// "id": 13,
+	}
+
+	dst, cnt, err := sqlx.ExtByKsql[int](dsc, stmt, argv, true)
+	if err != nil {
+		z.Println(err.Error())
+	} else {
+		z.Println("count:", cnt, ", items:", z.ToStr2(dst))
+	}
+}
+
+// go test -v z/ze/sqlx/model_test.go -run TestSelect9
+func TestSelect9(t *testing.T) {
+	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
+	sqlx.C.Sqlx.KsqlTbl = true
+
+	dsc := &sqlx.Dsx{Ex: genDB()}
+
+	repo := sqlx.NewRepo[AuthzRepo]()
+	data, _ := repo.Get(dsc, nil, 13)
+	// z.Println("[__test__]:", z.ToStr(data))
+
+	data.Name = sqlx.NewString("demo123456")
+	// argv := zc.ToMap(data, "db", false)
+	argv := repo.ToMap(data)
+	// argv := sqlx.ToMapBy(nil, data, true, true)
+	z.Println("[__test__]:", z.ToStr(argv))
+
+	stmt := `update {::entity.AuthzDO} set name=:name {:string1 string1=:string1} where id=:id`
+	dst, cnt, err := sqlx.ExtByKsql[int](dsc, stmt, argv, true)
+	if err != nil {
+		z.Println("[__test__]:", err.Error())
+	} else {
+		z.Println("[__test__]:", "count:", cnt, ", items:", z.ToStr2(dst))
+	}
+	item, _ := repo.Get(dsc, nil, 13)
+	z.Println("[__test__]:", z.ToStr(item))
+}

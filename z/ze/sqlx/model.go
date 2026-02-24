@@ -56,7 +56,7 @@ func WithTxCtx(dsc *DB, ctx context.Context, opt *sql.TxOptions, fn func(tx *Tx)
 	return err
 }
 
-// datasource connect
+// =============================================================================
 
 type Dsx struct {
 	Ex interface {
@@ -132,6 +132,8 @@ func (r *Dsx) Prepro(stmt string) string {
 	return stmt
 }
 
+// =============================================================================
+
 type Dsc interface {
 	Ext() Ext        // 默认上下文执行器
 	Exc() ExtContext // 指定上下文执行器
@@ -154,7 +156,7 @@ func NewRepo[T any]() *T {
 	return repo
 }
 
-// =========================================================
+// =============================================================================
 
 type Tabler interface {
 	TableName() string
@@ -190,6 +192,10 @@ func (r *Repo[T]) Table(obj any) string {
 
 // func (r *Repo[T]) Entity() *T { return new(T) }
 // func (r *Repo[T]) Arrays() []T { return []T{} }
+
+func (r *Repo[T]) ToMap(obj *T) map[string]any {
+	return ToMapBy(r.Stm, obj, false, true)
+}
 
 // =============================================================================
 
@@ -306,7 +312,7 @@ func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]
 			return nil, err
 		}
 		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s -------- %s | %s", stmt, stm, z.ToStr(arg))
+			z.Printf("[_showsql]: %s --> %s | %s", stmt, stm, z.ToStr(arg))
 		}
 		if ctx := dsc.Ctx(); ctx != nil {
 			// rows, rerr = NamedQueryContext(ctx, dsc.Exc(), stmt, args[0])
@@ -490,6 +496,29 @@ func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
 }
 
 // =============================================================================
+
+// nv: true保留 nil 值, dv: true处理 driver.Valuer -> any
+func ToMapBy[T any](stm *StructMap, obj *T, nv bool, dv bool) map[string]any {
+	if stm == nil {
+		stm = mapper().TypeMap(reflect.TypeFor[T]())
+	}
+	rst := map[string]any{}
+	if obj != nil {
+		val := reflect.ValueOf(obj).Elem()
+		for _, fi := range stm.GetIndexName() {
+			vv := val.FieldByIndex(fi.Index).Interface()
+			if dv {
+				if v2, ok := vv.(driver.Valuer); ok {
+					vv, _ = v2.Value()
+				}
+			}
+			if nv || vv != nil {
+				rst[fi.Name] = vv
+			}
+		}
+	}
+	return rst
+}
 
 // IsNotFound of sqlx
 func IsNotFound(err error) bool {

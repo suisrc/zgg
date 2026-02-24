@@ -17,6 +17,7 @@
 package sqlx
 
 import (
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"maps"
@@ -46,37 +47,34 @@ func ExtByKsql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T
 	if err := blk.Build(ksql, argm); err != nil {
 		return nil, 0, err
 	}
-	stm, err := blk.Handle(argm, argv, nil, KSQL_NFN_ERROR)
+	kstm, err := blk.Handle(argm, argv, nil, KSQL_NFN_ERROR)
 	// --------------------------------------------------------------------------
 	if err != nil {
 		return nil, 0, err
 	}
 	// e := dsc.Ext() // Ext & Exc 来自同一个 DB | TX
-	stm, arg, err := bindMap(BindType(dsc.Ext().DriverName()), stm, argv)
+	stmt, args, err := bindMap(BindType(dsc.Ext().DriverName()), kstm, argv)
 	if err != nil {
 		return nil, 0, err
 	}
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s -------- %s | %s", stm, stm, z.ToStr(arg))
-	}
-	if zc.HasPrefixFold(stm, SQL_SELECT) || zc.HasPrefixFold(ksql, "-- query") {
+	if zc.HasPrefixFold(stmt, SQL_SELECT) || zc.HasPrefixFold(ksql, "-- query") {
 		// select statement ------------------------------------------------
 		// 如果使用了 hint 标记， 因为不是 SELECT 开头，所以需要标记 -- query 开头
 		var cunt int64 = -1
 		if size {
 			// 优先统计行数，该语句没有预处理功能，如果需要预处理，可以单独执行
-			stc, err := blk.Count_(stm)
+			stmc, err := blk.Count_(stmt)
 			if C.Sqlx.ShowSQL {
-				z.Printf("[_showsql]: %s | %s", stc, z.ToStr(arg))
+				z.Printf("[_showsql]: %s | %s", stmc, z.ToStr(args))
 			}
 			if err != nil {
 				return nil, 0, err
 			}
 			var row *Row
 			if ctx := dsc.Ctx(); ctx != nil {
-				row = dsc.Exc().QueryRowxContext(ctx, stc, arg...)
+				row = dsc.Exc().QueryRowxContext(ctx, stmc, args...)
 			} else {
-				row = dsc.Ext().QueryRowx(stc, arg...)
+				row = dsc.Ext().QueryRowx(stmc, args...)
 			}
 			if err := row.scanAny(&cunt, false); err != nil {
 				return nil, 0, err
@@ -85,13 +83,16 @@ func ExtByKsql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T
 				return []T{}, cunt, nil // 没有数据，直接快速返回即可
 			}
 		}
-		stm = dsc.Prepro(stm) // 预处理
+		stmt = dsc.Prepro(stmt) // 预处理
+		if C.Sqlx.ShowSQL {
+			z.Printf("[_showsql]: %s --> %s | %s", kstm, stmt, z.ToStr(args))
+		}
 		var rows *Rows
 		var rerr error
 		if ctx := dsc.Ctx(); ctx != nil {
-			rows, rerr = dsc.Exc().QueryxContext(ctx, stm, arg...)
+			rows, rerr = dsc.Exc().QueryxContext(ctx, stmt, args...)
 		} else {
-			rows, rerr = dsc.Ext().Queryx(stm, arg...)
+			rows, rerr = dsc.Ext().Queryx(stmt, args...)
 		}
 		if rerr != nil {
 			return nil, 0, rerr
@@ -105,18 +106,21 @@ func ExtByKsql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T
 			cunt = int64(len(dest))
 		}
 		return dest, cunt, nil
-	} else if zc.HasPrefixFold(stm, SQL_INSERT) {
+	} else if zc.HasPrefixFold(stmt, SQL_INSERT) {
 		// insert statement ------------------------------------------------
-		stm = dsc.Prepro(stm)
+		stmt = dsc.Prepro(stmt)
+		if C.Sqlx.ShowSQL {
+			z.Printf("[_showsql]: %s --> %s | %s", kstm, stmt, z.ToStr(args))
+		}
 		var rowi int64
 		var rerr error
 		if ctx := dsc.Ctx(); ctx != nil {
-			res, rerr := dsc.Exc().ExecContext(ctx, stm, arg...)
+			res, rerr := dsc.Exc().ExecContext(ctx, stmt, args...)
 			if rerr == nil {
 				rowi, rerr = res.LastInsertId()
 			}
 		} else {
-			res, rerr := dsc.Ext().Exec(stm, arg...)
+			res, rerr := dsc.Ext().Exec(stmt, args...)
 			if rerr == nil {
 				rowi, rerr = res.LastInsertId()
 			}
@@ -125,16 +129,19 @@ func ExtByKsql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T
 	} else {
 		// update / delete / unknow statement -----------------------------
 		// 如果遇到特殊语句，只是用来查询， 可以在语句开头标记 "-- query" 来规避
-		stm = dsc.Prepro(stm)
+		stmt = dsc.Prepro(stmt)
+		if C.Sqlx.ShowSQL {
+			z.Printf("[_showsql]: %s --> %s | %s", kstm, stmt, z.ToStr(args))
+		}
 		var rows int64
 		var rerr error
 		if ctx := dsc.Ctx(); ctx != nil {
-			res, rerr := dsc.Exc().ExecContext(ctx, stm, arg...)
+			res, rerr := dsc.Exc().ExecContext(ctx, stmt, args...)
 			if rerr == nil {
 				rows, rerr = res.RowsAffected()
 			}
 		} else {
-			res, rerr := dsc.Ext().Exec(stm, arg...)
+			res, rerr := dsc.Ext().Exec(stmt, args...)
 			if rerr == nil {
 				rows, rerr = res.RowsAffected()
 			}
@@ -257,7 +264,7 @@ func RegKsqlFilter(name string, filter KsqlFilter) {
 
 // GetKsqlValue retrieves a value from the cache or the input map
 func GetKsqlEvalue(key string, inc map[string]any) any {
-	z.Println("[__debug_]: GetKsqlEvalue, ", key)
+	// z.Println("[__debug_]: GetKsqlEvalue, ", key)
 	var rst string
 	if idx := strings.LastIndex(key, "?:"); idx > 0 {
 		rst = key[idx+1:]
@@ -280,6 +287,11 @@ func GetKsqlEvalue(key string, inc map[string]any) any {
 					val = hdl(key[idx+1:], inc)
 				}
 			}
+		}
+	}
+	if val != nil {
+		if vv, ok := val.(driver.Valuer); ok {
+			val, _ = vv.Value()
 		}
 	}
 	if rst == "" {
@@ -402,7 +414,7 @@ func (blk *SelectBulk) Build(osql string, inc map[string]any) error {
 	nsql := reComment.ReplaceAllString(osql, " \n")
 	// 处理 countstr 部分内容 /** count(...) */
 	if m := reCountParam.FindStringIndex(osql); m != nil {
-		blk.countstm = strings.TrimSpace(nsql[m[0]+3 : m[1]-1])
+		blk.countstm = strings.TrimSpace(nsql[m[0]+3 : m[1]-2])
 		nsql = nsql[:m[0]] + nsql[m[1]:]
 	}
 	// Process {#xxxxx} patterns, 删除该格式
@@ -487,10 +499,7 @@ func (blk *SelectBulk) Count_(nsql string) (string, error) {
 			hint.WriteString(nsql[m[0]:m[1]] + " ")
 		}
 	}
-	if hint.Len() == 0 {
-		return SQL_SELECT + cstm + " " + nsql[fidx:], nil
-	}
-	return SQL_SELECT + hint.String() + cstm + " " + nsql[fidx:], nil
+	return SQL_SELECT + hint.String() + cstm + nsql[fidx:], nil
 }
 
 // 预处理模块
@@ -534,15 +543,18 @@ func (blk *StringBulk) Handle(inc, out map[string]any, ext KsqlExt, nfn KsqlNfn)
 		name := blk.statement[m[0]+1 : m[1]]
 		if _, exists := out[name]; !exists {
 			if val, ok := inc[name]; ok {
-				var obj1 any = val
-				if su, ok := val.(KsqlSupply); ok {
-					obj1 = su(name, inc)
+				if fsu, ok := val.(KsqlSupply); ok {
+					val = fsu(name, inc)
 				}
-				var obj2 any = obj1
 				if ext != nil {
-					obj2 = ext(name, obj1)
+					val = ext(name, val)
 				}
-				out[name] = obj2
+				if vv, ok := val.(driver.Valuer); ok {
+					val, _ = vv.Value()
+				}
+				out[name] = val
+				// if val != nil { out[name] = val } else if nfn != nil {
+				// if err := nfn(name); err != nil { return "", err } }
 			} else if nfn != nil {
 				if err := nfn(name); err != nil {
 					return "", err
