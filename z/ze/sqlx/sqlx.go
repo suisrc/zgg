@@ -1,5 +1,3 @@
-// https://github.com/jmoiron/sqlx/blob/master/sqlx.go
-
 package sqlx
 
 import (
@@ -870,7 +868,7 @@ type rowsi interface {
 // struct is expected but something else is given
 func structOnlyError(t reflect.Type) error {
 	isStruct := t.Kind() == reflect.Struct
-	isScanner := reflect.PtrTo(t).Implements(_scannerInterface)
+	isScanner := reflect.PointerTo(t).Implements(_scannerInterface)
 	if !isStruct {
 		return fmt.Errorf("expected %s but got %s", reflect.Struct, t.Kind())
 	}
