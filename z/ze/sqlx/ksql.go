@@ -31,6 +31,29 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
+/*
+Example:
+// ===================================================================================
+//go:embed ksql/*
+var ksql embed.FS
+// ksql cache map
+var kmap = map[string]string{}
+// ksql function
+func Ksql[T any](name string, argm map[string]any, size bool) ([]T, int64, error) {
+	str, ok := kmap[name]
+	if !ok {
+		if bts, err := ksql.ReadFile("ksql/" + name); err != nil {
+			return nil, 0, err
+		} else {
+			str = string(bts)
+			kmap[name] = str
+		}
+	}
+	return sqlx.Ksql[T](NewDsc(), str, argm, size)
+}
+// ===================================================================================
+*/
+
 // KSQL 语句执行函数
 // argm = zc.ToMap(any, "db", false)， 可以将任何结构体转换为 map[string]any 形式
 // 待优化： 1. ksql 语句没好缓存器， 2. 不提供查询单个对象， 3. select 内容需要一对一指定

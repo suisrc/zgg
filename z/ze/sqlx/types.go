@@ -1,5 +1,3 @@
-// https://github.com/jmoiron/sqlx/blob/master/types/types.go
-
 package sqlx
 
 import (
