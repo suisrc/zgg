@@ -12,39 +12,39 @@ import (
 )
 
 // 鉴权器, 一个简单的例子， 需要扩展后才可使用
-func NewAuthorize2(sites []string, client AuthClient) *Authorize2 {
-	return &Authorize2{
-		Authorize0: gtw.NewAuthorize0(sites),
+func NewAuthzCokie(sites []string, client AuthzClient) gtw.Authorizer {
+	return &AuthzCokie{
+		AuthRecord: gtw.NewAuthRecord(sites),
 		client:     client,
 		CookieKey:  "kat",
 	}
 }
 
-var _ gtw.Authorizer = (*Authorize2)(nil)
+// var _ gtw.Authorizer = (*AuthzCookie)(nil)
 
-// 通过接口验证权限
-type Authorize2 struct {
-	gtw.Authorize0
-	CookieKey string     // cookie key
-	client    AuthClient // 请求客户端
+type AuthzCokie struct {
+	gtw.AuthRecord
+	client    AuthzClient // 请求客户端
+	CookieKey string      // cookie key
 }
 
 // *redis.Client = redis.NewClient(*redis.Options)
 // *redis.ClusterClient = redis.NewClusterClient(*redis.ClusterOptions)
 
-func (aa *Authorize2) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
-	aa.Authorize0.Authz(gw, rw, rr, rt)
+func (aa *AuthzCokie) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
+	aa.AuthRecord.Authz(gw, rw, rr, rt)
+	// 处理 cookie 内容
 	cid, err := rr.Cookie(aa.CookieKey)
 	if err != nil {
 		// 没有登录信息，直接返回 401 错误
 		rw.WriteHeader(http.StatusUnauthorized)
 		return false
 	}
-	auth, err := aa.client.Do(rw, rr, cid.Value)
+	rst, err := aa.client.Do(rw, rr, aa.CookieKey, cid.Value)
 	if err != nil {
 		if err != gtw.ErrNil {
 			// gw.GetErrorHandler()(rw, rr, err) // StatusBadGateway = 502
-			msg := "error in authorize2, get userinfo, " + err.Error()
+			msg := "error in authzcokie, get userinfo, " + err.Error()
 			gw.Logf(msg + "\n")
 			rw.WriteHeader(http.StatusInternalServerError)
 			if rt != nil {
@@ -53,7 +53,6 @@ func (aa *Authorize2) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		}
 		return false
 	}
-	// 添加请求头
-	rr.Header.Set("X-Request-Sky-Authorize", auth)
-	return true
+	// rr.Header.Set("X-Request-Sky-Authorize", auth)
+	return rst
 }

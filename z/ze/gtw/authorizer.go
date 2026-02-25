@@ -20,25 +20,25 @@ type Authorizer interface {
 
 // -------------------------------------------------------------------------------------
 
-var _ Authorizer = (*Authorize0)(nil)
-
-// 全通关，不验证
-type Authorize0 struct {
-	ClientKey string   // Client ID key
-	SiteHosts []string // 站点域名
-	ClientAge int
-}
+// var _ Authorizer = (*Authorize0)(nil)
 
 // 基础例子， 提供 tarce-id 和 cookie__xc 增加功能
-func NewAuthorize0(sites []string) Authorize0 {
-	return Authorize0{
+func NewAuthRecord(sites []string) AuthRecord {
+	return AuthRecord{
 		ClientKey: "_xc",
 		SiteHosts: sites,
 		ClientAge: 2 * 365 * 24 * 3600, // 默认2年
 	}
 }
 
-func (aa *Authorize0) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt_ IRecord) bool {
+// 不验证，只用于记录日志
+type AuthRecord struct {
+	ClientKey string   // Client ID key
+	SiteHosts []string // 站点域名
+	ClientAge int
+}
+
+func (aa *AuthRecord) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Request, rt_ IRecord) bool {
 	rt, _ := rt_.(*Record0) // 转换
 	if rr.Header == nil {
 		rr.Header = make(http.Header)
@@ -120,6 +120,5 @@ func (aa *Authorize0) Authz(gw IGateway, rw http.ResponseWriter, rr *http.Reques
 			rt.Cookie[aa.ClientKey] = cookie
 		}
 	}
-
 	return true
 }

@@ -19,6 +19,7 @@ var (
 	}{}
 
 	RecordFunc = gte.ToRecord0
+	AuthzcFunc = gte.NewAuthzF1kin
 )
 
 type Config struct {
@@ -67,6 +68,7 @@ func Init3(ifn InitializFunc) {
 
 		// ...
 		switch C.Kwdog2.Record {
+		// case 0: RecordFunc = gte.ToRecord0
 		case 1:
 			RecordFunc = gte.ToRecord1
 		}
@@ -95,7 +97,7 @@ func Init3(ifn InitializFunc) {
 		}
 		api.GtwDefault.ProxyName = "kwdog2-gateway"
 		api.GtwDefault.RecordPool = api.RecordPool
-		api.GtwDefault.Authorizer = gte.NewAuthorize1(
+		api.GtwDefault.Authorizer = AuthzcFunc(
 			api.Config.Sites,
 			api.Config.AuthAddr,
 			api.Config.AuthSkip,

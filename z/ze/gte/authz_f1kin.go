@@ -19,9 +19,9 @@ import (
 // 鉴权器， 为 f1kin 系统定制的验证器
 // authz 鉴权服务器，authz = "" 时，只记录日志，不进行鉴权
 // askip 请求中存在 X-Request-Sky-Authorize，可以忽略鉴权
-func NewAuthorize1(sites []string, authz string, askip bool) *Authorize1 {
-	return &Authorize1{
-		Authorize0: gtw.NewAuthorize0(sites),
+func NewAuthzF1kin(sites []string, authz string, askip bool) gtw.Authorizer {
+	return &AuthzF1kin{
+		AuthRecord: gtw.NewAuthRecord(sites),
 		AuthzServe: authz,
 		AllowSkipz: askip,
 		client: &http.Client{
@@ -31,18 +31,17 @@ func NewAuthorize1(sites []string, authz string, askip bool) *Authorize1 {
 	}
 }
 
-var _ gtw.Authorizer = (*Authorize1)(nil)
-
 // 通过接口验证权限
-type Authorize1 struct {
-	gtw.Authorize0
+type AuthzF1kin struct {
+	gtw.AuthRecord
 	AuthzServe string       // 验证服务器
 	AllowSkipz bool         // 允许跳过验证
 	client     *http.Client // 请求客户端
 }
 
-func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
-	aa.Authorize0.Authz(gw, rw, rr, rt)
+func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
+	aa.AuthRecord.Authz(gw, rw, rr, rt)
+	// 通过验证服务器进行验证， 适配 FMES(f1kin) 平台
 	if rt != nil {
 		rt.SetSrvAuthz(aa.AuthzServe)
 	}
@@ -58,19 +57,19 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 	// }
 	ctx, cancel := context.WithTimeout(rr.Context(), 3*time.Second)
 	defer cancel() // 验证需要在 3s 完成，以防止后面业务阻塞
-	// 处理 url
-	uri := aa.AuthzServe
+	// -------- 处理验证地址 --------
+	authz := aa.AuthzServe
 	if rr.URL.RawQuery != "" {
 		// 增加查询参数
-		if idx := strings.IndexRune(uri, '?'); idx > 0 {
-			uri += "&"
+		if idx := strings.IndexRune(authz, '?'); idx > 0 {
+			authz += "&"
 		} else {
-			uri += "?"
+			authz += "?"
 		}
-		uri += rr.URL.RawQuery
+		authz += rr.URL.RawQuery
 	}
-	if _, err := url.Parse(uri); err != nil {
-		msg := "error in authorize1, parse zuthz addr, " + err.Error()
+	if _, err := url.Parse(authz); err != nil {
+		msg := "error in authzf1kin, parse zuthz addr, " + err.Error()
 		gw.Logf(msg + "\n")
 		rw.WriteHeader(http.StatusInternalServerError)
 		if rt != nil {
@@ -78,9 +77,10 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		}
 		return false
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, aa.AuthzServe, nil)
+	// -------- 处理远程验证 --------
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authz, nil)
 	if err != nil {
-		msg := "error in authorize1, new request context, " + err.Error()
+		msg := "error in authzf1kin, new request context, " + err.Error()
 		gw.Logf(msg + "\n")
 		rw.WriteHeader(http.StatusInternalServerError)
 		if rt != nil {
@@ -112,7 +112,7 @@ func (aa *Authorize1) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 			rr.Header[kk] = vv
 		}
 	}
-	// 处理结果
+	// -------- 处理验证结果 --------
 	if resp.StatusCode >= 300 || resp.Header.Get("X-Request-Sky-Authorize") == "" {
 		// 验证失败，返回结果
 		body, _ := io.ReadAll(resp.Body)
