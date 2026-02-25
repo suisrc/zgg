@@ -20,13 +20,7 @@ func init() {
 	z.Engines["rdx"] = NewRdxRouter
 }
 
-var _ z.Engine = (*RdxRouter)(nil)
-
-type RdxRouter struct {
-	name   string
-	svckit z.SvcKit
-	Router *Router
-}
+// var _ z.Engine = (*RdxRouter)(nil)
 
 func NewRdxRouter(svckit z.SvcKit) z.Engine {
 	return &RdxRouter{
@@ -34,6 +28,12 @@ func NewRdxRouter(svckit z.SvcKit) z.Engine {
 		svckit: svckit,
 		Router: New(),
 	}
+}
+
+type RdxRouter struct {
+	name   string
+	svckit z.SvcKit
+	Router *Router
 }
 
 func (aa *RdxRouter) Name() string {

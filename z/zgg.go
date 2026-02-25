@@ -481,7 +481,15 @@ func (aa *Tvc) Preload(dir string) error {
 // engine: 引擎管理工具
 
 // 基于 map 路由，为更高的性能，单接口而生，是默认的路由
-var _ Engine = (*MapRouter)(nil)
+// var _ Engine = (*MapRouter)(nil)
+
+func NewMapRouter(svckit SvcKit) Engine {
+	return &MapRouter{
+		name:    "zgg-map",
+		svckit:  svckit,
+		Handles: make(map[string]HandleFunc),
+	}
+}
 
 type MapRouter struct {
 	name    string
@@ -492,14 +500,6 @@ type MapRouter struct {
 	// https://github.com/puzpuzpuz/xsync
 	// 初始化后，map 就不会变更了，可以使用 xsync.Map 获取更高的性能
 	// handles *xsync.Map[string, HandleFunc]
-}
-
-func NewMapRouter(svckit SvcKit) Engine {
-	return &MapRouter{
-		name:    "zgg-map",
-		svckit:  svckit,
-		Handles: make(map[string]HandleFunc),
-	}
 }
 
 func (aa *MapRouter) Name() string {
@@ -549,13 +549,7 @@ func (aa *MapRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 // -----------------------------------------------------------------------------------
 
 // 基于 http.ServeMux 的路由
-var _ Engine = (*MuxRouter)(nil)
-
-type MuxRouter struct {
-	name   string
-	svckit SvcKit
-	Router *http.ServeMux
-}
+// var _ Engine = (*MuxRouter)(nil)
 
 func NewMuxRouter(svckit SvcKit) Engine {
 	return &MuxRouter{
@@ -563,6 +557,12 @@ func NewMuxRouter(svckit SvcKit) Engine {
 		svckit: svckit,
 		Router: http.NewServeMux(),
 	}
+}
+
+type MuxRouter struct {
+	name   string
+	svckit SvcKit
+	Router *http.ServeMux
 }
 
 func (aa *MuxRouter) Name() string {

@@ -15,11 +15,11 @@ import (
 )
 
 func init() {
-	z.CMD["cert"] = Cert        // 创建一个证书
-	z.CMD["certca"] = CertCA    // 创建一个根证书
-	z.CMD["certsa"] = CertSA    // 创建一个中间证书
-	z.CMD["certce"] = CertCE    // 通过中间证书创建一个证书
-	z.CMD["cert-exp"] = CertEXP // 验证生疏的过期时间
+	z.CMD["cert"] = Cert     // 创建一个证书
+	z.CMD["certca"] = CertCA // 创建一个根证书
+	z.CMD["certsa"] = CertSA // 创建一个中间证书
+	z.CMD["certce"] = CertCE // 通过中间证书创建一个证书
+	z.CMD["certex"] = CertEX // 验证生疏的过期时间
 }
 
 // -------------------------------------------------------------------
@@ -219,7 +219,7 @@ func CertCE() {
 // -------------------------------------------------------------------
 // -------------------------------------------------------------------
 
-func CertEXP() {
+func CertEX() {
 	// /etc/kubernetes/pki
 	// /var/lib/rancher/k3s/server/tls
 	var (
