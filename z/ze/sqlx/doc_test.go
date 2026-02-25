@@ -15,6 +15,7 @@ func TestSyncSqlx(t *testing.T) {
 	base_url := "https://raw.githubusercontent.com/jmoiron/sqlx/refs/heads/master/"
 	sync_map := map[string]string{
 		"types.go":     "types/types.go",
+		"reflect.go":   "reflectx/reflect.go",
 		"sqlx_bind.go": "bind.go",
 	}
 
