@@ -67,12 +67,19 @@ func (r *Repo[T]) ColsByInf(flds ...string) *Cols {
 // =============================================================================
 // Select
 
+func (r *Repo[T]) GetBy(dsc Dsc, cols *Cols, data *T, cond string, args ...any) (*T, error) {
+	return GetBy(dsc, cols, data, cond, args...)
+}
 func (r *Repo[T]) Get(dsc Dsc, id int64, flds ...string) (*T, error) {
 	return GetBy(dsc, r.ColsByInf(flds...), (*T)(nil), fmt.Sprintf("id=%d", id))
 }
 
 func (r *Repo[T]) Getx(dsc Dsc, id int64, data *T, flds ...string) (*T, error) {
 	return GetBy(dsc, r.ColsByInf(flds...), data, fmt.Sprintf("id=%d", id))
+}
+
+func (r *Repo[T]) SelectBy(dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error) {
+	return SelectBy[T](dsc, cols, cond, args...)
 }
 
 func (r *Repo[T]) SelectAll(dsc Dsc) ([]T, error) {
@@ -102,6 +109,10 @@ func (r *Repo[T]) SelectByInf(dsc Dsc, flds []string, cond string, args ...any) 
 // =============================================================================
 // Insert
 
+func (r *Repo[T]) InsertBy(dsc Dsc, cols *Cols, data *T, fnid func(int64)) error {
+	return r.InsertBy(dsc, cols, data, fnid)
+}
+
 func (r *Repo[T]) Insert(dsc Dsc, data *T) error {
 	fid, _ := r.Stm.Names["id"]
 	if fid == nil {
@@ -115,6 +126,10 @@ func (r *Repo[T]) Insert(dsc Dsc, data *T) error {
 
 // =============================================================================
 // Update
+
+func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Cols, cond string, args ...any) error {
+	return UpdateBy(dsc, data, cols, cond, args...)
+}
 
 func (r *Repo[T]) Update(dsc Dsc, data *T) error {
 	return UpdateBy(dsc, data, r.ColsByExc("id", "created", "creater"), "")
@@ -142,6 +157,10 @@ func (r *Repo[T]) UpdateByInf(dsc Dsc, data *T, flds ...string) error {
 
 // =============================================================================
 // Delete
+
+func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
+	return DeleteBy[T](dsc, cond, args...)
+}
 
 func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
 	if data == nil {
