@@ -27,6 +27,9 @@ func NewAuthzF1kin(sites []string, authz string, askip bool) gtw.Authorizer {
 		client: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: gtw.TransportGtw0,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse // 禁止重定向，返回原始响应
+			},
 		},
 	}
 }
@@ -55,20 +58,20 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 	ctx, cancel := context.WithTimeout(rr.Context(), 3*time.Second)
 	defer cancel() // 验证需要在 3s 完成，以防止后面业务阻塞
 	// -------- 处理验证地址 --------
-	authz := aa.AuthzServe
+	auz := aa.AuthzServe
 	if rr.URL.RawQuery != "" {
 		// 增加查询参数
-		if idx := strings.IndexRune(authz, '?'); idx > 0 {
-			authz += "&"
+		if idx := strings.IndexRune(auz, '?'); idx > 0 {
+			auz += "&"
 		} else {
-			authz += "?"
+			auz += "?"
 		}
-		authz += rr.URL.RawQuery
+		auz += rr.URL.RawQuery
 	}
 	if rt != nil {
-		rt.SetSrvAuthz(authz)
+		rt.SetSrvAuthz(auz)
 	}
-	if _, err := url.Parse(authz); err != nil {
+	if _, err := url.Parse(auz); err != nil {
 		msg := "error in authzf1kin, parse authz addr, " + err.Error()
 		gw.Logf(msg + "\n")
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -78,7 +81,7 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		return false
 	}
 	// -------- 处理远程验证 --------
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authz, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, auz, nil)
 	if err != nil {
 		msg := "error in authzf1kin, new request context, " + err.Error()
 		gw.Logf(msg + "\n")
@@ -91,7 +94,7 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 	// 处理 header
 	gtw.CopyHeader(req.Header, rr.Header)
 	req.Header.Set("X-Request-Origin-Host", rr.Host)
-	req.Header.Set("X-Request-Origin-Path", rr.URL.Path)
+	req.Header.Set("X-Request-Origin-Path", rr.URL.RequestURI())
 	req.Header.Set("X-Request-Origin-Method", rr.Method)
 	req.Header.Set("X-Request-Origin-Action", gtw.GetAction(rr.URL))
 	// 强制要求返回用户信息，所以在拷贝 header 时候，需要过滤 "X-Request-Sky-Authorize"
@@ -106,29 +109,22 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		return false
 	}
 	defer resp.Body.Close()
-	// X- 开头的 header 传递给 rr
-	for kk, vv := range resp.Header {
-		if gtw.HasPrefixFold(kk, "X-") {
-			rr.Header[kk] = vv
-		}
-	}
 	// -------- 处理验证结果 --------
 	if resp.StatusCode >= 300 || resp.Header.Get("X-Request-Sky-Authorize") == "" {
 		// 验证失败，返回结果
 		body, _ := io.ReadAll(resp.Body)
 		// 记录返回日志
 		if rt != nil {
-			rt.LogOutRequest(rr) // 带有的请求信息，用于记录
-			rt.LogResponse(resp) // 带有的响应信息，用于记录
+			rt.LogOutRequest(req) // 带有的请求信息，用于记录
+			rt.LogResponse(resp)  // 带有的响应信息，用于记录
 			rt.LogRespBody(int64(len(body)), nil, body)
 		}
 		// 认证结果返回
 		dst := rw.Header()
 		// 过滤 X-Request- , 其他的传递给 rw
 		for k, vv := range resp.Header {
-			if gtw.HasPrefixFold(k, "X-Request-") {
-				continue // 忽略用户信息
-				// X-Debug-Force-User 会触发 X-Request-Sky-Authorize 强制返回
+			if gtw.HasPrefixFold(k, "X-Request-Sky-") {
+				continue // 忽略用户信息 // X-Debug-Force-User 会触发 X-Request-Sky-Authorize 强制返回
 			}
 			for _, v := range vv {
 				dst.Add(k, v)
@@ -138,11 +134,16 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		rw.Write(body)
 		return false
 	}
-
-	// 验证成功，继续后续访问, Set-Cookie 传递给 rw
-	if sc, ok := rw.Header()["Set-Cookie"]; ok {
-		for _, v := range sc {
-			rw.Header().Add("Set-Cookie", v)
+	// -------- 处理验证成功 --------
+	// Set-Cookie 传递给 rw | X- 开头的 header 传递给 rr
+	for kk, vv := range resp.Header {
+		if gtw.HasPrefixFold(kk, "X-") {
+			rr.Header[kk] = vv
+		}
+	}
+	if sc, ok := resp.Header["Set-Cookie"]; ok {
+		for _, vv := range sc {
+			rw.Header().Add("Set-Cookie", vv)
 		}
 	}
 	return true
