@@ -30,17 +30,17 @@ func ExistMap(keys ...string) map[string]int {
 
 // ===================================================================
 
-type Column struct {
+type Col struct {
 	CName string // 对应数据库列名
 	Field string // 对应结构体字段
 	Alias string // 对应结构体字段
 	Condi string // 条件condition
 	Value any    // 值
 
-	// Chind []Column // 针对 where 嵌套， 预留字段
+	// Chind []Col // 针对 where 嵌套， 预留字段
 }
 
-func (c *Column) VName(alias string) string {
+func (c *Col) VName(alias string) string {
 	if c.Field == "" {
 		if alias == "" {
 			return "_" + c.CName
@@ -54,7 +54,7 @@ func (c *Column) VName(alias string) string {
 
 }
 
-func (c *Column) Select(alias string) string {
+func (c *Col) Select(alias string) string {
 	if c.Alias == "" {
 		if alias == "" {
 			return fmt.Sprintf("`%s`", c.CName)
@@ -69,7 +69,7 @@ func (c *Column) Select(alias string) string {
 
 // 暂不支持三目运算符， 三目运算符可以拆解为二目运算符
 // vanme == "", 使用 ? 参数方式，反之使用 Named 参数方式
-func (c *Column) Symbol(alias, vname string) (string, string) {
+func (c *Col) Symbol(alias, vname string) (string, string) {
 	condi := c.Condi
 	if condi == "" {
 		condi = "="
@@ -88,33 +88,37 @@ func (c *Column) Symbol(alias, vname string) (string, string) {
 
 // ===================================================================
 
-func NewColumns(alias string, stm *StructMap) *Columns {
-	return &Columns{
+func NewCols(alias string, stm *StructMap) *Cols {
+	return &Cols{
 		As:   alias,
 		Stm:  stm,
-		Cols: []Column{},
+		Cols: []Col{},
 	}
 }
 
-type Columns struct {
-	As   string
-	Stm  *StructMap
-	Cols []Column
+func NewAs(alias string) *Cols {
+	return &Cols{As: alias}
 }
 
-func (s *Columns) SetAs(alias string) *Columns {
+type Cols struct {
+	As   string
+	Stm  *StructMap
+	Cols []Col
+}
+
+func (s *Cols) SetAs(alias string) *Cols {
 	s.As = alias
 	return s
 }
 
 // where 增加条件
-func (s *Columns) Cond(fld, con string, val any) *Columns {
+func (s *Cols) Cond(fld, con string, val any) *Cols {
 	_ = s.Add("", fld, con, val, false)
 	return s
 }
 
 // field 允许为空，如果为空， 同 cname; cname 为空，会使用 field 查询
-func (s *Columns) Add(cname, field, condi string, value any, cover bool) error {
+func (s *Cols) Add(cname, field, condi string, value any, cover bool) error {
 	ignore := false
 	if cname == "" && field != "" && s.Stm != nil {
 		if fld := s.Stm.Fields[field]; fld != nil {
@@ -142,18 +146,18 @@ func (s *Columns) Add(cname, field, condi string, value any, cover bool) error {
 		}
 	}
 	// 追加到末尾
-	s.Cols = append(s.Cols, Column{CName: cname, Field: field, Condi: condi, Value: value})
+	s.Cols = append(s.Cols, Col{CName: cname, Field: field, Condi: condi, Value: value})
 	return nil
 }
 
 // 直接增加，跳过校验, 一般用于遍历 Field 的场景下
-func (s *Columns) Append(col Column) *Columns {
+func (s *Cols) Append(col Col) *Cols {
 	s.Cols = append(s.Cols, col)
 	return s
 }
 
-func (s *Columns) DelByCName(cname ...string) *Columns {
-	cols := []Column{}
+func (s *Cols) DelByCName(cname ...string) *Cols {
+	cols := []Col{}
 	emap := ExistMap(cname...)
 	for _, col := range s.Cols {
 		if _, ok := emap[col.CName]; !ok {
@@ -164,8 +168,8 @@ func (s *Columns) DelByCName(cname ...string) *Columns {
 	return s
 }
 
-func (s *Columns) DelByField(fields ...string) *Columns {
-	cols := []Column{}
+func (s *Cols) DelByField(fields ...string) *Cols {
+	cols := []Col{}
 	emap := ExistMap(fields...)
 	for _, col := range s.Cols {
 		if _, ok := emap[col.Field]; !ok {
@@ -176,7 +180,7 @@ func (s *Columns) DelByField(fields ...string) *Columns {
 	return s
 }
 
-func (s *Columns) GetByCName(cname string) *Column {
+func (s *Cols) GetByCName(cname string) *Col {
 	for _, col := range s.Cols {
 		if col.CName == cname {
 			return &col
@@ -185,7 +189,7 @@ func (s *Columns) GetByCName(cname string) *Column {
 	return nil
 }
 
-func (s *Columns) GetByField(field string) *Column {
+func (s *Cols) GetByField(field string) *Col {
 	for _, col := range s.Cols {
 		if col.Field == field {
 			return &col
@@ -194,7 +198,7 @@ func (s *Columns) GetByField(field string) *Column {
 	return nil
 }
 
-func (s *Columns) Select() string {
+func (s *Cols) Select() string {
 	sbr := strings.Builder{}
 	for _, col := range s.Cols {
 		if sbr.Len() > 0 {
@@ -206,7 +210,7 @@ func (s *Columns) Select() string {
 }
 
 // obj == nil 只会处理 cols 中的内容
-func (s *Columns) EachArgs(obj any, ign bool, fn func(Column, any)) {
+func (s *Cols) EachArgs(obj any, ign bool, fn func(Col, any)) {
 	if obj == nil {
 		for _, col := range s.Cols {
 			if ign && col.Value == nil {
@@ -244,7 +248,7 @@ func (s *Columns) EachArgs(obj any, ign bool, fn func(Column, any)) {
 }
 
 // 效率不高，sep 默认为 " AND ", update 默认为 ","
-func (s *Columns) NamedArgs(obj any, rst map[string]any, ign bool, sep string) (string, map[string]any) {
+func (s *Cols) NamedArgs(obj any, rst map[string]any, ign bool, sep string) (string, map[string]any) {
 	sbr := strings.Builder{}
 	if rst == nil {
 		rst = map[string]any{}
@@ -252,7 +256,7 @@ func (s *Columns) NamedArgs(obj any, rst map[string]any, ign bool, sep string) (
 	if sep == "" {
 		sep = " AND "
 	}
-	s.EachArgs(obj, ign, func(col Column, value any) {
+	s.EachArgs(obj, ign, func(col Col, value any) {
 		vname, vtext := col.Symbol(s.As, col.VName(s.As))
 		rst[vname] = value
 		if sbr.Len() > 0 {
@@ -265,13 +269,13 @@ func (s *Columns) NamedArgs(obj any, rst map[string]any, ign bool, sep string) (
 }
 
 // 效率不高，sep 默认为 " AND ", update 默认为 ","
-func (s *Columns) ArrayArgs(obj any, ign bool, sep string) (string, []any) {
+func (s *Cols) ArrayArgs(obj any, ign bool, sep string) (string, []any) {
 	sbr := strings.Builder{}
 	rst := []any{}
 	if sep == "" {
 		sep = " AND "
 	}
-	s.EachArgs(obj, ign, func(col Column, value any) {
+	s.EachArgs(obj, ign, func(col Col, value any) {
 		_, vtext := col.Symbol(s.As, "")
 		rst = append(rst, value)
 		if sbr.Len() > 0 {
@@ -282,11 +286,11 @@ func (s *Columns) ArrayArgs(obj any, ign bool, sep string) (string, []any) {
 	return sbr.String(), rst
 }
 
-func (s *Columns) InsertArgs(obj any, ign bool) (string, []any) {
+func (s *Cols) InsertArgs(obj any, ign bool) (string, []any) {
 	sbr := strings.Builder{}
 	rsv := strings.Builder{}
 	rst := []any{}
-	s.EachArgs(obj, ign, func(col Column, value any) {
+	s.EachArgs(obj, ign, func(col Col, value any) {
 		rst = append(rst, value)
 		if sbr.Len() > 0 {
 			sbr.WriteByte(',')
@@ -298,12 +302,12 @@ func (s *Columns) InsertArgs(obj any, ign bool) (string, []any) {
 	return fmt.Sprintf(" (%s) VALUES (%s)", sbr.String(), rsv.String()), rst
 }
 
-func (s *Columns) UpdateArgs(obj any, ign bool) (string, []any) {
+func (s *Cols) UpdateArgs(obj any, ign bool) (string, []any) {
 	// vsql, args := s.ArrayArgs(obj, ign, ",")
 	// return " SET " + vsql, args
 	sbr := strings.Builder{}
 	rst := []any{}
-	s.EachArgs(obj, ign, func(col Column, value any) {
+	s.EachArgs(obj, ign, func(col Col, value any) {
 		if col.CName == "id" {
 			return // 忽略 id
 		}

@@ -58,6 +58,17 @@ func WithTxCtx(dsc *DB, ctx context.Context, opt *sql.TxOptions, fn func(tx *Tx)
 
 // =============================================================================
 
+type Dsc interface {
+	Ext() Ext        // 默认上下文执行器
+	Exc() ExtContext // 指定上下文执行器
+	Ctx() context.Context
+
+	Offset() int64        // 用于快速判断是否还需要继续查询
+	Prepro(string) string // 修复sql文，如增加增强内容或分页
+}
+
+var _ Dsc = (*Dsx)(nil)
+
 type Dsx struct {
 	Ex interface {
 		Ext
@@ -134,150 +145,71 @@ func (r *Dsx) Prepro(stmt string) string {
 
 // =============================================================================
 
-type Dsc interface {
-	Ext() Ext        // 默认上下文执行器
-	Exc() ExtContext // 指定上下文执行器
-	Ctx() context.Context
-
-	Offset() int64        // 用于快速判断是否还需要继续查询
-	Prepro(string) string // 修复sql文，如增加增强内容或分页
-}
-
-// repo 初始化方法
-type RepoInit interface {
-	InitRepo()
-}
-
-func NewRepo[T any]() *T {
-	repo := new(T)
-	if ri, ok := any(repo).(RepoInit); ok {
-		ri.InitRepo()
-	}
-	return repo
-}
-
-// =============================================================================
-
-type Tabler interface {
-	TableName() string
-}
-
 type Nuller interface {
 	sql.Scanner
 	driver.Valuer
 }
 
-type Repo[T any] struct {
-	Typ reflect.Type // data type
-	Stm *StructMap   // struct map
-}
-
-// 忽略 没有被 "db" 标记的属性, 即 Repo 对应的 DO 必须具有 "db" 标签
-// var RepoMpr = NewMapperFunc("db", func(s string) string { return "-" })
-
-func (r *Repo[T]) InitRepo() {
-	r.Typ = reflect.TypeFor[T]()
-	r.Stm = mapper().TypeMap(r.Typ)
-	RegKsqlEnt(r.Typ.Name(), r.Table(new(T)))
+type Tabler interface {
+	TableName() string
 }
 
 // 获取 Table Name， 这样的优势在于，可以通过 obj 的值进行分表操作
-func (r *Repo[T]) Table(obj any) string {
+func TableName(obj any) string {
 	if tabler, ok := obj.(Tabler); ok {
 		return tabler.TableName()
 	} else {
-		return strings.ToLower(r.Typ.Name())
+		typ := reflect.TypeOf(obj)
+		return strings.ToLower(typ.Name())
 	}
 }
 
-// func (r *Repo[T]) Entity() *T { return new(T) }
-// func (r *Repo[T]) Arrays() []T { return []T{} }
-
-func (r *Repo[T]) ToMap(obj *T) map[string]any {
-	return ToMapBy(r.Stm, obj, false, true)
+func Colx[T any](chk func(*FieldInfo) (string, bool), cols ...string) *Cols {
+	return ColsBy[T](nil, chk, cols...)
 }
 
-// =============================================================================
-
 // cols 第一个可能是别名， 格式为 xxx. 以 . 结尾
-func (r *Repo[T]) ColsBy(chk func(map[string]int, *FieldInfo) bool, cols ...string) *Columns {
+func ColsBy[T any](stm *StructMap, chk func(*FieldInfo) (string, bool), cols ...string) *Cols {
+	if stm == nil {
+		typ := reflect.TypeFor[T]()
+		stm = mapper().TypeMap(typ)
+	}
 	alias := ""
 	if len(cols) > 0 && strings.HasSuffix(cols[0], ".") {
 		alias = cols[0][:len(cols[0])-1]
 		cols = cols[1:]
 	}
 	if len(cols) == 0 || chk == nil {
-		rst := NewColumns(alias, r.Stm)
-		for _, val := range r.Stm.GetIndexName() {
-			rst.Append(Column{CName: val.Name, Field: val.GetFieldName()})
+		dest := NewCols(alias, stm)
+		for _, val := range stm.GetIndexName() {
+			dest.Append(Col{CName: val.Name, Field: val.GetFieldName()})
 		}
-		return rst
+		return dest
 	}
-	rst := NewColumns(alias, r.Stm)
+	dest := NewCols(alias, stm)
 	emap := ExistMap(cols...)
-	for _, val := range r.Stm.GetIndexName() {
-		if chk(emap, val) {
-			rst.Append(Column{CName: val.Name, Field: val.GetFieldName()})
+	for _, val := range stm.GetIndexName() {
+		kk, rr := chk(val)
+		if _, ok := emap[kk]; rr == ok {
+			dest.Append(Col{CName: val.Name, Field: val.GetFieldName()})
 		}
 	}
-	return rst
+	return dest
 }
 
-func (r *Repo[T]) Cols() *Columns {
-	return r.ColsBy(nil)
-}
-
-func (r *Repo[T]) ColsByExc(cols ...string) *Columns {
-	return r.ColsBy(func(emap map[string]int, val *FieldInfo) bool {
-		_, ok := emap[val.Name]
-		return !ok
-	}, cols...)
-}
-
-func (r *Repo[T]) ColsByInc(cols ...string) *Columns {
-	return r.ColsBy(func(emap map[string]int, val *FieldInfo) bool {
-		_, ok := emap[val.Name]
-		return ok
-	}, cols...)
-}
-
-func (r *Repo[T]) ColsByExf(flds ...string) *Columns {
-	return r.ColsBy(func(emap map[string]int, val *FieldInfo) bool {
-		_, ok := emap[val.GetFieldName()]
-		return !ok
-	}, flds...)
-}
-
-func (r *Repo[T]) ColsByInf(flds ...string) *Columns {
-	return r.ColsBy(func(emap map[string]int, val *FieldInfo) bool {
-		_, ok := emap[val.GetFieldName()]
-		return ok
-	}, flds...)
-}
-
-// =============================================================================
-// Select
-
-func (r *Repo[T]) Get(dsc Dsc, data *T, id int64, flds ...string) (*T, error) {
+// 查询独享
+func GetBy[T any](dsc Dsc, cols *Cols, data *T, cond string, args ...any) (*T, error) {
+	// stmt = fmt.Sprintf("select %s from %s where %s", Colx[T](nil).Select(), TableName(data), cond)
+	// Get(sqlx.*DB, data, stmt, args...)
+	if cols == nil {
+		cols = ColsBy[T](nil, nil)
+	} else if len(cols.Cols) == 0 {
+		cols = ColsBy[T](nil, nil, cols.As+".")
+	}
 	if data == nil {
 		data = new(T)
 	}
-	stmt := SQL_SELECT + r.ColsByInf(flds...).Select() + SQL_FROM + r.Table(data) + SQL_WHERE + fmt.Sprintf("id=%d", id)
-	stmt = dsc.Prepro(stmt)
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s", stmt)
-	}
-	if ctx := dsc.Ctx(); ctx != nil {
-		return data, GetContext(ctx, dsc.Exc(), data, stmt)
-	}
-	return data, Get(dsc.Ext(), data, stmt)
-}
-
-func (r *Repo[T]) GetBy(dsc Dsc, data *T, cond string, args ...any) (*T, error) {
-	if data == nil {
-		data = new(T)
-	}
-	stmt := SQL_SELECT + r.ColsByExf().Select() + SQL_FROM + r.Table(data) + SQL_WHERE + cond
+	stmt := SQL_SELECT + cols.Select() + SQL_FROM + TableName(data) + SQL_WHERE + cond
 	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
@@ -288,15 +220,19 @@ func (r *Repo[T]) GetBy(dsc Dsc, data *T, cond string, args ...any) (*T, error) 
 	return data, Get(dsc.Ext(), data, stmt, args...)
 }
 
-func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]T, error) {
-	stmt := SQL_SELECT + cols.Select() + SQL_FROM + r.Table(new(T))
+// 查询列表
+func SelectBy[T any](dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error) {
+	if cols == nil {
+		cols = ColsBy[T](nil, nil)
+	} else if len(cols.Cols) == 0 {
+		cols = ColsBy[T](nil, nil, cols.As+".")
+	}
+	stmt := SQL_SELECT + cols.Select() + SQL_FROM + TableName(new(T))
 	if cols.As != "" {
-		// 别名
-		stmt += " " + cols.As
+		stmt += " " + cols.As // 别名
 	}
 	if cond != "" {
-		// 条件
-		stmt += SQL_WHERE + cond
+		stmt += SQL_WHERE + cond // 条件
 	}
 	stmt = dsc.Prepro(stmt)
 	var rows *Rows
@@ -344,40 +280,16 @@ func (r *Repo[T]) SelectBy(dsc Dsc, cols *Columns, cond string, args ...any) ([]
 	return dest, nil
 }
 
-func (r *Repo[T]) SelectAll(dsc Dsc) ([]T, error) {
-	return r.SelectBy(dsc, r.Cols(), "")
-}
-
-func (r *Repo[T]) Select(dsc Dsc, cond string, args ...any) ([]T, error) {
-	return r.SelectBy(dsc, r.Cols(), cond, args...)
-}
-
-func (r *Repo[T]) SelectByExc(dsc Dsc, cols []string, cond string, args ...any) ([]T, error) {
-	return r.SelectBy(dsc, r.ColsByExc(cols...), cond, args...)
-}
-
-func (r *Repo[T]) SelectByInc(dsc Dsc, cols []string, cond string, args ...any) ([]T, error) {
-	return r.SelectBy(dsc, r.ColsByInc(cols...), cond, args...)
-}
-
-func (r *Repo[T]) SelectByExf(dsc Dsc, flds []string, cond string, args ...any) ([]T, error) {
-	return r.SelectBy(dsc, r.ColsByExf(flds...), cond, args...)
-}
-
-func (r *Repo[T]) SelectByInf(dsc Dsc, flds []string, cond string, args ...any) ([]T, error) {
-	return r.SelectBy(dsc, r.ColsByInf(flds...), cond, args...)
-}
-
-// =============================================================================
-// Insert
-
-func (r *Repo[T]) InsertBy(dsc Dsc, data *T, setid func(int64)) error {
+// 插入数据
+func InsertBy[T any](dsc Dsc, cols *Cols, data *T, fnid func(int64)) error {
 	if data == nil {
 		return errors.New("data is nil")
 	}
-	cols := r.ColsByExc("id")
+	if cols == nil {
+		cols = ColsBy[T](nil, func(val *FieldInfo) (string, bool) { return val.Name, false }, "id")
+	}
 	stmt, args := cols.InsertArgs(data, true)
-	stmt = SQL_INSERT + r.Table(data) + stmt
+	stmt = SQL_INSERT + TableName(data) + stmt
 	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
@@ -389,44 +301,34 @@ func (r *Repo[T]) InsertBy(dsc Dsc, data *T, setid func(int64)) error {
 	} else {
 		rst, err = dsc.Ext().Exec(stmt, args...)
 	}
-	var iid int64
 	if err != nil {
-	} else if setid == nil {
-	} else if iid, err = rst.LastInsertId(); err != nil {
-	} else {
-		setid(iid)
+		return err
 	}
-	return err
+	if fnid != nil {
+		if eid, err := rst.LastInsertId(); err != nil {
+			return err
+		} else {
+			fnid(eid)
+		}
+	}
+	return nil
 }
 
-func (r *Repo[T]) Insert(dsc Dsc, data *T) error {
-	fid, _ := r.Stm.Names["id"]
-	if fid == nil {
-		return r.InsertBy(dsc, data, nil)
-	}
-	setid := func(id int64) {
-		reflect.ValueOf(data).Elem().FieldByIndex(fid.Field.Index).Set(reflect.ValueOf(id))
-	}
-	return r.InsertBy(dsc, data, setid)
-}
-
-// =============================================================================
-// Update
-
-func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Columns, cond string, args ...any) error {
+// 更新数据
+func UpdateBy[T any](dsc Dsc, data *T, cols *Cols, cond string, args ...any) error {
 	if data == nil {
 		return errors.New("data is nil")
 	}
 	if cond == "" {
-		fid, _ := r.Stm.Names["id"]
-		if fid == nil {
+		fid, ok := reflect.TypeFor[T]().FieldByName("ID")
+		if !ok {
 			return errors.New("condition is emtpy")
 		}
-		cond = fmt.Sprintf("id=%v", reflect.ValueOf(data).Elem().FieldByIndex(fid.Field.Index).Interface())
+		cond = fmt.Sprintf("id=%v", reflect.ValueOf(data).Elem().FieldByIndex(fid.Index).Interface())
 	}
 	// cols.DelByCName("id") // id 必须删除
 	stmt, argv := cols.UpdateArgs(data, true)
-	stmt = SQL_UPDATE + r.Table(data) + stmt + SQL_WHERE + cond
+	stmt = SQL_UPDATE + TableName(data) + stmt + SQL_WHERE + cond
 	argv = append(argv, args...)
 	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
@@ -441,47 +343,9 @@ func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Columns, cond string, args ..
 	return err
 }
 
-func (r *Repo[T]) Update(dsc Dsc, data *T) error {
-	return r.UpdateBy(dsc, data, r.ColsByExc("id", "created", "creater"), "")
-}
-
-func (r *Repo[T]) UpdateByExc(dsc Dsc, data *T, cols ...string) error {
-	keys := cols[:]
-	keys = append(keys, "id", "created", "creater")
-	return r.UpdateBy(dsc, data, r.ColsByExc(keys...), "")
-}
-
-func (r *Repo[T]) UpdateByInc(dsc Dsc, data *T, cols ...string) error {
-	return r.UpdateBy(dsc, data, r.ColsByInc(cols...), "")
-}
-
-func (r *Repo[T]) UpdateByExf(dsc Dsc, data *T, flds ...string) error {
-	keys := flds[:]
-	keys = append(keys, "ID", "Created", "Creater")
-	return r.UpdateBy(dsc, data, r.ColsByExf(keys...), "")
-}
-
-func (r *Repo[T]) UpdateByInf(dsc Dsc, data *T, flds ...string) error {
-	return r.UpdateBy(dsc, data, r.ColsByInf(flds...), "")
-}
-
-// =============================================================================
-// Delete
-
-func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
-	if data == nil {
-		return errors.New("data is nil")
-	}
-	fid, _ := r.Stm.Names["id"]
-	if fid == nil {
-		return errors.New("id field is nil")
-	}
-	id := reflect.ValueOf(data).Elem().FieldByIndex(fid.Field.Index).Interface()
-	return r.DeleteBy(dsc, fmt.Sprintf("id=%v", id))
-}
-
-func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
-	stmt := SQL_DELETE + SQL_FROM + r.Table(new(T)) + SQL_WHERE + cond
+// 删除数据
+func DeleteBy[T any](dsc Dsc, cond string, args ...any) error {
+	stmt := SQL_DELETE + SQL_FROM + TableName(new(T)) + SQL_WHERE + cond
 	stmt = dsc.Prepro(stmt)
 	if C.Sqlx.ShowSQL {
 		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	// _ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/ze/sqlx"
 )
@@ -72,7 +72,7 @@ func genDB() *sqlx.DB {
 	return dsc
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelectAll
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelectAll
 func TestSelectAll(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -87,13 +87,13 @@ func TestSelectAll(t *testing.T) {
 	// }
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelectGet
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelectGet
 func TestSelectGet(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 
-	datas, err := repo.Get(dsc, nil, 2)
+	datas, err := repo.Get(dsc, 2)
 	if err != nil {
 		z.Println(err.Error())
 	} else {
@@ -101,13 +101,13 @@ func TestSelectGet(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelectGet2
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelectGet2
 func TestSelectGet2(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
 
-	datas, err := repo.Get(dsc, nil, 2, "ID", "Name", "AppKey", "secret")
+	datas, err := repo.Get(dsc, 2, "ID", "Name", "AppKey", "secret")
 	if err != nil {
 		z.Println(err.Error())
 	} else {
@@ -115,8 +115,8 @@ func TestSelectGet2(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect
-func TestSelect(t *testing.T) {
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect0
+func TestSelect0(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -129,13 +129,13 @@ func TestSelect(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect1
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect1
 func TestSelect1(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
-	repo := sqlx.NewRepo[AuthzRepo]()
+	// repo := sqlx.NewRepo[AuthzRepo]()
 
-	datas, err := repo.SelectBy(dsc, repo.ColsBy(nil, "_a."), "_a.id < 3")
+	datas, err := sqlx.SelectBy[AuthzDO](dsc, sqlx.NewAs("_a"), "_a.id < 3")
 	if err != nil {
 		z.Println(err.Error())
 	} else {
@@ -143,7 +143,7 @@ func TestSelect1(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestInsert1
+// go test -v z/ze/sqlx/kmod_test.go -run TestInsert1
 func TestInsert1(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
@@ -160,7 +160,7 @@ func TestInsert1(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestUpdate1
+// go test -v z/ze/sqlx/kmod_test.go -run TestUpdate1
 func TestUpdate1(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
@@ -178,28 +178,28 @@ func TestUpdate1(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestUpdate2
+// go test -v z/ze/sqlx/kmod_test.go -run TestUpdate2
 func TestUpdate2(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
-	data := AuthzDO{
+	data := &AuthzDO{
 		ID:   12,
 		Name: sqlx.NewString("test12"),
 	}
 
-	err := repo.UpdateBy(dsc, &data, repo.ColsByExc("disable", "deleted"), "id = ?", 13)
+	err := sqlx.UpdateBy(dsc, data, repo.ColsByExc("disable", "deleted"), "id = ?", 13)
 	if err != nil {
 		z.Println(err.Error())
 	} else {
 		z.Println(z.ToStr2(data))
 	}
 
-	repo.Get(dsc, &data, 13)
+	data, _ = repo.Get(dsc, 13)
 	z.Println(z.ToStr2(data))
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestDelete1
+// go test -v z/ze/sqlx/kmod_test.go -run TestDelete1
 func TestDelete1(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
@@ -217,7 +217,7 @@ func TestDelete1(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestTx1
+// go test -v z/ze/sqlx/kmod_test.go -run TestTx1
 func TestTx1(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -237,11 +237,11 @@ func TestTx1(t *testing.T) {
 		return
 	}
 	data.Name.String = ""
-	repo.Get(&sqlx.Dsx{Ex: ds}, &data, 13)
+	repo.Getx(&sqlx.Dsx{Ex: ds}, 13, &data)
 	z.Println(z.ToStr2(data))
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestTx2
+// go test -v z/ze/sqlx/kmod_test.go -run TestTx2
 func TestTx2(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -262,11 +262,11 @@ func TestTx2(t *testing.T) {
 		return
 	}
 	data.Name.String = ""
-	repo.Get(&sqlx.Dsx{Ex: ds, Cx: cx}, &data, 13)
+	repo.Getx(&sqlx.Dsx{Ex: ds, Cx: cx}, 13, &data)
 	z.Println(z.ToStr2(data))
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelectAll2
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelectAll2
 func TestSelectAll2(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -281,7 +281,7 @@ func TestSelectAll2(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect3
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect3
 func TestSelect3(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -302,7 +302,7 @@ func TestSelect3(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect4
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect4
 func TestSelect4(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -322,7 +322,7 @@ func TestSelect4(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect5
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect5
 func TestSelect5(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo]()
@@ -342,7 +342,7 @@ func TestSelect5(t *testing.T) {
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect6
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect6
 func TestSelect6(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
 	sqlx.C.Sqlx.KsqlTbl = true
@@ -368,7 +368,7 @@ SELECT /*+ xxx */ * FROM {::entity.AuthzDO} WHERE 1=1
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect7
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect7
 func TestSelect7(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
 	sqlx.C.Sqlx.KsqlTbl = true
@@ -398,7 +398,7 @@ SELECT
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect8
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect8
 func TestSelect8(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
 	sqlx.C.Sqlx.KsqlTbl = true
@@ -428,7 +428,7 @@ ORDER BY id
 	}
 }
 
-// go test -v z/ze/sqlx/model_test.go -run TestSelect9
+// go test -v z/ze/sqlx/kmod_test.go -run TestSelect9
 func TestSelect9(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
 	sqlx.C.Sqlx.KsqlTbl = true
@@ -436,7 +436,7 @@ func TestSelect9(t *testing.T) {
 	dsc := &sqlx.Dsx{Ex: genDB()}
 
 	repo := sqlx.NewRepo[AuthzRepo]()
-	data, _ := repo.Get(dsc, nil, 13)
+	data, _ := repo.Get(dsc, 13)
 	// z.Println("[__test__]:", z.ToStr(data))
 
 	data.Name = sqlx.NewString("demo123456")
@@ -452,6 +452,6 @@ func TestSelect9(t *testing.T) {
 	} else {
 		z.Println("[__test__]:", "count:", cnt, ", items:", z.ToStr2(dst))
 	}
-	item, _ := repo.Get(dsc, nil, 13)
+	item, _ := repo.Get(dsc, 13)
 	z.Println("[__test__]:", z.ToStr(item))
 }
