@@ -141,7 +141,7 @@ func LoadConfig(cfs string) {
 	if !C.Cache {
 		vcache = nil // 禁用缓存， 缓存是在 Env 中完成初始化的
 	}
-	InitLoggerFn()
+	InitConfigFn()
 }
 
 // 获取配置文件中指定的字段值， 可能存在 key 相同的覆盖情况， PS: 由于使用的是 reflect.Value，因此原始值改变时，缓存也会改变

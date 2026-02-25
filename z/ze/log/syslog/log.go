@@ -24,10 +24,10 @@ import (
 
 func init() {
 	// 注册初始化Logger方法
-	zc.InitLoggerFn = InitLoggerBySysLog
+	zc.InitConfigFn = InitSysLog
 }
 
-func InitLoggerBySysLog() {
+func InitSysLog() {
 	if zc.C.Syslog == "" {
 		return // 不进行初始化
 	}
@@ -38,7 +38,6 @@ func InitLoggerBySysLog() {
 		addr = addr[idx+3:]
 	}
 	zc.Log = NewLoggerSyslog(addr, net, 0, zc.C.LogTty)
-
 }
 
 func NewLoggerSyslog(addr, net string, pir int, tty bool) zc.Logger {

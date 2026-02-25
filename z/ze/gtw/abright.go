@@ -18,6 +18,15 @@ import (
 	"github.com/suisrc/zgg/z"
 )
 
+/*
+
+// 代理规则：
+// /~/ 开头的，使用 a 地址完全取代; /xx/zz -> /~/vv = /vv
+// /-/ 开头的，使用 a 地址截取 b 地址; /xx/zz -> /-/xx = /zz
+// 其他形式，使用 a 地址合并 b 地址; /xx/zz -> /vv = /vv/xx/zz
+
+*/
+
 var (
 	ErrNil = errors.New("<nil>") // 处理业务过程中，用于跳过错误
 
@@ -179,7 +188,9 @@ func RewriteRequestURL2(req *http.Request, target *url.URL) {
 	}
 }
 
-// /~/ 开头的，使用 a 地址完全取代, /-/ 开头的，使用 a 地址截取 b地址, 其他形式合并
+// /~/ 开头的，使用 a 地址完全取代; /xx/zz -> /~/vv = /vv
+// /-/ 开头的，使用 a 地址截取 b 地址; /xx/zz -> /-/xx = /zz
+// 其他形式合并; /xx/zz -> /vv = /vv/xx/zz
 func JoinURLPath2(a, b *url.URL) (path, rawpath string) {
 	// z.Println("[_gateway]: ===========", a.Path, a.RawPath)
 	if strings.HasPrefix(a.Path, "/~/") {
@@ -188,7 +199,7 @@ func JoinURLPath2(a, b *url.URL) (path, rawpath string) {
 		}
 		return a.Path[2:], a.RawPath[2:]
 	}
-	if strings.HasPrefix(a.Path, "/-") {
+	if strings.HasPrefix(a.Path, "/-/") {
 		if a.RawPath == "" {
 			return strings.TrimPrefix(b.Path, a.Path[2:]), ""
 		}
