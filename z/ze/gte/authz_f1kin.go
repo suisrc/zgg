@@ -42,9 +42,6 @@ type AuthzF1kin struct {
 func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Request, rt gtw.IRecord) bool {
 	aa.AuthRecord.Authz(gw, rw, rr, rt)
 	// 通过验证服务器进行验证， 适配 FMES(f1kin) 平台
-	if rt != nil {
-		rt.SetSrvAuthz(aa.AuthzServe)
-	}
 	if aa.AuthzServe == "" {
 		return true // 只记录日志，不进行鉴权， 同 NewLoggerAuthz
 	}
@@ -68,8 +65,11 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 		}
 		authz += rr.URL.RawQuery
 	}
+	if rt != nil {
+		rt.SetSrvAuthz(authz)
+	}
 	if _, err := url.Parse(authz); err != nil {
-		msg := "error in authzf1kin, parse zuthz addr, " + err.Error()
+		msg := "error in authzf1kin, parse authz addr, " + err.Error()
 		gw.Logf(msg + "\n")
 		rw.WriteHeader(http.StatusInternalServerError)
 		if rt != nil {
@@ -101,7 +101,7 @@ func (aa *AuthzF1kin) Authz(gw gtw.IGateway, rw http.ResponseWriter, rr *http.Re
 	if err != nil {
 		gw.GetErrorHandler()(rw, req, err)
 		if rt != nil {
-			rt.SetRespBody([]byte("###error authorize1, request authz serve, " + err.Error()))
+			rt.SetRespBody([]byte("###error authzf1kin, request authz serve, " + err.Error()))
 		}
 		return false
 	}
