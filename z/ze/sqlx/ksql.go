@@ -178,7 +178,7 @@ func Ksql_[T any](dsc Dsc, ksql string, karg map[string]any, page Page, kext Ksq
 	}
 }
 
-func Ksgs[T any](name string, ksgr KsqlGetter, dsc Dsc, ksql string, karg map[string]any, page Page) ([]T, int64, error) {
+func Ksgs[T any](dsc Dsc, ksgr KsqlGetter, name string, karg map[string]any, page Page) ([]T, int64, error) {
 	if ksql, err := ksgr(name); err != nil {
 		return nil, 0, err
 	} else {
