@@ -37,24 +37,9 @@ Example:
 // ===================================================================================
 //go:embed ksql/*
 var ksfs embed.FS
-var ksgr = sqlx.Ksgr(ksfs, "ksql/")
+var ksgr = sqlx.Ksgr(ksfs, "ksql/") // if sqlx.C.Sqlx.KsqlDebug { ksgr = sqlx.Ksgr(os.DirFS("ksql"), "") }
 
-// var ksgr = sqlx.Ksgr(os.DirFS("ksql"), "")
-// var ksgr = func(name string) (string, error) {
-// 	if sqlx.C.Sqlx.KsqlDebug {
-// 		return sqlx.Ksgr(os.DirFS("ksql"), "")(name)
-// 	}
-// 	return sqlx.Ksgr(ksfs, "ksql/")(name)
-// }
-
-// ksql function
-func Ksql[T any](name string, args map[string]any, page sqlx.Page) ([]T, int64, error) {
-	if ksql, err := ksgr(name); err != nil {
-		return nil, 0, err
-	} else {
-		return sqlx.Ksql[T](NewDsc(), ksql, args, page)
-	}
-}
+rst, siz, err := sqlx.Ksgs("authz_find_all", ksgr, NewDsc(), karg, page)
 // ===================================================================================
 */
 
@@ -190,6 +175,14 @@ func Ksql_[T any](dsc Dsc, ksql string, karg map[string]any, page Page, kext Ksq
 			}
 		}
 		return nil, rows, rerr
+	}
+}
+
+func Ksgs[T any](name string, ksgr KsqlGetter, dsc Dsc, ksql string, karg map[string]any, page Page) ([]T, int64, error) {
+	if ksql, err := ksgr(name); err != nil {
+		return nil, 0, err
+	} else {
+		return Ksql_[T](dsc, ksql, karg, page, nil, KSQL_NFN_ERROR)
 	}
 }
 
