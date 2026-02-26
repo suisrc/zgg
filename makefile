@@ -99,7 +99,6 @@ kwdog2:
 		exit 1; \
 	fi
 	sed -i -e 's|// z.HttpServeDef|z.HttpServeDef|g' \
-	-e 's|// proxy2.|proxy2.|g' -e '7i"github.com/suisrc/zgg/app/proxy2"' \
 	-e 's|// kwdog2.|kwdog2.|g' -e '7i"github.com/suisrc/zgg/app/kwdog2"' app/main.go
 	git commit -am "${tag}" && git tag -a $(tag)-kwdog2 -m "${tag}" && git push origin $(tag)-kwdog2 && git reset --hard HEAD~1
 
