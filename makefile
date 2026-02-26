@@ -108,5 +108,5 @@ wgetar:
 		echo "error: 'tag' not specified! Please specify the 'tag' using 'make wgetar tag=(version)";\
 		exit 1; \
 	fi
-	cp wgetar Dockerfile
+	cp wgetar.Dockerfile Dockerfile
 	git commit -am "${tag}" && git tag -a $(tag)-wgetar -m "${tag}" && git push origin $(tag)-wgetar && git reset --hard HEAD~1
