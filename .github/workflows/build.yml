@@ -37,7 +37,7 @@ jobs:
           IMAGE_VERSION=$TAG_NAME
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
 
-          IMAGE_ID=$REGISTRY_URL/$IMAGE_NAME
+          IMAGE_ID=$REGISTRY_URL/$GITHUB_REPOSITORY
           echo IMAGE_ID=$IMAGE_ID
           VERSION=$IMAGE_VERSION
           echo VERSION=$VERSION
