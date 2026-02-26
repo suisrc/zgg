@@ -2,7 +2,7 @@ FROM golang:1.25-alpine3.23 AS build_deps
 
 RUN apk add --no-cache git
 
-WORKDIR /workspace
+WORKDIR /opt
 
 COPY go.mod .
 COPY go.sum .
@@ -13,12 +13,13 @@ FROM build_deps AS build
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o zgg -ldflags '-w -extldflags "-static"' .
+RUN CGO_ENABLED=0 go build -o zgg -ldflags '-w -extldflags "-static"' ./app
 
 FROM alpine:3.23
 
 RUN apk add --no-cache ca-certificates tzdata
 
-COPY --from=build /workspace/zgg /usr/local/bin/zgg
+WORKDIR /opt
+COPY --from=build /opt/zgg /opt/zgg
 
-ENTRYPOINT ["zgg"]
+ENTRYPOINT ["./zgg"]

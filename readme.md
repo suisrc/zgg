@@ -137,8 +137,13 @@ var (
 
 ## 项目列表
 
+[zgg](https://github.com/suisrc/zgg.git) 基于 zgg 的工具包
+- front2: 前端部署服务
+- kwdog2: 鉴权网关服务
+- proxy2: 正向代理服务
+- kwlog2: 日志存储服务
+
 [k8skit](https://github.com/suisrc/k8skit.git) k8s工具包
-- kubesider: k8s 边车注入服务
-- front2: 前端静态资源组件
-- kwdog2: 容器边车监控服务
+- sidecar: k8s 边车注入服务
+- front3: 增强前端部署服务
 - fluent: 日志收集服务

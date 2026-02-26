@@ -21,8 +21,7 @@ dist
 _out
 *.log
 www
-__zgg.toml
-__zmy.txt
+__zgg.*
 
 ksql
 # model_test.go
