@@ -58,3 +58,13 @@ jobs:
 
           docker tag image $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
+
+      # zgg 的 tag 是 会同步到其引用的项目中，所以这里个 tag 只是标注激活构建，因此构建成功后，应该删除掉 tag
+      - name: Delete tag reference via GitHub API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -X DELETE \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG_NAME"
