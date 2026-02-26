@@ -28,17 +28,21 @@ import (
 )
 
 func init() {
-	z.Register("01-hello", func(srv z.IServer) z.Closed {
-		api := z.Inject(srv.GetSvcKit(), &HelloApi{})
-		srv.AddRouter("hello", api.hello)
+	z.Register("50-hello", func(zgg *z.Zgg) z.Closed {
+		api := z.Inject(zgg.SvcKit, &HelloApi{})
+		zgg.AddRouter("hello", api.hello)
+
+		if ifn != nil {
+			ifn(api, zgg) // 初始化方法
+		}
 		return func() {
 			z.Println("api-hello closed")
 		}
 	})
-	z.Register("zz-world", func(srv z.IServer) z.Closed {
-		api := srv.GetSvcKit().Get("HelloApi").(*HelloApi)
-		z.GET("world", api.world, srv)
-		z.GET("token", z.TokenAuth(z.Ptr(""), api.token), srv)
+	z.Register("zz-world", func(zgg *z.Zgg) z.Closed {
+		api := zgg.SvcKit.Get("HelloApi").(*HelloApi)
+		z.GET("world", api.world, zgg)
+		z.GET("token", z.TokenAuth(z.Ptr("123"), api.token), zgg)
 		return nil
 	})
 }
@@ -86,54 +90,6 @@ xxx -h # 查看帮助(仅限web模式)
 xxx -debug -local
 
 ```
-
-## 前端部署
-
-```
---- main.go     # 项目入口
- +- version     # 项目版本
- +- appname     # 项目名
- +- www         # 前端 dist 目录
-```
-
-执行打包命令  
-go mod init ${APP} && go mod tidy && CGO_ENABLED=0 go build -ldflags "-w -s" -o ./_out/$(APP) ./  
-
-由于 zgg 坚持零依赖原则，因此不处理自动CDN问题，但是 [front2](https://github.com/suisrc/k8skit/tree/front2) 可以实现前端静态资源自动CDN.  
-
-```go
-package main
-
-import (
-	"embed"
-	"strings"
-
-	"github.com/suisrc/zgg/app/front2"
-	"github.com/suisrc/zgg/z"
-	// "k8s.io/klog/v2"
-)
-
-func main() {
-	front2.Init(wwwFS)
-	z.Execute(appname, version, "(https://github.com/suisrc/k8skit) front2")
-}
-
-//go:embed vname
-var appbyte []byte
-
-//go:embed version
-var verbyte []byte
-
-//go:embed www/* www/**/*
-var wwwFS embed.FS
-
-var (
-	appname = strings.TrimSpace(string(appbyte))
-	version = strings.TrimSpace(string(verbyte))
-)
-```
-
--f2show=/site/list123456  : 显示当前应用包装内的文件
 
 ## 项目列表
 
