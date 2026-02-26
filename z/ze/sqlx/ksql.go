@@ -20,6 +20,8 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"maps"
 	"regexp"
 	"slices"
@@ -33,22 +35,33 @@ import (
 /*
 Example:
 // ===================================================================================
-//go:embed ksql/*
-var ksfs embed.FS
-// ksql cache map
-var kmap = map[string]string{}
+var (
+	//go:embed ksql/*
+	ksfs embed.FS
+	// ksql cache map
+	kmap = map[string]string{}
+)
+
 // ksql function
-func Ksql[T any](name string, args map[string]any, page Page) ([]T, int64, error) {
+func Ksgr(name string) (string, error) {
 	sql, ok := kmap[name]
 	if !ok {
 		if bts, err := ksfs.ReadFile("ksql/" + name + ".sql"); err != nil {
-			return nil, 0, err
+			return "", err
 		} else {
 			sql = string(bts)
 			kmap[name] = sql
 		}
 	}
-	return sqlx.Ksql[T](NewDsc(), sql, args, page)
+	return sql, nil
+}
+
+func Ksql[T any](name string, argv map[string]any, page sqlx.Page) ([]T, int64, error) {
+	sql, err := Ksgr(name)
+	if err != nil {
+		return nil, 0, err
+	}
+	return sqlx.Ksql[T](NewDsc(), sql, argv, page)
 }
 // ===================================================================================
 */
@@ -188,6 +201,47 @@ func Ksql_[T any](dsc Dsc, ksql string, karg map[string]any, page Page, kext Ksq
 	}
 }
 
+func Ksgr(ksfs fs.FS, kdir string) KsqlGetter {
+	return func(name string) (string, error) {
+		if C.Sqlx.KsqlDebug || KsqlStmCache == nil {
+			if fsf, err := ksfs.Open(kdir + name + ".sql"); err != nil {
+				return "", err
+			} else if bts, err := io.ReadAll(fsf); err != nil {
+				return "", err
+			} else if len(bts) == 0 {
+				return "", errors.New("ksql file context is emtpy")
+			} else {
+				return string(bts), nil
+			}
+		}
+		ksqlStmMutex.RLock()
+		ksql, exist := KsqlStmCache[name]
+		ksqlStmMutex.RUnlock()
+		if !exist {
+			ksqlStmMutex.Lock()
+			defer ksqlStmMutex.Unlock()
+			if fsf, err := ksfs.Open(kdir + name + ".sql"); err != nil {
+				KsqlStmCache[name] = "[error]:" + err.Error()
+				return "", err
+			} else if bts, err := io.ReadAll(fsf); err != nil {
+				KsqlStmCache[name] = "[error]:" + err.Error()
+				return "", err
+			} else if len(bts) == 0 {
+				err := errors.New("ksql file context is emtpy")
+				KsqlStmCache[name] = "[error]:" + err.Error()
+				return "", err
+			} else {
+				ksql = string(bts)
+				KsqlStmCache[name] = ksql
+			}
+		}
+		if strings.HasPrefix(ksql, "[error]:") {
+			return "", errors.New(ksql[8:])
+		}
+		return ksql, nil
+	}
+}
+
 func KsqlParser(sql string, inc, out map[string]any, ext KsqlExt, nfn KsqlNfn) (string, error) {
 	blk := &SelectBulk{}
 	if err := blk.Build(sql, inc); err != nil {
@@ -221,11 +275,16 @@ var (
 	KSQL_NFN_PANIC = func(key string) error { panic("missing parameter: " + key) }
 	KSQL_NFN_PRINT = func(key string) error { fmt.Println("missing parameter: ", key); return nil }
 
+	// ksql cache
 	ksqlc = &KsqlCache{
 		filters: make(map[string]KsqlFilter),
 		evalues: make(map[string]any),
 		etables: make(map[string]string),
 	}
+
+	// ksql cache map
+	KsqlStmCache = map[string]string{}
+	ksqlStmMutex sync.RWMutex
 )
 
 var (

@@ -20,6 +20,8 @@ func init() {
 }
 
 type Config struct {
+	KsqlDebug bool `json:"ksqldebug"` // 默认 false，不适用缓存器，用于调试
+
 	ShowSQL bool `json:"showsql"`
 	KsqlTbl bool `json:"ksqltbl"` // 默认 false， 是否支持 ksql 收集 table type 和 table name 的映射关系
 	TblName struct {
