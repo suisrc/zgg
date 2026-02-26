@@ -27,7 +27,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/zc"
 )
 
@@ -35,21 +34,21 @@ import (
 Example:
 // ===================================================================================
 //go:embed ksql/*
-var ksql embed.FS
+var ksfs embed.FS
 // ksql cache map
 var kmap = map[string]string{}
 // ksql function
-func Ksql[T any](name string, argm map[string]any, size bool) ([]T, int64, error) {
-	str, ok := kmap[name]
+func Ksql[T any](name string, args map[string]any, page Page) ([]T, int64, error) {
+	sql, ok := kmap[name]
 	if !ok {
-		if bts, err := ksql.ReadFile("ksql/" + name); err != nil {
+		if bts, err := ksfs.ReadFile("ksql/" + name + ".sql"); err != nil {
 			return nil, 0, err
 		} else {
-			str = string(bts)
-			kmap[name] = str
+			sql = string(bts)
+			kmap[name] = sql
 		}
 	}
-	return sqlx.Ksql[T](NewDsc(), str, argm, size)
+	return sqlx.Ksql[T](NewDsc(), sql, args, page)
 }
 // ===================================================================================
 */
@@ -59,18 +58,26 @@ func Ksql[T any](name string, argm map[string]any, size bool) ([]T, int64, error
 // 待优化： 1. ksql 语句没好缓存器， 2. 不提供查询单个对象， 3. select 内容需要一对一指定
 // dsc: 数据库链接， ksql: 语句， argm: 参数, size: 是否统计所有行数（只有在 select 语句中有效）
 // 这是一个复杂的处理逻辑，简单的调用可以使用 sqlx.KsqlParserSimple 完成
-func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int64, error) {
-	if argm == nil {
-		argm = make(map[string]any)
+
+func Ksql[T any](dsc Dsc, ksql string, karg map[string]any, page Page) ([]T, int64, error) {
+	return Ksql_[T](dsc, ksql, karg, page, nil, KSQL_NFN_ERROR)
+}
+
+func Ksql_[T any](dsc Dsc, ksql string, karg map[string]any, page Page, kext KsqlExt, knfn KsqlNfn) ([]T, int64, error) {
+	if karg == nil {
+		karg = make(map[string]any)
 	}
 	argv := make(map[string]any)
 	// --------------------------------------------------------------------------
 	// stmt, err := KsqlParserSimple(ksql, argm, argv)
 	blk := &SelectBulk{}
-	if err := blk.Build(ksql, argm); err != nil {
+	if err := blk.Build(ksql, karg); err != nil {
 		return nil, 0, err
 	}
-	kstm, err := blk.Handle(argm, argv, nil, KSQL_NFN_ERROR)
+	if knfn == nil {
+		knfn = KSQL_NFN_ERROR
+	}
+	kstm, err := blk.Handle(karg, argv, kext, knfn)
 	// --------------------------------------------------------------------------
 	if err != nil {
 		return nil, 0, err
@@ -83,13 +90,21 @@ func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int
 	if zc.HasPrefixFold(stmt, SQL_SELECT) || zc.HasPrefixFold(ksql, "-- query") {
 		// select statement ------------------------------------------------
 		// 如果使用了 hint 标记， 因为不是 SELECT 开头，所以需要标记 -- query 开头
-		var cunt int64 = -1
-		if size {
-			// 优先统计行数，该语句没有预处理功能，如果需要预处理，可以单独执行
-			stmc, err := blk.Count_(stmt)
-			if C.Sqlx.ShowSQL {
-				z.Printf("[_showsql]: %s | %s", stmc, z.ToStr(args))
+		if page == nil {
+			if _page, ok := karg["__page__"]; !ok {
+				// __page__ 标记分页数据
+			} else if pg, ok := _page.(Page); ok {
+				page = pg
 			}
+		}
+		var cunt int64 = -1
+		if page != nil && page.Stats() {
+			// 统计行数 -----------------
+			stmc, err := blk.Count_(stmt)
+			if err != nil {
+				return nil, 0, err
+			}
+			stmc, err = dsc.Patch(stmc, args, nil) // 预处理
 			if err != nil {
 				return nil, 0, err
 			}
@@ -102,13 +117,13 @@ func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int
 			if err := row.scanAny(&cunt, false); err != nil {
 				return nil, 0, err
 			}
-			if cunt >= 0 && dsc.Offset() >= cunt {
+			if cunt >= 0 && page.First() >= cunt {
 				return []T{}, cunt, nil // 没有数据，直接快速返回即可
 			}
 		}
-		stmt = dsc.Prepro(stmt) // 预处理
-		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s --> %s | %s", kstm, stmt, z.ToStr(args))
+		stmt, err = dsc.Patch(stmt, args, page) // 预处理
+		if err != nil {
+			return nil, 0, err
 		}
 		var rows *Rows
 		var rerr error
@@ -131,9 +146,9 @@ func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int
 		return dest, cunt, nil
 	} else if zc.HasPrefixFold(stmt, SQL_INSERT) {
 		// insert statement ------------------------------------------------
-		stmt = dsc.Prepro(stmt)
-		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s --> %s | %s", kstm, stmt, z.ToStr(args))
+		stmt, err = dsc.Patch(stmt, args, nil)
+		if err != nil {
+			return nil, 0, err
 		}
 		var rowi int64
 		var rerr error
@@ -152,9 +167,9 @@ func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int
 	} else {
 		// update / delete / unknow statement -----------------------------
 		// 如果遇到特殊语句，只是用来查询， 可以在语句开头标记 "-- query" 来规避
-		stmt = dsc.Prepro(stmt)
-		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s --> %s | %s", kstm, stmt, z.ToStr(args))
+		stmt, err = dsc.Patch(stmt, args, nil)
+		if err != nil {
+			return nil, 0, err
 		}
 		var rows int64
 		var rerr error
@@ -173,10 +188,6 @@ func Ksql[T any](dsc Dsc, ksql string, argm map[string]any, size bool) ([]T, int
 	}
 }
 
-// ==========================================================================================
-// ==========================================================================================
-// ==========================================================================================
-
 func KsqlParser(sql string, inc, out map[string]any, ext KsqlExt, nfn KsqlNfn) (string, error) {
 	blk := &SelectBulk{}
 	if err := blk.Build(sql, inc); err != nil {
@@ -190,6 +201,8 @@ func KsqlParserSimple(sql string, inc, out map[string]any) (string, error) {
 	return KsqlParser(sql, inc, out, nil, KSQL_NFN_ERROR)
 }
 
+// ==========================================================================================
+
 type (
 	// KsqlFilter interface for filtering SQL conditions
 	KsqlFilter func(key string, inc map[string]any) bool
@@ -198,7 +211,9 @@ type (
 	// KsqlFmc interface for formatting parameter values
 	KsqlExt func(key string, obj any) any
 	// KsqlNfn interface for handling missing parameters
-	KsqlNfn func(string) error
+	KsqlNfn func(key string) error
+	// KsqlGetter interface for getting ksql statement
+	KsqlGetter func(key string) (string, error)
 )
 
 var (
@@ -503,7 +518,7 @@ func (blk *SelectBulk) Handle(inc, out map[string]any, ext KsqlExt, nfn KsqlNfn)
 	return removeWhitespace(sbir.String(), false), nil
 }
 
-// Count_ 该方法只是为了兼容，建议区别统计 Items 和 Count
+// Count_ 该方法只是为了兼容，建议区别统计 Items 和 Count, 已 '_' 结尾不推荐使用
 // nsql，_ := Handle(inc, out, ext, nfn)
 func (blk *SelectBulk) Count_(nsql string) (string, error) {
 	cstm := blk.countstm

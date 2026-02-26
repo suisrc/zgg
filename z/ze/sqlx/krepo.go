@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
+
+	"github.com/suisrc/zgg/z/zc"
 )
 
 // repo 初始化方法
@@ -24,6 +27,7 @@ func NewRepo[T any]() *T {
 type Repo[T any] struct {
 	Typ reflect.Type // data type
 	Stm *StructMap   // struct map
+	Kgr KsqlGetter   // ksql getter
 }
 
 // 忽略 没有被 "db" 标记的属性, 即 Repo 对应的 DO 必须具有 "db" 标签
@@ -39,7 +43,8 @@ func (r *Repo[T]) InitRepo() {
 // func (r *Repo[T]) Arrays() []T { return []T{} }
 
 func (r *Repo[T]) ToMap(obj *T) map[string]any {
-	return ToMapBy(r.Stm, obj, false, true)
+	rst, _ := ToMapBy(r.Stm, obj, false, true)
+	return rst
 }
 
 // =============================================================================
@@ -172,4 +177,34 @@ func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
 	}
 	id := reflect.ValueOf(data).Elem().FieldByIndex(fid.Field.Index).Interface()
 	return DeleteBy[T](dsc, fmt.Sprintf("id=%v", id))
+}
+
+// =============================================================================
+// ksql
+func (r *Repo[T]) KsqlAny(dsc Dsc, data any, page Page) ([]T, int64, error) {
+	return r.KsqlAny_(r.Kgr, 1, dsc, data, page)
+}
+
+func (r *Repo[T]) KsqlAny_(kgr KsqlGetter, idx int, dsc Dsc, data any, page Page) ([]T, int64, error) {
+	argv, err := ToMapBy(nil, data, false, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	return r.KsqlMap_(kgr, idx+1, dsc, argv, page)
+}
+
+func (r *Repo[T]) KsqlMap(dsc Dsc, argv map[string]any, page Page) ([]T, int64, error) {
+	return r.KsqlMap_(r.Kgr, 1, dsc, argv, page)
+}
+
+func (r *Repo[T]) KsqlMap_(kgr KsqlGetter, idx int, dsc Dsc, argv map[string]any, page Page) ([]T, int64, error) {
+	minfo := zc.GetCallerMethodInfo(idx + 2)
+	fname := fmt.Sprintf("%s_%s", strings.ReplaceAll(minfo.StructName, "/", "_"), minfo.MethodName)
+	ksql, err := kgr(fname)
+	if err != nil {
+		return nil, 0, err
+	} else if ksql == "" {
+		return nil, 0, errors.New("ksql context is empty")
+	}
+	return Ksql[T](dsc, ksql, argv, page)
 }

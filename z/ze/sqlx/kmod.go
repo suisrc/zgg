@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/suisrc/zgg/z"
-	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
@@ -62,12 +61,15 @@ type Dsc interface {
 	Ext() Ext        // 默认上下文执行器
 	Exc() ExtContext // 指定上下文执行器
 	Ctx() context.Context
-
-	Offset() int64        // 用于快速判断是否还需要继续查询
-	Prepro(string) string // 修复sql文，如增加增强内容或分页
+	Patch(string, any, Page) (string, error)
 }
 
-var _ Dsc = (*Dsx)(nil)
+func NewDsc(ex interface {
+	Ext
+	ExtContext
+}) Dsc {
+	return &Dsx{Ex: ex}
+}
 
 type Dsx struct {
 	Ex interface {
@@ -75,13 +77,6 @@ type Dsx struct {
 		ExtContext
 	}
 	Cx context.Context
-
-	First int64
-	Limit int64
-}
-
-func (r *Dsx) Ctx() context.Context {
-	return r.Cx
 }
 
 func (r *Dsx) Ext() Ext {
@@ -92,52 +87,87 @@ func (r *Dsx) Exc() ExtContext {
 	return r.Ex
 }
 
+func (r *Dsx) Ctx() context.Context {
+	return r.Cx
+}
+
+func (r *Dsx) Patch(stmt string, args any, page Page) (string, error) {
+	// 扩展， 用于对 sql 打补丁，比如打印等
+	if page != nil {
+		stmt = page.Patch(stmt, r.Ex.DriverName())
+	}
+	if C.Sqlx.ShowSQL {
+		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+	}
+	return stmt, nil
+}
+
+type Page interface {
+	First() int64
+	Limit() int64
+	Stats() bool
+	Patch(stmt, driver string) string
+}
+
 // 小于 0 是禁用分页， 等于 0 是使用默认值
-func (r *Dsx) Page(page, size int64) {
-	if size < 0 || page < 0 {
-		// 禁用分页，需要查询全部
-		r.First = 0
-		r.Limit = 0
-		return
-	}
-	if size == 0 {
-		size = 10
-	}
-	r.Limit = size
-	if page == 0 {
-		r.First = 0
-	} else {
-		r.First = (page - 1) * size
-	}
+func NewPage(page, size int64) Page {
+	return &Pagx{Page: page, Size: size}
 }
 
-func (r *Dsx) Offset() int64 {
-	return r.First
+type Pagx struct {
+	Page int64 // <0 First = -Page, 自定义偏移
+	Size int64 // <0 不限制， =0 默认值 10
+	IsTS bool  // 统计总量 Total Statistics
 }
 
-func (r *Dsx) Prepro(stmt string) string {
-	if r.First <= 0 && r.Limit <= 0 || !zc.HasPrefixFold(stmt, SQL_SELECT) {
+func (p *Pagx) First() int64 {
+	if p.Page < 0 {
+		return -p.Page
+	}
+	if p.Page < 1 {
+		return 0
+	}
+	return (p.Page - 1) * p.Limit()
+}
+
+func (p *Pagx) Limit() int64 {
+	if p.Size < 0 {
+		return 0
+	}
+	if p.Size == 0 {
+		return 10
+	}
+	return p.Size
+}
+
+func (p *Pagx) Stats() bool {
+	return p.IsTS
+}
+
+func (r *Pagx) Patch(stmt, driver string) string {
+	first, limit := r.First(), r.Limit()
+	if first <= 0 && limit <= 0 {
 		return stmt
 	}
 	// 分页, 只针对 select 语句
-	switch r.Ex.DriverName() {
+	switch driver {
 	case "mysql", "sqlite3", "sqlite", "postgres", "pgx", "pg": // LIMIT ... OFFSET 是数据库扩展语法，仅在部分数据库中支持
 		// 大偏移量场景下都建议使用键值分页替代：
 		// SELECT * FROM users  WHERE id < (SELECT id FROM users ORDER BY id DESC LIMIT 1 OFFSET 10) ORDER BY id DESC LIMIT 10;
-		if r.First > 0 && r.Limit > 0 {
-			return stmt + fmt.Sprintf(" LIMIT %d OFFSET %d", r.Limit, r.First)
-		} else if r.Limit > 0 {
-			return stmt + fmt.Sprintf(" LIMIT %d", r.Limit)
-		} else if r.First > 0 {
-			return stmt + fmt.Sprintf(" OFFSET %d", r.First)
+		if first > 0 && limit > 0 {
+			return stmt + fmt.Sprintf(" LIMIT %d OFFSET %d", limit, first)
+		} else if limit > 0 {
+			return stmt + fmt.Sprintf(" LIMIT %d", limit)
+		} else if first > 0 {
+			return stmt + fmt.Sprintf(" OFFSET %d", first)
 		}
 	case "sqlserver", "ibmdb", "ora", "godror", "dm": // postgres, OFFSET ... FETCH NEXT 是 SQL:2008 标准语法
-		if r.First > 0 && r.Limit > 0 {
-			return stmt + fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", r.First, r.Limit)
-		} else if r.Limit > 0 {
-			return stmt + fmt.Sprintf(" OFFSET 0 ROWS FETCH NEXT %d ROWS ONLY", r.Limit)
-		} else if r.First > 0 {
-			return stmt + fmt.Sprintf(" OFFSET %d", r.First)
+		if first > 0 && limit > 0 {
+			return stmt + fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", first, limit)
+		} else if limit > 0 {
+			return stmt + fmt.Sprintf(" OFFSET 0 ROWS FETCH NEXT %d ROWS ONLY", limit)
+		} else if first > 0 {
+			return stmt + fmt.Sprintf(" OFFSET %d", first)
 		}
 	}
 	return stmt
@@ -210,9 +240,10 @@ func GetBy[T any](dsc Dsc, cols *Cols, data *T, cond string, args ...any) (*T, e
 		data = new(T)
 	}
 	stmt := SQL_SELECT + cols.Select() + SQL_FROM + TableName(data) + SQL_WHERE + cond
-	stmt = dsc.Prepro(stmt)
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+	var err error
+	stmt, err = dsc.Patch(stmt, args, nil)
+	if err != nil {
+		return nil, err
 	}
 	if ctx := dsc.Ctx(); ctx != nil {
 		return data, GetContext(ctx, dsc.Exc(), data, stmt, args...)
@@ -220,7 +251,7 @@ func GetBy[T any](dsc Dsc, cols *Cols, data *T, cond string, args ...any) (*T, e
 	return data, Get(dsc.Ext(), data, stmt, args...)
 }
 
-// 查询列表
+// 查询列表, page 必须是最后一个参数
 func SelectBy[T any](dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error) {
 	if cols == nil {
 		cols = ColsBy[T](nil, nil)
@@ -234,7 +265,15 @@ func SelectBy[T any](dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error)
 	if cond != "" {
 		stmt += SQL_WHERE + cond // 条件
 	}
-	stmt = dsc.Prepro(stmt)
+	var page Page
+	if len(args) > 0 {
+		if _page := args[len(args)-1]; _page == nil {
+			// 最后一个参数可能是分页对象
+		} else if pg, ok := _page.(Page); ok {
+			page = pg
+			args = args[:len(args)-1]
+		}
+	}
 	var rows *Rows
 	var rerr error
 	if len(args) != 1 || !reNamedStm.MatchString(stmt) {
@@ -247,8 +286,9 @@ func SelectBy[T any](dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error)
 		if err != nil {
 			return nil, err
 		}
-		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s --> %s | %s", stmt, stm, z.ToStr(arg))
+		stm, err = dsc.Patch(stm, arg, page)
+		if err != nil {
+			return nil, err
 		}
 		if ctx := dsc.Ctx(); ctx != nil {
 			// rows, rerr = NamedQueryContext(ctx, dsc.Exc(), stmt, args[0])
@@ -260,8 +300,9 @@ func SelectBy[T any](dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error)
 	}
 	if rows == nil && rerr == nil {
 		// 未执行任何查询， 使用索引参数
-		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+		stmt, rerr = dsc.Patch(stmt, args, page)
+		if rerr != nil {
+			return nil, rerr
 		}
 		if ctx := dsc.Ctx(); ctx != nil {
 			rows, rerr = dsc.Exc().QueryxContext(ctx, stmt, args...)
@@ -290,12 +331,12 @@ func InsertBy[T any](dsc Dsc, cols *Cols, data *T, fnid func(int64)) error {
 	}
 	stmt, args := cols.InsertArgs(data, true)
 	stmt = SQL_INSERT + TableName(data) + stmt
-	stmt = dsc.Prepro(stmt)
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+	var err error
+	stmt, err = dsc.Patch(stmt, args, nil)
+	if err != nil {
+		return err
 	}
 	var rst sql.Result
-	var err error
 	if ctx := dsc.Ctx(); ctx != nil {
 		rst, err = dsc.Exc().ExecContext(ctx, stmt, args...)
 	} else {
@@ -330,11 +371,11 @@ func UpdateBy[T any](dsc Dsc, data *T, cols *Cols, cond string, args ...any) err
 	stmt, argv := cols.UpdateArgs(data, true)
 	stmt = SQL_UPDATE + TableName(data) + stmt + SQL_WHERE + cond
 	argv = append(argv, args...)
-	stmt = dsc.Prepro(stmt)
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(argv))
-	}
 	var err error
+	stmt, err = dsc.Patch(stmt, argv, nil)
+	if err != nil {
+		return err
+	}
 	if ctx := dsc.Ctx(); ctx != nil {
 		_, err = dsc.Exc().ExecContext(ctx, stmt, argv...)
 	} else {
@@ -346,11 +387,11 @@ func UpdateBy[T any](dsc Dsc, data *T, cols *Cols, cond string, args ...any) err
 // 删除数据
 func DeleteBy[T any](dsc Dsc, cond string, args ...any) error {
 	stmt := SQL_DELETE + SQL_FROM + TableName(new(T)) + SQL_WHERE + cond
-	stmt = dsc.Prepro(stmt)
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
-	}
 	var err error
+	stmt, err = dsc.Patch(stmt, args, nil)
+	if err != nil {
+		return err
+	}
 	if ctx := dsc.Ctx(); ctx != nil {
 		_, err = dsc.Exc().ExecContext(ctx, stmt, args...)
 	} else {
@@ -361,27 +402,57 @@ func DeleteBy[T any](dsc Dsc, cond string, args ...any) error {
 
 // =============================================================================
 
-// nv: true保留 nil 值, dv: true处理 driver.Valuer -> any
-func ToMapBy[T any](stm *StructMap, obj *T, nv bool, dv bool) map[string]any {
-	if stm == nil {
-		stm = mapper().TypeMap(reflect.TypeFor[T]())
-	}
+// snil: true 保留 nil 值, dval: true 处理 driver.Valuer -> any
+func ToMapBy(stm *StructMap, arg any, snil bool, dval bool) (map[string]any, error) {
 	rst := map[string]any{}
-	if obj != nil {
-		val := reflect.ValueOf(obj).Elem()
-		for _, fi := range stm.GetIndexName() {
-			vv := val.FieldByIndex(fi.Index).Interface()
-			if dv {
+	if arg == nil {
+		return rst, errors.New("arg is <nil>")
+	}
+	typ := reflect.TypeOf(arg)
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	// MAP -> map[string]any
+	if typ.Kind() == reflect.Map && typ.Key().Kind() == reflect.String {
+		// if m, ok := arg.(map[string]any); ok {
+		// 	return m, nil
+		// }
+		ref := reflect.ValueOf(arg)
+		for _, key := range ref.MapKeys() {
+			vv := ref.MapIndex(key).Interface()
+			if dval {
 				if v2, ok := vv.(driver.Valuer); ok {
 					vv, _ = v2.Value()
 				}
 			}
-			if nv || vv != nil {
-				rst[fi.Name] = vv
+			if snil || vv != nil {
+				rst[key.String()] = vv
 			}
 		}
+		return rst, nil
+	} else if typ.Kind() != reflect.Struct {
+		return rst, errors.New("arg is not struct")
 	}
-	return rst
+	// STRUCT TAG['db'] -> map[string]any
+	if stm == nil {
+		stm = mapper().TypeMap(typ)
+	}
+	val := reflect.ValueOf(arg)
+	if val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+	for _, fi := range stm.GetIndexName() {
+		vv := val.FieldByIndex(fi.Index).Interface()
+		if dval {
+			if v2, ok := vv.(driver.Valuer); ok {
+				vv, _ = v2.Value()
+			}
+		}
+		if snil || vv != nil {
+			rst[fi.Name] = vv
+		}
+	}
+	return rst, nil
 }
 
 // IsNotFound of sqlx
