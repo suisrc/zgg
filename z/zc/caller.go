@@ -1,6 +1,7 @@
 package zc
 
 import (
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -77,4 +78,21 @@ func ParseMethodInfo(finfo string) *MethodInfo {
 	// 普通函数
 	info.MethodName = rest
 	return info
+}
+
+func GetFuncInfo(obj any) string {
+	if obj == nil {
+		return "<nil>"
+	}
+	fnValue := reflect.ValueOf(obj)
+	pc := fnValue.Pointer()
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return "<nfn>"
+	}
+	fnName := fn.Name()
+	if idx := strings.LastIndexByte(fnName, '/'); idx > 0 {
+		fnName = fnName[idx+1:]
+	}
+	return fnName
 }

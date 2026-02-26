@@ -79,6 +79,7 @@ var (
 	GetNamespace = zc.GetNamespace
 	GetLocAreaIp = zc.GetLocAreaIp
 	GetServeName = zc.GetServeName
+	GetFuncInfo  = zc.GetFuncInfo
 
 	NewBoolVal = zc.NewBoolVal
 	NewIntVal  = zc.NewIntVal
