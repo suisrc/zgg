@@ -1,4 +1,4 @@
-package proxy2
+package kwdog2
 
 // curl -k -x 127.0.0.1:12014 https://ipinfo.io
 
@@ -15,15 +15,7 @@ import (
 	"github.com/suisrc/zgg/z/ze/tlsx"
 )
 
-var (
-	C = struct {
-		Proxy2 Config
-	}{}
-
-	RecordFunc = gte.ToRecord0
-)
-
-type Config struct {
+type ProxyConfig struct {
 	Disabled bool   `json:"disabled"`
 	AddrPort string `json:"port" default:"0.0.0.0:12012"`
 	CrtCA    string `json:"cacrt"`
@@ -43,10 +35,9 @@ type Config struct {
 // https://github.com/gojue/ecapture
 
 // 初始化方法， 处理 api 的而外配置接口 12012
-type InitializFunc func(api *Proxy2Api, zgg *z.Zgg)
+type InitializProxyFunc func(api *Proxy2Api, zgg *z.Zgg)
 
-func Init3(ifn InitializFunc) {
-	z.Config(&C)
+func InitProxy(ifn InitializProxyFunc) {
 
 	flag.BoolVar(&(C.Proxy2.Disabled), "p2disabled", true, "是否禁用proxy2")
 	flag.StringVar(&(C.Proxy2.AddrPort), "p2port", "0.0.0.0:12012", "proxy server addr and port")
@@ -88,7 +79,7 @@ func Init3(ifn InitializFunc) {
 
 }
 
-func (api *Proxy2Api) Init(cfg Config) error {
+func (api *Proxy2Api) Init(cfg ProxyConfig) error {
 	abp := gtw.NewBufferPool(32*1024, 0)
 	api.GtwDefault = &gtw.ForwardProxy{}
 	api.GtwDefault.BufferPool = abp

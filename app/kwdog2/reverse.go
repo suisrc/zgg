@@ -13,16 +13,7 @@ import (
 	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
-var (
-	C = struct {
-		Kwdog2 Config
-	}{}
-
-	RecordFunc = gte.ToRecord0
-	AuthzcFunc = gte.NewAuthzF1kin
-)
-
-type Config struct {
+type KwdogConfig struct {
 	Disabled bool              `json:"disabled"`
 	AddrPort string            `json:"addr" default:"0.0.0.0:12006"`
 	NextAddr string            `json:"next"`    // 默认 127.0.0.1:80
@@ -40,10 +31,9 @@ type Config struct {
 }
 
 // 初始化方法， 处理 api 的而外配置接口
-type InitializFunc func(api *KwdogApi, zgg *z.Zgg)
+type InitializKwdogFunc func(api *KwdogApi, zgg *z.Zgg)
 
-func Init3(ifn InitializFunc) {
-	z.Config(&C)
+func InitKwdog(ifn InitializKwdogFunc) {
 
 	flag.BoolVar(&C.Kwdog2.Disabled, "k2disabled", false, "是否禁用kwdog2")
 	flag.StringVar(&C.Kwdog2.AddrPort, "k2addr", "0.0.0.0:12006", "监控认证端口")
@@ -121,7 +111,7 @@ func Init3(ifn InitializFunc) {
 }
 
 type KwdogApi struct {
-	Config Config
+	Config KwdogConfig
 	// ----------------------------------------
 	RecordPool gtw.RecordPool          // 记录池
 	BufferPool gtw.BufferPool          // 缓存池
