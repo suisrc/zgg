@@ -1,12 +1,15 @@
 name: build
 
-# on:
-#   push:
-#     # branches: [ main ]
-#     tags: [ "*-*" ]
+on:
+  push:
+    # branches: [ main ]
+    tags: [ "*-*" ]
+
+#  https://github.com/suisrc/zgg/
+#  https://github.com/suisrc/zgg/pkgs/container/k8s
 
 env:
-  IMAGE_NAME: suisrc/zgg
+  IMAGE_NAME: suisrc/k8skit
   GITHUB_REGISTRY: ghcr.io
   DOCKER_REGISTRY: docker.io
 

@@ -327,7 +327,7 @@ func (aa *Svc) Map() map[string]any {
 	return ckv
 }
 
-func (aa *Svc) _toInjName(tType, tField string) string {
+func (aa *Svc) toInjName(tType, tField string) string {
 	name := fmt.Sprintf("%s.%s", tType, tField)
 	if size := len(name); size < 36 {
 		name += strings.Repeat(" ", 36-size)
@@ -355,7 +355,7 @@ func (aa *Svc) Inj(obj any) SvcKit {
 					tField.Type.Kind() == reflect.Interface && vType.Implements(tField.Type) {
 					tElem.Field(i).Set(reflect.ValueOf(value))
 					if IsDebug() {
-						Printf("[_svckit_]: [inject] %s <- %s\n", aa._toInjName(tType.String(), tField.Name), vType)
+						Printf("[_svckit_]: [inject] %s <- %s\n", aa.toInjName(tType.String(), tField.Name), vType)
 					}
 					found = true
 					break
@@ -363,7 +363,7 @@ func (aa *Svc) Inj(obj any) SvcKit {
 			}
 			if !found {
 				errstr := fmt.Sprintf("[_svckit_]: [inject] %s <- %s.(type) error, service not found", //
-					aa._toInjName(tType.String(), tField.Name), tField.Type)
+					aa.toInjName(tType.String(), tField.Name), tField.Type)
 				if IsDebug() {
 					Println(errstr)
 				} else {
@@ -375,7 +375,7 @@ func (aa *Svc) Inj(obj any) SvcKit {
 			val := aa.svcmap[tagVal]
 			if val == nil {
 				errstr := fmt.Sprintf("[_svckit_]: [inject] %s <- %s.(name) error, service not found", //
-					aa._toInjName(tType.String(), tField.Name), tagVal)
+					aa.toInjName(tType.String(), tField.Name), tagVal)
 				if IsDebug() {
 					Println(errstr)
 				} else {
@@ -385,7 +385,7 @@ func (aa *Svc) Inj(obj any) SvcKit {
 			}
 			tElem.Field(i).Set(reflect.ValueOf(val))
 			if IsDebug() {
-				Printf("[_svckit_]: [inject] %s <- %s\n", aa._toInjName(tType.String(), tField.Name), reflect.TypeOf(val))
+				Printf("[_svckit_]: [inject] %s <- %s\n", aa.toInjName(tType.String(), tField.Name), reflect.TypeOf(val))
 			}
 		}
 	}
