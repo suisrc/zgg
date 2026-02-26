@@ -9,20 +9,17 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
-// repo 初始化方法
-type RepoInit interface {
-	InitRepo()
-}
+// 忽略 没有被 "db" 标记的属性, 即 Repo 对应的 DO 必须具有 "db" 标签
+// var RepoMpr = NewMapperFunc("db", func(s string) string { return "-" })
+// =============================================================================
 
-func NewRepo[T any]() *T {
+func NewRepo[T any](kgr KsqlGetter) *T {
 	repo := new(T)
-	if ri, ok := any(repo).(RepoInit); ok {
-		ri.InitRepo()
+	if r, ok := any(repo).(interface{ InitRepo(KsqlGetter) }); ok {
+		r.InitRepo(kgr)
 	}
 	return repo
 }
-
-// =============================================================================
 
 type Repo[T any] struct {
 	Typ reflect.Type // data type
@@ -30,10 +27,8 @@ type Repo[T any] struct {
 	Kgr KsqlGetter   // ksql getter
 }
 
-// 忽略 没有被 "db" 标记的属性, 即 Repo 对应的 DO 必须具有 "db" 标签
-// var RepoMpr = NewMapperFunc("db", func(s string) string { return "-" })
-
-func (r *Repo[T]) InitRepo() {
+func (r *Repo[T]) InitRepo(kgr KsqlGetter) {
+	r.Kgr = kgr
 	r.Typ = reflect.TypeFor[T]()
 	r.Stm = mapper().TypeMap(r.Typ)
 	RegKsqlEnt(r.Typ.Name(), TableName(new(T)))

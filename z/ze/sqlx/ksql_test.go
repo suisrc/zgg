@@ -176,7 +176,7 @@ func TestParser5(t *testing.T) {
 	zc.C.Print = true
 	zc.LoadConfig("") // 加载配置，激活环境
 
-	_ = sqlx.NewRepo[AffiliatesMasterRepo]() // 注册仓库
+	_ = sqlx.NewRepo[AffiliatesMasterRepo](nil) // 注册仓库
 	z.Println(z.ToStr(sqlx.GetKsqlEnts()))
 	// z.Println(z.ToStr(zc.GetByPre("")))
 

@@ -35,33 +35,25 @@ import (
 /*
 Example:
 // ===================================================================================
-var (
-	//go:embed ksql/*
-	ksfs embed.FS
-	// ksql cache map
-	kmap = map[string]string{}
-)
+//go:embed ksql/*
+var ksfs embed.FS
+var ksgr = sqlx.Ksgr(ksfs, "ksql/")
+
+// var ksgr = sqlx.Ksgr(os.DirFS("ksql"), "")
+// var ksgr = func(name string) (string, error) {
+// 	if sqlx.C.Sqlx.KsqlDebug {
+// 		return sqlx.Ksgr(os.DirFS("ksql"), "")(name)
+// 	}
+// 	return sqlx.Ksgr(ksfs, "ksql/")(name)
+// }
 
 // ksql function
-func Ksgr(name string) (string, error) {
-	sql, ok := kmap[name]
-	if !ok {
-		if bts, err := ksfs.ReadFile("ksql/" + name + ".sql"); err != nil {
-			return "", err
-		} else {
-			sql = string(bts)
-			kmap[name] = sql
-		}
-	}
-	return sql, nil
-}
-
-func Ksql[T any](name string, argv map[string]any, page sqlx.Page) ([]T, int64, error) {
-	sql, err := Ksgr(name)
-	if err != nil {
+func Ksql[T any](name string, args map[string]any, page sqlx.Page) ([]T, int64, error) {
+	if ksql, err := ksgr(name); err != nil {
 		return nil, 0, err
+	} else {
+		return sqlx.Ksql[T](NewDsc(), ksql, args, page)
 	}
-	return sqlx.Ksql[T](NewDsc(), sql, argv, page)
 }
 // ===================================================================================
 */
