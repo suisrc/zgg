@@ -1,10 +1,14 @@
 name: 'Build Image Logic'
 description: 'Build image steps for jobs'
 
-# inputs:
-#   var_appname:
-#     description: 'Name of the variable'
-#     required: true
+inputs:
+  docker_user:
+    description: 'docker.io user name'
+    required: true
+  docker_token:
+    description: 'docker.io user token'
+    required: true
+    secret: true
 
 # env:
 #   IMAGE_NAME: suisrc/k8skit
@@ -19,6 +23,7 @@ runs:
       shell: bash
       run: |
         echo "appname: `cat app/vname`, version: `cat app/version`"
+        sed -i "s|zgg|`cat app/vname`|g" Dockerfile
         make `cat app/vname`2 && docker build -t image --no-cache .
     - name: Push github image
       shell: bash
@@ -35,7 +40,7 @@ runs:
       shell: bash
       run: |
         REGISTRY_URL=$DOCKER_REGISTRY
-        echo "${{ secrets.DOCKER_TOKEN }}" | docker login $REGISTRY_URL -u ${{ secrets.DOCKER_USER }} --password-stdin
+        echo "${{ inputs.docker_token }}" | docker login $REGISTRY_URL -u ${{ inputs.docker_user }} --password-stdin
         IMAGE_ID=$REGISTRY_URL/$IMAGE_NAME
         echo IMAGE_ID=$IMAGE_ID
         VERSION=$IMAGE_VERSION

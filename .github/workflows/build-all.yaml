@@ -28,6 +28,9 @@ jobs:
 
       - name: Use build logic
         uses: ./.github/actions/build
+        with:
+          docker_user: ${{ secrets.DOCKER_USER }}
+          docker_token: ${{ secrets.DOCKER_TOKEN }}
 
       # - name: Build image
       #   run: |
