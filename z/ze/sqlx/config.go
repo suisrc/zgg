@@ -83,7 +83,7 @@ func ConnectDatabase(cfg *DatabaseConfig) (*DB, error) {
 	return cds, nil
 }
 
-func ConnectDB(cfg *DatabaseConfig, log func(...string)) (*DB, error) {
+func ConnectDB(cfg *DatabaseConfig, log func(...any)) (*DB, error) {
 	dsc, err := ConnectDatabase(cfg)
 	if err != nil {
 		return nil, err
