@@ -15,12 +15,13 @@ description: 'Build image steps for jobs'
 runs:
   using: 'composite'
   steps:
-    - uses: actions/checkout@v2
     - name: Build image
+      shell: bash
       run: |
         echo "appname: `cat app/vname`, version: `cat app/version`"
         make `cat app/vname`2 && docker build -t image --no-cache .
     - name: Push github image
+      shell: bash
       run: |
         REGISTRY_URL=$GITHUB_REGISTRY
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
@@ -31,6 +32,7 @@ runs:
         docker tag image $IMAGE_ID:$VERSION
         docker push $IMAGE_ID:$VERSION
     - name: Push docker image
+      shell: bash
       run: |
         REGISTRY_URL=$DOCKER_REGISTRY
         echo "${{ secrets.DOCKER_TOKEN }}" | docker login $REGISTRY_URL -u ${{ secrets.DOCKER_USER }} --password-stdin
