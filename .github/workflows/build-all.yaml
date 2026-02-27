@@ -13,7 +13,7 @@ env:
   DOCKER_REGISTRY: docker.io
 
 jobs:
-  front:
+  front2:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -22,7 +22,7 @@ jobs:
         with:
           docker_user: ${{ secrets.DOCKER_USER }}
           docker_token: ${{ secrets.DOCKER_TOKEN }}
-  kwdog:
+  kwdog2:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -31,7 +31,7 @@ jobs:
         with:
           docker_user: ${{ secrets.DOCKER_USER }}
           docker_token: ${{ secrets.DOCKER_TOKEN }}
-  kwlog:
+  kwlog2:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
