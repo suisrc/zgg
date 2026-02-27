@@ -83,6 +83,25 @@ func ConnectDatabase(cfg *DatabaseConfig) (*DB, error) {
 	return cds, nil
 }
 
+func ConnectDB(cfg *DatabaseConfig, log func(...string)) (*DB, error) {
+	dsc, err := ConnectDatabase(cfg)
+	if err != nil {
+		return nil, err
+	} else if log != nil {
+		// 链接成功， 打印链接信息
+		dsn := cfg.DataSource
+		if idx := strings.Index(dsn, "@"); idx > 0 {
+			usr := dsn[:idx]
+			dsn = dsn[idx+1:]
+			if idz := strings.Index(usr, ":"); idz > 0 {
+				dsn = usr[:idz] + ":******@" + dsn
+			}
+		}
+		log("[database]: connect ok,", dsn)
+	}
+	return dsc, err
+}
+
 func GetTableByEnv(typ, def string) string {
 	if C.Sqlx.TblName.Mapping == nil {
 	} else if tbl, ok := C.Sqlx.TblName.Mapping[typ]; ok {

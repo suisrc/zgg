@@ -15,8 +15,16 @@ import (
 
 func NewRepo[T any](kgr KsqlGetter) *T {
 	repo := new(T)
-	if r, ok := any(repo).(interface{ InitRepo(KsqlGetter) }); ok {
-		r.InitRepo(kgr)
+	if r, ok := any(repo).(interface{ InitRepo(Dsc, KsqlGetter) }); ok {
+		r.InitRepo(nil, kgr)
+	}
+	return repo
+}
+
+func NewRepox[T any](dsc Dsc, kgr KsqlGetter) *T {
+	repo := new(T)
+	if r, ok := any(repo).(interface{ InitRepo(Dsc, KsqlGetter) }); ok {
+		r.InitRepo(dsc, kgr)
 	}
 	return repo
 }
@@ -25,9 +33,12 @@ type Repo[T any] struct {
 	Typ reflect.Type // data type
 	Stm *StructMap   // struct map
 	Kgr KsqlGetter   // ksql getter
+
+	Dsc Dsc // 是否启用取决于应用自身， 框架不进行初始化
 }
 
-func (r *Repo[T]) InitRepo(kgr KsqlGetter) {
+func (r *Repo[T]) InitRepo(dsc Dsc, kgr KsqlGetter) {
+	r.Dsc = dsc
 	r.Kgr = kgr
 	r.Typ = reflect.TypeFor[T]()
 	r.Stm = mapper().TypeMap(r.Typ)
