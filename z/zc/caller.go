@@ -29,11 +29,11 @@ func GetCurrentMethodInfo() *MethodInfo {
 }
 
 // GetCallerMethodInfo 获取调用者的方法信息
-func GetCallerMethodInfo(idx int) *MethodInfo {
-	if idx < 1 {
-		idx = 1
+func GetCallerMethodInfo(depth int) *MethodInfo {
+	if depth < 1 {
+		depth = 1
 	}
-	pc, file, line, ok := runtime.Caller(idx)
+	pc, file, line, ok := runtime.Caller(depth)
 	if !ok {
 		return nil
 	}
@@ -95,4 +95,24 @@ func GetFuncInfo(obj any) string {
 		fnName = fnName[idx+1:]
 	}
 	return fnName
+}
+
+func GetTraceFile(depth int) (string, int) {
+	if depth < 0 {
+		depth = 0
+	}
+	_, file, line, ok := runtime.Caller(depth + 1)
+	if !ok {
+		file = "???"
+		line = 1
+	} else {
+		if slash := strings.LastIndex(file, "/"); slash >= 0 {
+			path := file
+			file = path[slash+1:]
+			if dirsep := strings.LastIndex(path[:slash], "/"); dirsep >= 0 {
+				file = path[dirsep+1:]
+			}
+		}
+	}
+	return file, line
 }

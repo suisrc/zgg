@@ -29,6 +29,7 @@ var (
 	CS = map[string]any{}    // 需要初始化配置
 	FS = map[string]func(){} // 配置初始化函数
 
+	InitConfigFn = func() {}
 )
 
 // Config 配置参数
@@ -38,6 +39,7 @@ type Config struct {
 	Cache  bool   `json:"cache"`  // 是否启用缓存, 如果启用，可以通过 GetByKey 获取已有的配置
 	Syslog string `json:"syslog"` // udp://klog.default.svc:514, syslog 输出地址
 	LogTty bool   `json:"logtty"` // 启用 syslog 同步打印日志到控制台
+	LogTff bool   `json:"logtcf"` // 追踪打印日志的位置
 }
 
 var (

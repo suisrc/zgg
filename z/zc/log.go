@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
@@ -20,9 +18,6 @@ import (
 var (
 	Std = NewLogger(os.Stdout)
 	Log = Std
-
-	LogTrackFile = false
-	InitConfigFn = func() {}
 )
 
 func Printl0(v ...any) {
@@ -87,21 +82,9 @@ func (log *logger0) Output(depth int, appbuf func([]byte) []byte) error {
 	*buf = append(*buf, '.')
 	LogItoa(buf, now.Nanosecond()/1e3, 6)
 
-	if LogTrackFile && depth > 0 {
+	if C.LogTff && depth > 0 {
 		*buf = append(*buf, ' ')
-		_, file, line, ok := runtime.Caller(depth)
-		if !ok {
-			file = "???"
-			line = 1
-		} else {
-			if slash := strings.LastIndex(file, "/"); slash >= 0 {
-				path := file
-				file = path[slash+1:]
-				if dirsep := strings.LastIndex(path[:slash], "/"); dirsep >= 0 {
-					file = path[dirsep+1:]
-				}
-			}
-		}
+		file, line := GetTraceFile(depth)
 		*buf = append(*buf, file...)
 		*buf = append(*buf, ':')
 		LogItoa(buf, line, -1)

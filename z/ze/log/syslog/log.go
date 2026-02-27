@@ -10,7 +10,6 @@ package logsyslog
 
 import (
 	"log/syslog"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -137,20 +136,8 @@ func (r *lSyslog) _output(depth int, appbuf func([]byte) []byte) error {
 	}
 
 	msg := ""
-	if zc.LogTrackFile && depth > 0 {
-		_, file, line, ok := runtime.Caller(depth)
-		if !ok {
-			file = "???"
-			line = 1
-		} else {
-			if slash := strings.LastIndex(file, "/"); slash >= 0 {
-				path := file
-				file = path[slash+1:]
-				if dirsep := strings.LastIndex(path[:slash], "/"); dirsep >= 0 {
-					file = path[dirsep+1:]
-				}
-			}
-		}
+	if zc.C.LogTff && depth > 0 {
+		file, line := zc.GetTraceFile(depth)
 		msg = file + ":" + strconv.Itoa(line) + "] "
 	}
 	msg += string(*buf)
