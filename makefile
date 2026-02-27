@@ -27,7 +27,7 @@ helm:
 
 # -eng rdx/mux/map
 main:
-	go run app/main.go -eng map -local -dual -c __zgg.toml
+	go run app/main.go -eng map -local -dual -c doc/__zgg.toml
 # -tpl ./tmpl
 tenv:
 	ZGG_FRONT2_INDEXS_0="/api/v1/=http://127.0.0.1" ZGG_FRONT2_TPROOT="none"  go run app/main.go -local -debug -print -port 81
@@ -107,5 +107,5 @@ wgetar:
 		echo "error: 'tag' not specified! Please specify the 'tag' using 'make wgetar tag=(version)";\
 		exit 1; \
 	fi
-	cp wgetar.Dockerfile Dockerfile
+	cp doc/wgetar.Dockerfile Dockerfile
 	git commit -am "${tag}" && git tag -a $(tag)-wgetar -m "${tag}" && git push origin $(tag)-wgetar && git reset --hard HEAD~1

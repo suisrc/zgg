@@ -53,7 +53,7 @@ func genDB() *sqlx.DB {
 		Driver: "mysql",
 		// DataSource: "xxx:xxx@tcp(mysql.base.svc:3306)/cfg?charset=utf8&parseTime=True&loc=Asia%2FShanghai",
 	}
-	dss, err := os.ReadFile("../../../__zgg.zmy.txt")
+	dss, err := os.ReadFile("../../../doc/__zgg.zmy.txt")
 	if err != nil {
 		panic(err)
 	}
