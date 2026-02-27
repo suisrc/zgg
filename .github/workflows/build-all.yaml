@@ -1,4 +1,4 @@
-name: build
+name: build-all
 
 on:
   push:
@@ -13,43 +13,53 @@ env:
   DOCKER_REGISTRY: docker.io
 
 jobs:
-  front2:
+  front:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v2
 
-      - name: Build image
+      - name: Build app.version
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           echo ${TAG_NAME#v} > app/version
           echo $GITHUB_JOB > app/vname
           echo "IMAGE_VERSION=${TAG_NAME#v}-$GITHUB_JOB" >> $GITHUB_ENV
-          echo "appname: `cat app/vname`, version: `cat app/version`"
-          make `cat app/vname` && docker build -t image --no-cache .
 
-      - name: Push github image
-        run: |
-          REGISTRY_URL=$GITHUB_REGISTRY
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
+      - name: Use build logic
+        uses: ./.github/actions/build
 
-          IMAGE_ID=$REGISTRY_URL/$GITHUB_REPOSITORY
-          echo IMAGE_ID=$IMAGE_ID
-          VERSION=$IMAGE_VERSION
-          echo VERSION=$VERSION
+      # - name: Build image
+      #   run: |
+      #     TAG_NAME=${GITHUB_REF#refs/tags/}
+      #     echo ${TAG_NAME#v} > app/version
+      #     echo $GITHUB_JOB > app/vname
+      #     echo "IMAGE_VERSION=${TAG_NAME#v}-$GITHUB_JOB" >> $GITHUB_ENV
+      #     echo "appname: `cat app/vname`, version: `cat app/version`"
+      #     make `cat app/vname`2 && docker build -t image --no-cache .
 
-          docker tag image $IMAGE_ID:$VERSION
-          docker push $IMAGE_ID:$VERSION
+      # - name: Push github image
+      #   run: |
+      #     REGISTRY_URL=$GITHUB_REGISTRY
+      #     echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
 
-      - name: Push docker image
-        run: |
-          REGISTRY_URL=$DOCKER_REGISTRY
-          echo "${{ secrets.DOCKER_TOKEN }}" | docker login $REGISTRY_URL -u ${{ secrets.DOCKER_USER }} --password-stdin
+      #     IMAGE_ID=$REGISTRY_URL/$GITHUB_REPOSITORY
+      #     echo IMAGE_ID=$IMAGE_ID
+      #     VERSION=$IMAGE_VERSION
+      #     echo VERSION=$VERSION
 
-          IMAGE_ID=$REGISTRY_URL/$IMAGE_NAME
-          echo IMAGE_ID=$IMAGE_ID
-          VERSION=$IMAGE_VERSION
-          echo VERSION=$VERSION
+      #     docker tag image $IMAGE_ID:$VERSION
+      #     docker push $IMAGE_ID:$VERSION
 
-          docker tag image $IMAGE_ID:$VERSION
-          docker push $IMAGE_ID:$VERSION
+      # - name: Push docker image
+      #   run: |
+      #     REGISTRY_URL=$DOCKER_REGISTRY
+      #     echo "${{ secrets.DOCKER_TOKEN }}" | docker login $REGISTRY_URL -u ${{ secrets.DOCKER_USER }} --password-stdin
+
+      #     IMAGE_ID=$REGISTRY_URL/$IMAGE_NAME
+      #     echo IMAGE_ID=$IMAGE_ID
+      #     VERSION=$IMAGE_VERSION
+      #     echo VERSION=$VERSION
+
+      #     docker tag image $IMAGE_ID:$VERSION
+      #     docker push $IMAGE_ID:$VERSION
