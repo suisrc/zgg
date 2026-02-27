@@ -6,7 +6,6 @@ on:
     tags: [ "*-*" ]
 
 #  https://github.com/suisrc/zgg/
-#  https://github.com/suisrc/zgg/pkgs/container/k8s
 
 env:
   IMAGE_NAME: suisrc/k8skit

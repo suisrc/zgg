@@ -77,30 +77,36 @@ git:
 	 	git tag -a $(t) -m "${t}" && git push origin $(t); \
 	fi
 
-front2:
+front:
 	@if [ -z "$(tag)" ]; then \
 		echo "error: 'tag' not specified! Please specify the 'tag' using 'make front2 tag=(version)";\
 		exit 1; \
 	fi
-	sed -i -e 's|// front2.Init3(os.|front2.Init3(os.|g' -e '7i"os"' -e '7i"github.com/suisrc/zgg/app/front2"' app/main.go
-	git commit -am "${tag}" && git tag -a $(tag)-front2 -m "${tag}" && git push origin $(tag)-front2 && git reset --hard HEAD~1
+	make front2 && git commit -am "${tag}" && git tag -a $(tag)-front2 -m "${tag}" && git push origin $(tag)-front2 && git reset --hard HEAD~1
 
-kwlog2:
+front2:
+	sed -i -e 's|// front2.Init3(os.|front2.Init3(os.|g' -e '7i"os"' -e '7i"github.com/suisrc/zgg/app/front2"' app/main.go
+
+kwlog:
 	@if [ -z "$(tag)" ]; then \
 		echo "error: 'tag' not specified! Please specify the 'tag' using 'make kwlog2 tag=(version)";\
 		exit 1; \
 	fi
-	sed -i -e 's|// kwlog2.|kwlog2.|g' -e '7i"github.com/suisrc/zgg/app/kwlog2"' app/main.go
-	git commit -am "${tag}" && git tag -a $(tag)-kwlog2 -m "${tag}" && git push origin $(tag)-kwlog2 && git reset --hard HEAD~1
+	make kwlog2 && git commit -am "${tag}" && git tag -a $(tag)-kwlog2 -m "${tag}" && git push origin $(tag)-kwlog2 && git reset --hard HEAD~1
 
-kwdog2:
+kwlog2:
+	sed -i -e 's|// kwlog2.|kwlog2.|g' -e '7i"github.com/suisrc/zgg/app/kwlog2"' app/main.go
+
+kwdog:
 	@if [ -z "$(tag)" ]; then \
 		echo "error: 'tag' not specified! Please specify the 'tag' using 'make kwdog2 tag=(version)";\
 		exit 1; \
 	fi
+	make kwdog2 && git commit -am "${tag}" && git tag -a $(tag)-kwdog2 -m "${tag}" && git push origin $(tag)-kwdog2 && git reset --hard HEAD~1
+
+kwdog2:
 	sed -i -e 's|// z.HttpServeDef|z.HttpServeDef|g' \
-	-e 's|// kwdog2.|kwdog2.|g' -e '7i"github.com/suisrc/zgg/app/kwdog2"' app/main.go
-	git commit -am "${tag}" && git tag -a $(tag)-kwdog2 -m "${tag}" && git push origin $(tag)-kwdog2 && git reset --hard HEAD~1
+	-e 's|// kwdog2.|kwdog2.|g' -e '7i"github.com/suisrc/zgg/app/kwdog2"' app/main.go 
 
 wgetar:
 	@if [ -z "$(tag)" ]; then \
