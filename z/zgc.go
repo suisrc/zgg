@@ -265,7 +265,7 @@ func EncodeJson2(rr *http.Request, rw http.ResponseWriter, rs *Result) {
 	aa.Success = rs.Success
 	aa.Data = rs.Data
 	aa.TraceID = rs.TraceID
-	if rs.ErrCode == "" {
+	if rs.ErrCode != "" {
 		aa.ErrCode = rs.ErrCode
 		aa.Message = rs.Message
 	}
