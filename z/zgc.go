@@ -106,6 +106,21 @@ func (ctx *Ctx) TEXT(txt string, hss int) {
 	ctx.Writer.Write([]byte(txt))
 }
 
+// 已 BYTE 模板格式写出响应
+func (ctx *Ctx) BYTE(bts io.Reader, hss int, cty string) {
+	ctx._abort = true
+	if ctx.TraceID != "" {
+		ctx.Writer.Header().Set("X-Request-Id", ctx.TraceID)
+	}
+	if cty != "" {
+		ctx.Writer.Header().Set("Content-Type", cty)
+	}
+	if hss > 0 {
+		ctx.Writer.WriteHeader(hss) // 最后写状态码头
+	}
+	io.Copy(ctx.Writer, bts)
+}
+
 // 已 JSON 错误格式写出响应
 func (ctx *Ctx) JERR(err error, hss int) {
 	ctx._abort = true // rc.Abort()
@@ -160,6 +175,7 @@ type Result struct {
 	Message string `json:"message,omitempty"`
 	ErrShow int    `json:"errshow,omitempty"`
 	TraceID string `json:"traceid,omitempty"`
+	Total   *int   `json:"total,omitempty"`
 
 	Ctx    *Ctx   `json:"-"`
 	Status int    `json:"-"`
@@ -230,6 +246,9 @@ func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) {
 	}
 	if rs.TraceID != "" {
 		ha["traceId"] = rs.TraceID
+	}
+	if rs.Total != nil {
+		ha["total"] = rs.Total
 	}
 	// 响应结果
 	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
