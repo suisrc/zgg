@@ -167,6 +167,8 @@ func GetAction(uu *url.URL) string {
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
+type ResultEncoder func(rr *http.Request, rw http.ResponseWriter, rs *Result)
+
 // 定义响应结构体
 type Result struct {
 	Success bool   `json:"success"`
@@ -188,7 +190,6 @@ func (aa *Result) Error() string {
 }
 
 // ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
 
 // 响应 JSON 结果, 这是一个套娃，
 func JSON(ctx *Ctx, res *Result) {
@@ -203,19 +204,16 @@ func JSON(ctx *Ctx, res *Result) {
 	if !res.Success && res.ErrShow <= 0 {
 		res.ErrShow = 1
 	}
-	// 响应其他头部
+	// 响应头部
 	if ctx.Request.Header != nil { // 设置响应头
 		for k, v := range res.Header {
 			ctx.Writer.Header().Set(k, v)
 		}
 	}
 	// 响应结果
-	switch ctx.ReqType {
-	case "2":
-		JSON2(ctx.Request, ctx.Writer, res)
-	case "3":
-		HTML3(ctx.Request, ctx.Writer, res)
-	default:
+	if rfn, ok := ResultEncoders[ctx.ReqType]; ok {
+		rfn(ctx.Request, ctx.Writer, res)
+	} else {
 		JSON0(ctx.Request, ctx.Writer, res)
 	}
 }
@@ -228,55 +226,6 @@ func JSON0(rr *http.Request, rw http.ResponseWriter, rs *Result) {
 		rw.WriteHeader(rs.Status)
 	}
 	json.NewEncoder(rw).Encode(rs)
-}
-
-// 以 '2' 形式格式化, 响应 JSON 结果: content-type http-status json-data
-func JSON2(rr *http.Request, rw http.ResponseWriter, rs *Result) {
-	// 转换结构
-	ha := HA{"success": rs.Success}
-	if rs.Data != nil {
-		ha["data"] = rs.Data
-	}
-	if rs.ErrCode != "" {
-		ha["errorCode"] = rs.ErrCode
-		ha["errorMessage"] = rs.Message
-	}
-	if rs.ErrShow > 0 {
-		ha["showType"] = rs.ErrShow
-	}
-	if rs.TraceID != "" {
-		ha["traceId"] = rs.TraceID
-	}
-	if rs.Total != nil {
-		ha["total"] = rs.Total
-	}
-	// 响应结果
-	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if rs.Status > 0 {
-		rw.WriteHeader(rs.Status)
-	}
-	json.NewEncoder(rw).Encode(ha)
-}
-
-// 以 '3' 形式格式化, 选择模版，响应 HTML 模板结果: content-type http-status html-data
-func HTML3(rr *http.Request, rw http.ResponseWriter, rs *Result) {
-	if rs.Ctx == nil {
-		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		rw.Write([]byte("template render error: request content not found"))
-		return
-	}
-	tmpl := rs.TplKey
-	if tmpl == "" {
-		if rs.Success {
-			tmpl = "success.html"
-		} else {
-			tmpl = "error.html"
-		}
-	}
-	if rs.Status > 0 {
-		rw.WriteHeader(rs.Status)
-	}
-	HTML0(rs.Ctx.SvcKit.Zgg(), rr, rw, rs, tmpl)
 }
 
 // 响应 HTML 模板结果: content-type http-status html-data
@@ -294,6 +243,64 @@ func HTML0(zg *Zgg, rr *http.Request, rw http.ResponseWriter, rs any, tp string)
 			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 		}
 	}
+}
+
+type Result2 struct {
+	Success bool   `json:"success"`
+	Data    any    `json:"data,omitempty"`
+	ErrCode string `json:"errorCode,omitempty"`
+	Message string `json:"errorMessage,omitempty"`
+	ErrShow int    `json:"showType,omitempty"`
+	TraceID string `json:"traceId,omitempty"`
+	Total   *int   `json:"total,omitempty"`
+}
+
+func (aa *Result2) Error() string {
+	return fmt.Sprintf("[%v], %s, %s", aa.Success, aa.ErrCode, aa.Message)
+}
+
+func EncodeJson2(rr *http.Request, rw http.ResponseWriter, rs *Result) {
+	// 转换结构
+	aa := &Result2{}
+	aa.Success = rs.Success
+	aa.Data = rs.Data
+	aa.TraceID = rs.TraceID
+	if rs.ErrCode == "" {
+		aa.ErrCode = rs.ErrCode
+		aa.Message = rs.Message
+	}
+	if rs.ErrShow > 0 {
+		aa.ErrShow = rs.ErrShow
+	}
+	if rs.Total != nil {
+		aa.Total = rs.Total
+	}
+	// 响应结果
+	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if rs.Status > 0 {
+		rw.WriteHeader(rs.Status)
+	}
+	json.NewEncoder(rw).Encode(aa)
+}
+
+func EncodeHtml3(rr *http.Request, rw http.ResponseWriter, rs *Result) {
+	if rs.Ctx == nil {
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		rw.Write([]byte("template render error: request content not found"))
+		return
+	}
+	tmpl := rs.TplKey
+	if tmpl == "" {
+		if rs.Success {
+			tmpl = "success.html"
+		} else {
+			tmpl = "error.html"
+		}
+	}
+	if rs.Status > 0 {
+		rw.WriteHeader(rs.Status)
+	}
+	HTML0(rs.Ctx.SvcKit.Zgg(), rr, rw, rs, tmpl)
 }
 
 // ----------------------------------------------------------------------------

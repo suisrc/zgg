@@ -47,6 +47,11 @@ var (
 	C = new(struct {
 		Server ServerConfig
 	})
+
+	ResultEncoders = map[string]ResultEncoder{
+		"2": EncodeJson2,
+		"3": EncodeHtml3,
+	}
 )
 
 func PrintVersion() {
