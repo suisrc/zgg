@@ -79,41 +79,71 @@ func (r *Repo[T]) ColsByInf(flds ...string) *Cols {
 // Select
 
 func (r *Repo[T]) GetBy(dsc Dsc, cols *Cols, data *T, cond string, args ...any) (*T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return GetBy(dsc, cols, data, cond, args...)
 }
 func (r *Repo[T]) Get(dsc Dsc, id int64, flds ...string) (*T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return GetBy(dsc, r.ColsByInf(flds...), (*T)(nil), fmt.Sprintf("id=%d", id))
 }
 
 func (r *Repo[T]) Getx(dsc Dsc, id int64, data *T, flds ...string) (*T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return GetBy(dsc, r.ColsByInf(flds...), data, fmt.Sprintf("id=%d", id))
 }
 
 func (r *Repo[T]) SelectBy(dsc Dsc, cols *Cols, cond string, args ...any) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, cols, cond, args...)
 }
 
 func (r *Repo[T]) SelectAll(dsc Dsc) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, r.Cols(), "")
 }
 
 func (r *Repo[T]) Select(dsc Dsc, cond string, args ...any) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, r.Cols(), cond, args...)
 }
 
 func (r *Repo[T]) SelectByExc(dsc Dsc, cols []string, cond string, args ...any) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, r.ColsByExc(cols...), cond, args...)
 }
 
 func (r *Repo[T]) SelectByInc(dsc Dsc, cols []string, cond string, args ...any) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, r.ColsByInc(cols...), cond, args...)
 }
 
 func (r *Repo[T]) SelectByExf(dsc Dsc, flds []string, cond string, args ...any) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, r.ColsByExf(flds...), cond, args...)
 }
 
 func (r *Repo[T]) SelectByInf(dsc Dsc, flds []string, cond string, args ...any) ([]T, error) {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return SelectBy[T](dsc, r.ColsByInf(flds...), cond, args...)
 }
 
@@ -121,10 +151,16 @@ func (r *Repo[T]) SelectByInf(dsc Dsc, flds []string, cond string, args ...any) 
 // Insert
 
 func (r *Repo[T]) InsertBy(dsc Dsc, cols *Cols, data *T, fnid func(int64)) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return r.InsertBy(dsc, cols, data, fnid)
 }
 
 func (r *Repo[T]) Insert(dsc Dsc, data *T) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	fid, _ := r.Stm.Names["id"]
 	if fid == nil {
 		return InsertBy(dsc, r.ColsByExc("id"), data, nil)
@@ -139,30 +175,48 @@ func (r *Repo[T]) Insert(dsc Dsc, data *T) error {
 // Update
 
 func (r *Repo[T]) UpdateBy(dsc Dsc, data *T, cols *Cols, cond string, args ...any) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return UpdateBy(dsc, data, cols, cond, args...)
 }
 
 func (r *Repo[T]) Update(dsc Dsc, data *T) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return UpdateBy(dsc, data, r.ColsByExc("id", "created", "creater"), "")
 }
 
 func (r *Repo[T]) UpdateByExc(dsc Dsc, data *T, cols ...string) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	keys := cols[:]
 	keys = append(keys, "id", "created", "creater")
 	return UpdateBy(dsc, data, r.ColsByExc(keys...), "")
 }
 
 func (r *Repo[T]) UpdateByInc(dsc Dsc, data *T, cols ...string) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return UpdateBy(dsc, data, r.ColsByInc(cols...), "")
 }
 
 func (r *Repo[T]) UpdateByExf(dsc Dsc, data *T, flds ...string) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	keys := flds[:]
 	keys = append(keys, "ID", "Created", "Creater")
 	return UpdateBy(dsc, data, r.ColsByExf(keys...), "")
 }
 
 func (r *Repo[T]) UpdateByInf(dsc Dsc, data *T, flds ...string) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return UpdateBy(dsc, data, r.ColsByInf(flds...), "")
 }
 
@@ -170,10 +224,16 @@ func (r *Repo[T]) UpdateByInf(dsc Dsc, data *T, flds ...string) error {
 // Delete
 
 func (r *Repo[T]) DeleteBy(dsc Dsc, cond string, args ...any) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	return DeleteBy[T](dsc, cond, args...)
 }
 
 func (r *Repo[T]) Delete(dsc Dsc, data *T) error {
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	if data == nil {
 		return errors.New("data is nil")
 	}
@@ -192,6 +252,12 @@ func (r *Repo[T]) KsqlAny(dsc Dsc, data any, page Page) ([]T, int64, error) {
 }
 
 func (r *Repo[T]) KsqlAny_(kgr KsqlGetter, idx int, dsc Dsc, data any, page Page) ([]T, int64, error) {
+	if kgr == nil {
+		kgr = r.Kgr
+	}
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	argv, err := ToMapBy(nil, data, false, true)
 	if err != nil {
 		return nil, 0, err
@@ -204,6 +270,12 @@ func (r *Repo[T]) KsqlMap(dsc Dsc, argv map[string]any, page Page) ([]T, int64, 
 }
 
 func (r *Repo[T]) KsqlMap_(kgr KsqlGetter, idx int, dsc Dsc, argv map[string]any, page Page) ([]T, int64, error) {
+	if kgr == nil {
+		kgr = r.Kgr
+	}
+	if dsc == nil {
+		dsc = r.Dsc
+	}
 	minfo := zc.GetCallerMethodInfo(idx + 2)
 	fname := fmt.Sprintf("%s_%s", strings.ReplaceAll(minfo.StructName, "/", "_"), minfo.MethodName)
 	ksql, err := kgr(fname)
