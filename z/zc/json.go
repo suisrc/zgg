@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"maps"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -102,4 +103,118 @@ func ToJsonBytes(val any, tag string, kfn func(string) string, non bool) ([]byte
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
+}
+
+// ---------------------------------------------------------------------------------------
+
+func MapKey(src map[string]any, key string) any {
+	return MapTraverse(src, key, nil)
+}
+
+func MapDef[T any](src map[string]any, key string, def T) T {
+	val := MapTraverse(src, key, nil)
+	if vv, ok := val.(T); ok {
+		return vv
+	} else {
+		return def
+	}
+}
+
+func MapVal(src map[string]any, key string, val any) any {
+	return MapTraverse(src, key, func() any { return val })
+}
+
+func MapTraverse(src any, key string, vfn func() any) any {
+	keys := strings.Split(key, ".")
+	last := len(keys) - 1
+	curr := src
+	var mvfn func(any) = nil
+	for indx, k := range keys {
+		if curr == nil {
+			return nil
+		}
+		if m, ok := curr.(map[any]any); ok {
+			curr = m[k]
+			if indx == last && vfn != nil {
+				if v := vfn(); v != nil {
+					m[k] = v
+				} else {
+					delete(m, k)
+				}
+			}
+			mvfn = func(v any) { m[k] = v }
+		} else if m, ok := curr.(map[string]any); ok {
+			curr = m[k]
+			if indx == last && vfn != nil {
+				if v := vfn(); v != nil {
+					m[k] = v
+				} else {
+					delete(m, k)
+				}
+			}
+			mvfn = func(v any) { m[k] = v }
+		} else if a, ok := curr.([]any); ok {
+			if k == "-0" {
+				curr = nil
+				if vfn != nil {
+					if v := vfn(); v != nil {
+						a = append(a, v)
+						if mvfn != nil {
+							mvfn(a)
+						}
+					}
+				}
+			} else if strings.HasPrefix(k, "-") {
+				k = k[1:]
+				if i, err := strconv.Atoi(k); err != nil {
+					return nil
+				} else if i > 0 && i <= len(a) {
+					li := len(a) - i
+					curr = a[li]
+					if indx == last && vfn != nil {
+						if v := vfn(); v != nil {
+							a[li] = v
+						} else if li+1 < len(a) {
+							a = append(a[:li], a[li+1:]...)
+						} else if li == 0 {
+							a = a[1:]
+						} else {
+							a = a[:li]
+						}
+						if mvfn != nil {
+							mvfn(a)
+						}
+					}
+				} else {
+					return nil
+				}
+			} else {
+				if i, err := strconv.Atoi(k); err != nil {
+					return nil
+				} else if i < len(a) {
+					curr = a[i]
+					if indx == last && vfn != nil {
+						if v := vfn(); v != nil {
+							a[i] = v
+						} else if i+1 < len(a) {
+							a = append(a[:i], a[i+1:]...)
+						} else if i == 0 {
+							a = a[1:]
+						} else {
+							a = a[:i]
+						}
+						if mvfn != nil {
+							mvfn(a)
+						}
+					}
+				} else {
+					return nil
+				}
+			}
+		} else {
+			// 其他类型暂不支持
+			return nil
+		}
+	}
+	return curr
 }

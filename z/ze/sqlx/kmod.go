@@ -17,8 +17,8 @@ var (
 	reNamedStm = regexp.MustCompile(`:\w+`) // `[:@]\w+`
 )
 
-func WithTx(dsc *DB, fn func(tx *Tx) error) error {
-	tx, err := dsc.Beginx()
+func WithTx(begin func() (*Tx, error), txfn func(tx *Tx) error) error {
+	tx, err := begin()
 	if err != nil {
 		return err
 	}
@@ -32,26 +32,7 @@ func WithTx(dsc *DB, fn func(tx *Tx) error) error {
 			err = tx.Commit()
 		}
 	}()
-	err = fn(tx)
-	return err
-}
-
-func WithTxCtx(dsc *DB, ctx context.Context, opt *sql.TxOptions, fn func(tx *Tx) error) error {
-	tx, err := dsc.BeginTxx(ctx, opt)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p) // 重新抛出 panic
-		} else if err != nil {
-			tx.Rollback()
-		} else {
-			err = tx.Commit()
-		}
-	}()
-	err = fn(tx)
+	err = txfn(tx)
 	return err
 }
 
@@ -62,8 +43,10 @@ type Dsc interface {
 	Exc() ExtContext // 指定上下文执行器
 	Ctx() context.Context
 	Patch(string, any, Page) (string, error)
+	WithTx(*sql.TxOptions, func(Dsc) error) error
 }
 
+// -----------------------------------------------------------------------------
 func NewDsc(ex interface {
 	Ext
 	ExtContext
@@ -92,15 +75,118 @@ func (r *Dsx) Ctx() context.Context {
 }
 
 func (r *Dsx) Patch(stmt string, args any, page Page) (string, error) {
-	// 扩展， 用于对 sql 打补丁，比如打印等
-	if page != nil {
-		stmt = page.Patch(stmt, r.Ex.DriverName())
-	}
-	if C.Sqlx.ShowSQL {
-		z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
-	}
-	return stmt, nil
+	return DscPatch(r.Ex.DriverName(), stmt, args, page)
 }
+
+func (r *Dsx) WithTx(opts *sql.TxOptions, txfn func(tx Dsc) error) error {
+	return DscWithTx(r, opts, txfn)
+}
+
+// -----------------------------------------------------------------------------
+
+var (
+	// 默认 SQL 处理补丁
+	DscPatch = func(driver string, stmt string, args any, page Page) (string, error) {
+		// 扩展， 用于对 sql 打补丁，比如打印等
+		if page != nil {
+			stmt = page.Patch(stmt, driver)
+		}
+		if C.Sqlx.ShowSQL {
+			z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+		}
+		return stmt, nil
+	}
+	// 默认 SQL 处理事务
+	DscWithTx = func(dsc Dsc, opts *sql.TxOptions, txfn func(tx Dsc) error) (err error) {
+		var txx *Tx
+		if ctx := dsc.Ctx(); ctx != nil {
+			// z.Printf("---------------------------- nested transaction with context")
+			if _, ok := dsc.Exc().(*Tx); ok {
+				return txfn(dsc) // 嵌套的事务
+			} else if bfn, ok := dsc.Exc().(interface {
+				BeginTxx(context.Context, *sql.TxOptions) (*Tx, error)
+			}); ok {
+				txx, err = bfn.BeginTxx(ctx, opts)
+			} else {
+				return errors.New("[sqlx]: no BeginTxx function")
+			}
+		} else {
+			// z.Printf("---------------------------- nested transaction")
+			if _, ok := dsc.Ext().(*Tx); ok {
+				return txfn(dsc) // 嵌套的事务
+			} else if bfn, ok := dsc.Ext().(interface{ Beginx() (*Tx, error) }); ok {
+				txx, err = bfn.Beginx()
+			} else {
+				return errors.New("[sqlx]: no Beginx function")
+			}
+		}
+		if err != nil {
+			return err
+		} else if txx == nil {
+			return errors.New("[sqlx]: no transactional executor")
+		}
+		// -------------------------------------------------------------------
+		defer func() {
+			if p := recover(); p != nil {
+				txx.Rollback()
+				panic(p) // 重新抛出 panic
+			} else if err != nil {
+				txx.Rollback()
+			} else {
+				err = txx.Commit()
+			}
+		}()
+		err = txfn(&Dsx{Ex: txx, Cx: dsc.Ctx()})
+		return err
+	}
+)
+
+// -----------------------------------------------------------------------------
+
+func NewDsz(ex any) Dsc {
+	return &Dsz{Ex: ex}
+}
+
+type Dsz struct {
+	Ex any
+	Cx context.Context
+}
+
+func (r *Dsz) Ext() Ext {
+	if dsc, ok := r.Ex.(Ext); ok {
+		return dsc
+	} else {
+		return nil
+	}
+}
+
+func (r *Dsz) Exc() ExtContext {
+	if dsc, ok := r.Ex.(ExtContext); ok {
+		return dsc
+	} else {
+		return nil
+	}
+}
+
+func (r *Dsz) Ctx() context.Context {
+	return r.Cx
+}
+
+func (r *Dsz) Patch(stmt string, args any, page Page) (string, error) {
+	driver := ""
+	if bfn, ok := r.Ex.(interface{ DriverName() string }); ok {
+		driver = bfn.DriverName()
+	} else {
+		return "", errors.New("[sqlx]: no DriverName function")
+	}
+	return DscPatch(driver, stmt, args, page)
+}
+
+func (r *Dsz) WithTx(opts *sql.TxOptions, txfn func(tx Dsc) error) error {
+	return DscWithTx(r, opts, txfn)
+}
+
+// -----------------------------------------------------------------------------
 
 type Page interface {
 	First() int64
@@ -176,8 +262,10 @@ func (r *Pagx) Patch(stmt, driver string) string {
 // =============================================================================
 
 type Nuller interface {
-	sql.Scanner
-	driver.Valuer
+	// sql.Scanner
+	Scan(src any) error
+	// driver.Valuer
+	Value() (driver.Value, error)
 }
 
 type Tabler interface {

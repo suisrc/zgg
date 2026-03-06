@@ -24,17 +24,17 @@ func Test_files(t *testing.T) {
 func Test_result(t *testing.T) {
 	result := "success"
 
-	res := "{\"success\":false, \"data\":0,\"showType\": 9}"
-	if idx := strings.Index(res, "\"success\":"); idx > 0 && idx+11 < len(res) {
+	res := `{"success": false, "data":0,"showType": 9}`
+	if idx := strings.Index(res, `"success":`); idx > 0 && idx+11 < len(res) {
 		idx += 10
 		if res[idx] == 'f' {
-			if strings.Contains(res, "\"showType\":9") || strings.Contains(res, "\"errshow\":9") {
+			if strings.Contains(res, `"showType":9`) || strings.Contains(res, `"errshow":9`) {
 				result = "redirect"
 			} else {
 				result = "abnormal"
 			}
 		} else if res[idx] == ' ' && res[idx+1] == 'f' {
-			if strings.Contains(res, "\"showType\": 9") || strings.Contains(res, "\"errshow\": 9") {
+			if strings.Contains(res, `"showType": 9`) || strings.Contains(res, `"errshow": 9`) {
 				result = "redirect"
 			} else {
 				result = "abnormal"

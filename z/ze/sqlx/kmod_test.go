@@ -53,7 +53,7 @@ func genDB() *sqlx.DB {
 		Driver: "mysql",
 		// DataSource: "xxx:xxx@tcp(mysql.base.svc:3306)/cfg?charset=utf8&parseTime=True&loc=Asia%2FShanghai",
 	}
-	dss, err := os.ReadFile("../../../doc/__zgg.zmy.txt")
+	dss, err := os.ReadFile("../../../doc/__zgg.sql.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -226,18 +226,19 @@ func TestTx1(t *testing.T) {
 		Name: sqlx.NewString("test123456"),
 	}
 	// data.Version = sqlx.NewInt64(3)
-	ds := genDB()
+	dsc := sqlx.NewDsc(genDB())
 
-	err := sqlx.WithTx(ds, func(tx *sqlx.Tx) error {
-		err := repo.Update(&sqlx.Dsx{Ex: tx}, &data)
-		return err
+	err := dsc.WithTx(nil, func(tx sqlx.Dsc) error {
+		return tx.WithTx(nil, func(dx sqlx.Dsc) error {
+			return repo.Update(dx, &data)
+		})
 	})
 	if err != nil {
 		z.Println(err.Error())
 		return
 	}
 	data.Name.String = ""
-	repo.Getx(&sqlx.Dsx{Ex: ds}, 13, &data)
+	repo.Getx(dsc, 13, &data)
 	z.Println(z.ToStr2(data))
 }
 
@@ -250,19 +251,19 @@ func TestTx2(t *testing.T) {
 		Name: sqlx.NewString("test123456"),
 	}
 	data.Version = sqlx.NewInt64(4)
-	ds := genDB()
-	cx := context.TODO()
+	dsc := &sqlx.Dsx{Ex: genDB(), Cx: context.TODO()}
 
-	err := sqlx.WithTxCtx(ds, cx, nil, func(tx *sqlx.Tx) error {
-		err := repo.Update(&sqlx.Dsx{Ex: tx, Cx: cx}, &data)
-		return err
+	err := dsc.WithTx(nil, func(tx sqlx.Dsc) error {
+		return tx.WithTx(nil, func(dx sqlx.Dsc) error {
+			return repo.Update(dx, &data)
+		})
 	})
 	if err != nil {
 		z.Println(err.Error())
 		return
 	}
 	data.Name.String = ""
-	repo.Getx(&sqlx.Dsx{Ex: ds, Cx: cx}, 13, &data)
+	repo.Getx(dsc, 13, &data)
 	z.Println(z.ToStr2(data))
 }
 
