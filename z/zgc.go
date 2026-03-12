@@ -149,6 +149,43 @@ func NewCtx(svckit SvcKit, request *http.Request, writer http.ResponseWriter, ro
 	return ctx
 }
 
+// 清理访问资源
+func (ctx *Ctx) Clear() {
+	ctx.Cancel()
+	// 重点是清除指针，防止内存泄漏，
+	// 因此如果是延迟或多线程处理时候，一定要 Clone Ctx, 否则无法在请求结束后使用
+	ctx.Ctx = nil
+	ctx.Cancel = nil
+	ctx.SvcKit = nil
+	ctx.Caches = nil
+	ctx.Params = nil
+	ctx.Request = nil
+	ctx.Writer = nil
+}
+
+// 克隆上下文函数
+func (ctx *Ctx) Clone(hasContext, hasRequest bool) *Ctx {
+	clo := Ctx{}
+	if hasContext {
+		clo.Ctx = ctx.Ctx
+		clo.Cancel = ctx.Cancel
+	}
+	clo.SvcKit = ctx.SvcKit
+	clo.Action = ctx.Action
+	clo.Caches = ctx.Caches
+	clo.ReqType = ctx.ReqType
+	clo.TraceID = ctx.TraceID
+	clo._router = ctx._router
+	// 拷贝参数
+	if hasRequest {
+		clo.Params = ctx.Params
+		clo.Request = ctx.Request
+		clo.Writer = ctx.Writer
+		clo._abort = ctx._abort
+	}
+	return &clo
+}
+
 // 获取请求 action
 // 1. 优先使用 query.action
 // 2. 其次使用 path[1:] 作为 action, 注意，如果需要补全path， 需要增加 /

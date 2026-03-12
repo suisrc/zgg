@@ -48,7 +48,7 @@ func (aa *RdxRouter) Handle(method, action string, handle z.HandleFunc) {
 	aa.Router.Handle(method, path, func(rw http.ResponseWriter, rr *http.Request, ps Params) {
 		ctx := z.NewCtx(aa.svckit, rr, rw, aa.name)
 		ctx.Params = ps.ByName
-		defer ctx.Cancel()
+		defer ctx.Clear()
 		handle(ctx)
 	})
 }

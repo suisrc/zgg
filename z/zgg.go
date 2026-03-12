@@ -542,7 +542,7 @@ func (aa *MapRouter) GetHandle(method, action string) (HandleFunc, bool) {
 func (aa *MapRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	// 查询并执行业务 Action
 	ctx := NewCtx(aa.svckit, rr, rw, aa.name)
-	defer ctx.Cancel() // 确保取消
+	defer ctx.Clear() // 确保取消
 	if ctx.Action == "healthz" {
 		// 健康健康高优先级， 直接出发检索
 		Healthz(ctx)
@@ -593,7 +593,7 @@ func (aa *MuxRouter) Handle(method, action string, handle HandleFunc) {
 	}
 	aa.Router.HandleFunc(pattern, func(rw http.ResponseWriter, rr *http.Request) {
 		ctx := NewCtx(aa.svckit, rr, rw, aa.name)
-		defer ctx.Cancel()
+		defer ctx.Clear()
 		handle(ctx)
 	})
 }
