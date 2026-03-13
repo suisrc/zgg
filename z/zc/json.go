@@ -123,7 +123,7 @@ func TrimYamlString(str string) string {
 
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
-	val := MapItr(src, key, false, true, nil)
+	val := MapItr(src, key, false, nil)
 	if val == nil {
 		return def
 	}
@@ -135,19 +135,19 @@ func MapDef[T any](src map[string]any, key string, def T) T {
 
 // 将任意类型转换为 T 类型, 尽量转换， 这里处理了 string 和 number bool 类型间的附加关系
 func MapAny[T any](src map[string]any, key string, def T) T {
-	val := MapItr(src, key, false, true, nil)
+	val := MapItr(src, key, false, nil)
 	return ToAny(val, def)
 }
 
 // 将任意类型转换为 int 类型
 func MapInt(src map[string]any, key string, def int) int {
-	val := MapItr(src, key, false, true, nil)
+	val := MapItr(src, key, false, nil)
 	return ToInt(val, def)
 }
 
 // 从 map 中获取字段的值， 原始数据， 同 MapItr(src, key, false, nil) 操作
 func MapGet(src map[string]any, key string) any {
-	return MapItr(src, key, false, true, nil)
+	return MapItr(src, key, false, nil)
 }
 
 // 从 map 中获取字段的值， 获取所有匹配的数据
@@ -158,157 +158,145 @@ func MapAll(src map[string]any, key string) []any {
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段
 // 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增
 func MapSet(src map[string]any, key string, val any) any {
-	return MapItr(src, key, false, true, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
+	return MapItr(src, key, false, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
 }
 
 // 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
 // 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径
 // -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险
 func MapNew(src map[string]any, key string, val any) any {
-	return MapItr(src, key, val != nil, true, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
+	return MapItr(src, key, val != nil, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
 }
 
 // 支持 key=containers.-1.env.[.name=EXT_CFG_HOST].value， Iterator or Traverse
 // cover: = 0 忽略， > 1 覆盖， < 0 删除,
 // fnk: fix path value, 修复路径上的所有值,
 // one: true, 只处理第一个 默认， false: 处理所有, 数据通过 vfn 回调， 返回值是最后一个遍历的值。
-func MapItr(src any, key string, fpv, one bool, vfn func(any) (value any, cover int8)) any {
+func MapItr(src any, key string, fpv bool, vfn func(any) (value any, cover int8)) any {
 	paths := MapParserPaths(key) // strings.Split(key, ".")
-	// z.Println("[_mapkey_]: map traverse: keys=", keys)
 	last := len(paths) - 1
 	curr := src
-	var mvfn func(any) = nil
+	var vset func(any) = nil
 	for indx, ikey := range paths {
 		if curr == nil {
 			return nil
 		}
-		if m, ok := curr.(map[any]any); ok {
-			for _, mk := range FindByFieldInMap(m, ikey, one) {
-				curr, _ = m[mk]
-				if indx == last && vfn != nil {
-					if v, r := vfn(curr); r > 0 {
-						m[mk] = v
-					} else if r < 0 {
-						delete(m, mk)
-					}
-				} else if curr == nil && fpv && indx < last {
-					// 未到末尾，已经没有值了， 创建字段
-					if next := paths[indx+1]; next == "-0" {
-						curr = []any{}
-						m[mk] = curr // 创建数组
-					} else {
-						curr = map[string]any{}
-						m[mk] = curr // 创建字段
-					}
-				}
-				mvfn = func(v any) { m[mk] = v }
+		if mm, ok := curr.(map[any]any); ok {
+			mk := any(ikey)
+			if mks := FindByFieldInMap(mm, ikey, true); len(mks) > 0 {
+				mk = mks[0]
 			}
-		} else if m, ok := curr.(map[string]any); ok {
-			for _, mk := range FindByFieldInMap(m, ikey, one) {
-				curr, _ = m[mk] // 通过 key 获取内容
-				if indx == last && vfn != nil {
-					if v, r := vfn(curr); r > 0 {
-						m[mk] = v
-					} else if r < 0 {
-						delete(m, mk)
-					}
-				} else if curr == nil && fpv && indx < last {
-					// 未到末尾，已经没有值了， 创建字段
-					if next := paths[indx+1]; next == "-0" {
-						curr = []any{}
-						m[mk] = curr // 创建数组
-					} else {
-						curr = map[string]any{}
-						m[mk] = curr // 创建字段
-					}
+			curr, _ = mm[mk]
+			if indx == last && vfn != nil {
+				if v, r := vfn(curr); r > 0 {
+					mm[mk] = v
+				} else if r < 0 {
+					delete(mm, mk)
 				}
-				mvfn = func(v any) { m[mk] = v }
+			} else if curr == nil && fpv && indx < last {
+				// 未到末尾，已经没有值了， 创建字段
+				if next := paths[indx+1]; next == "-0" {
+					curr = []any{}
+					mm[mk] = curr // 创建数组
+				} else {
+					curr = map[string]any{}
+					mm[mk] = curr // 创建字段
+				}
 			}
-		} else if a, ok := curr.([]any); ok {
+			vset = func(v any) { mm[mk] = v }
+		} else if mm, ok := curr.(map[string]any); ok {
+			mk := ikey
+			if mks := FindByFieldInMap(mm, ikey, true); len(mks) > 0 {
+				mk = mks[0]
+			}
+			curr, _ = mm[mk] // 通过 key 获取内容
+			if indx == last && vfn != nil {
+				if v, r := vfn(curr); r > 0 {
+					mm[mk] = v
+				} else if r < 0 {
+					delete(mm, mk)
+				}
+			} else if curr == nil && fpv && indx < last {
+				// 未到末尾，已经没有值了， 创建字段
+				if next := paths[indx+1]; next == "-0" {
+					curr = []any{}
+					mm[mk] = curr // 创建数组
+				} else {
+					curr = map[string]any{}
+					mm[mk] = curr // 创建字段
+				}
+			}
+			vset = func(v any) { mm[mk] = v }
+		} else if aa, ok := curr.([]any); ok {
 			curr = nil
-			var avfn func(int) = nil
-			if ikey != "-0" && indx == last && vfn != nil {
-				avfn = func(i int) {
-					if v, r := vfn(a[i]); r > 0 {
-						a[i] = v // 更新字段
-						// mvfn = nil // 无需调用
-					} else if r < 0 {
-						if i == 0 {
-							a = a[1:] // 删除第一个
-						} else if i == len(a)-1 {
-							a = a[:i] // 删除最后一个
-						} else {
-							a = append(a[:i], a[i+1:]...) // 中间删除
-						}
-						if mvfn != nil {
-							mvfn(a)
-						}
-					}
-					mvfn = nil // 清理上级关联
-				}
-			}
 			if ikey == "-0" {
 				// 末尾追加数据
 				if indx == last && vfn != nil {
 					if v, r := vfn(nil); r > 0 {
-						a = append(a, v)
-						if mvfn != nil {
-							mvfn(a)
+						aa = append(aa, v)
+						if vset != nil {
+							vset(aa)
 						}
-						i := len(a) - 1
-						mvfn = func(v any) { a[i] = v }
+						i := len(aa) - 1
+						vset = func(v any) { aa[i] = v }
 					}
 				} else if fpv && indx < last {
 					// 未到末尾，已经没有值了， 创建字段
 					if next := paths[indx+1]; next == "-0" {
 						curr = []any{}
-						a = append(a, curr) // 创建数组
-						if mvfn != nil {
-							mvfn(a)
-						}
-						i := len(a) - 1
-						mvfn = func(v any) { a[i] = v }
+						aa = append(aa, curr) // 创建数组
 					} else {
 						curr = map[string]any{}
-						a = append(a, curr) // 创建字段
-						if mvfn != nil {
-							mvfn(a)
-						}
-						i := len(a) - 1
-						mvfn = func(v any) { a[i] = v }
+						aa = append(aa, curr) // 创建字段
 					}
-				}
-			} else if strings.HasPrefix(ikey, "-") {
-				// 倒序检索数据
-				ak := ikey[1:]
-				if i, err := strconv.Atoi(ak); err != nil {
-					// 数字转换失败
-				} else if i > 0 && i <= len(a) { // 倒序检索
-					j := len(a) - i
-					curr = a[j]
-					if avfn != nil {
-						avfn(j)
+					if vset != nil {
+						vset(aa)
 					}
-					mvfn = func(v any) { a[j] = v }
-				}
-			} else if strings.HasPrefix(ikey, ".") {
-				// 通过属性检索数据
-				for _, i := range FindByFieldInArr(a, ikey, one) {
-					curr = a[i]
-					if avfn != nil {
-						avfn(i)
-					}
-					mvfn = func(v any) { a[i] = v }
+					ai := len(aa) - 1
+					vset = func(v any) { aa[ai] = v }
 				}
 			} else {
-				if i, err := strconv.Atoi(ikey); err != nil {
-					// 数字转换失败
-				} else if i < len(a) {
-					curr = a[i]
-					if avfn != nil {
-						avfn(i)
+				ai := -1
+				if strings.HasPrefix(ikey, "-") {
+					// 倒序检索数据
+					ak := ikey[1:]
+					if i, err := strconv.Atoi(ak); err != nil {
+						// 数字转换失败
+					} else if i > 0 && i <= len(aa) { // 倒序检索
+						ai = len(aa) - i
 					}
-					mvfn = func(v any) { a[i] = v }
+				} else if strings.HasPrefix(ikey, ".") {
+					// 通过属性检索数据
+					ais := FindByFieldInArr(aa, ikey, true)
+					if len(ais) > 0 {
+						ai = ais[0]
+					}
+				} else {
+					if i, err := strconv.Atoi(ikey); err != nil {
+						// 数字转换失败
+					} else if i >= 0 && i < len(aa) {
+						ai = i
+					}
+				}
+				if ai >= 0 {
+					curr = aa[ai]
+					if indx == last && vfn != nil {
+						if v, r := vfn(aa[ai]); r > 0 {
+							aa[ai] = v // 更新字段
+						} else if r < 0 {
+							if ai == 0 {
+								aa = aa[1:] // 删除第一个
+							} else if ai == len(aa)-1 {
+								aa = aa[:ai] // 删除最后一个
+							} else {
+								aa = append(aa[:ai], aa[ai+1:]...) // 中间删除
+							}
+							if vset != nil {
+								vset(aa)
+							}
+						}
+					}
+					vset = func(v any) { aa[ai] = v }
 				}
 			}
 		} else {
