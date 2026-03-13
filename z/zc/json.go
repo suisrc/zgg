@@ -123,7 +123,7 @@ func TrimYamlString(str string) string {
 
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
-	val := MapTraverse(src, key, false, nil)
+	val := MapItr(src, key, false, nil)
 	if val == nil {
 		return def
 	}
@@ -135,33 +135,36 @@ func MapDef[T any](src map[string]any, key string, def T) T {
 
 // 将任意类型转换为 T 类型, 尽量转换， 这里处理了 string 和 number bool 类型间的附加关系
 func MapAny[T any](src map[string]any, key string, def T) T {
-	val := MapTraverse(src, key, false, nil)
+	val := MapItr(src, key, false, nil)
 	return ToAny(val, def)
 }
 
 // 将任意类型转换为 int 类型
 func MapInt(src map[string]any, key string, def int) int {
-	val := MapTraverse(src, key, false, nil)
+	val := MapItr(src, key, false, nil)
 	return ToInt(val, def)
 }
 
-// 从 map 中获取字段
-func MapKey(src map[string]any, key string) any {
-	return MapTraverse(src, key, false, nil)
+// 从 map 中获取字段的值， 原始数据， 同 MapItr(src, key, false, nil) 操作
+func MapVal(src map[string]any, key string) any {
+	return MapItr(src, key, false, nil)
 }
 
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段
-func MapVal(src map[string]any, key string, val any) any {
-	return MapTraverse(src, key, false, func() any { return val })
+// 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增
+func MapSet(src map[string]any, key string, val any) any {
+	return MapItr(src, key, false, func() any { return val })
 }
 
-// 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil， 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段
-func MapVaz(src map[string]any, key string, val any) any {
-	return MapTraverse(src, key, val != nil, func() any { return val })
+// 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
+// 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径
+// -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险
+func MapNew(src map[string]any, key string, val any) any {
+	return MapItr(src, key, val != nil, func() any { return val })
 }
 
-// 支持 key=containers.-1.env.[.name=EXT_CFG_HOST].value
-func MapTraverse(src any, key string, nok bool, vfn func() any) any {
+// 支持 key=containers.-1.env.[.name=EXT_CFG_HOST].value， Iterator or Traverse
+func MapItr(src any, key string, nok bool, vfn func() any) any {
 	paths := MapParserPaths(key) // strings.Split(key, ".")
 	// z.Println("[_mapkey_]: map traverse: keys=", keys)
 	last := len(paths) - 1
@@ -172,7 +175,7 @@ func MapTraverse(src any, key string, nok bool, vfn func() any) any {
 			return nil
 		}
 		if m, ok := curr.(map[any]any); ok {
-			mk := MapFindByField(m, ikey, any(ikey))
+			mk := FindByFieldInMap(m, ikey, any(ikey))
 			curr, _ = m[mk]
 			if indx == last && vfn != nil {
 				if v := vfn(); v != nil {
@@ -192,7 +195,7 @@ func MapTraverse(src any, key string, nok bool, vfn func() any) any {
 			}
 			mvfn = func(v any) { m[mk] = v }
 		} else if m, ok := curr.(map[string]any); ok {
-			mk := MapFindByField(m, ikey, ikey)
+			mk := FindByFieldInMap(m, ikey, ikey)
 			curr, _ = m[mk] // 通过 key 获取内容
 			if indx == last && vfn != nil {
 				if v := vfn(); v != nil {
@@ -277,7 +280,7 @@ func MapTraverse(src any, key string, nok bool, vfn func() any) any {
 				}
 			} else if strings.HasPrefix(ikey, ".") {
 				// 通过属性检索数据
-				if i := ArrFindByField(a, ikey); i >= 0 {
+				if i := FindByFieldInArr(a, ikey); i >= 0 {
 					curr = a[i]
 					if avfn != nil {
 						avfn(i)
@@ -379,7 +382,8 @@ func MapParserPath2(path string) []string {
 	}
 }
 
-func MapFindByField[K comparable](src map[K]any, key string, def K) K {
+// 从源 map 中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
+func FindByFieldInMap[K comparable](src map[K]any, key string, def K) K {
 	if len(key) == 0 || key[0] != '.' || strings.IndexByte(key, '=') <= 0 {
 		return def
 	}
@@ -409,7 +413,8 @@ func MapFindByField[K comparable](src map[K]any, key string, def K) K {
 	return def
 }
 
-func ArrFindByField(src []any, key string) int {
+// 从数组中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
+func FindByFieldInArr(src []any, key string) int {
 	if len(key) == 0 || key[0] != '.' || strings.IndexByte(key, '=') <= 0 {
 		return -1
 	}
@@ -441,6 +446,7 @@ func ArrFindByField(src []any, key string) int {
 
 // ---------------------------------------------------------------------------------------
 
+// any 转换为指定类型
 func ToAny[T any](val any, def T) T {
 	if val == nil {
 		return def
@@ -505,6 +511,7 @@ func ToAny[T any](val any, def T) T {
 	return def
 }
 
+// any 转换为 int
 func ToInt(val any, def int) int {
 	if val == nil {
 		return def
