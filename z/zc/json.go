@@ -123,7 +123,7 @@ func TrimYamlString(str string) string {
 
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
-	val := MapItr(src, key, false, nil)
+	val := MapItr(src, key, false, true, nil)
 	if val == nil {
 		return def
 	}
@@ -135,36 +135,44 @@ func MapDef[T any](src map[string]any, key string, def T) T {
 
 // 将任意类型转换为 T 类型, 尽量转换， 这里处理了 string 和 number bool 类型间的附加关系
 func MapAny[T any](src map[string]any, key string, def T) T {
-	val := MapItr(src, key, false, nil)
+	val := MapItr(src, key, false, true, nil)
 	return ToAny(val, def)
 }
 
 // 将任意类型转换为 int 类型
 func MapInt(src map[string]any, key string, def int) int {
-	val := MapItr(src, key, false, nil)
+	val := MapItr(src, key, false, true, nil)
 	return ToInt(val, def)
 }
 
 // 从 map 中获取字段的值， 原始数据， 同 MapItr(src, key, false, nil) 操作
-func MapVal(src map[string]any, key string) any {
-	return MapItr(src, key, false, nil)
+func MapGet(src map[string]any, key string) any {
+	return MapItr(src, key, false, true, nil)
+}
+
+// 从 map 中获取字段的值， 获取所有匹配的数据
+func MapAll(src map[string]any, key string) []any {
+	return nil
 }
 
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段
 // 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增
 func MapSet(src map[string]any, key string, val any) any {
-	return MapItr(src, key, false, func() any { return val })
+	return MapItr(src, key, false, true, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
 }
 
 // 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
 // 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径
 // -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险
 func MapNew(src map[string]any, key string, val any) any {
-	return MapItr(src, key, val != nil, func() any { return val })
+	return MapItr(src, key, val != nil, true, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
 }
 
 // 支持 key=containers.-1.env.[.name=EXT_CFG_HOST].value， Iterator or Traverse
-func MapItr(src any, key string, nok bool, vfn func() any) any {
+// cover: = 0 忽略， > 1 覆盖， < 0 删除,
+// fnk: fix path value, 修复路径上的所有值,
+// one: true, 只处理第一个 默认， false: 处理所有, 数据通过 vfn 回调， 返回值是最后一个遍历的值。
+func MapItr(src any, key string, fpv, one bool, vfn func(any) (value any, cover int8)) any {
 	paths := MapParserPaths(key) // strings.Split(key, ".")
 	// z.Println("[_mapkey_]: map traverse: keys=", keys)
 	last := len(paths) - 1
@@ -175,69 +183,74 @@ func MapItr(src any, key string, nok bool, vfn func() any) any {
 			return nil
 		}
 		if m, ok := curr.(map[any]any); ok {
-			mk := FindByFieldInMap(m, ikey, any(ikey))
-			curr, _ = m[mk]
-			if indx == last && vfn != nil {
-				if v := vfn(); v != nil {
-					m[mk] = v
-				} else {
-					delete(m, mk)
+			for _, mk := range FindByFieldInMap(m, ikey, one) {
+				curr, _ = m[mk]
+				if indx == last && vfn != nil {
+					if v, r := vfn(curr); r > 0 {
+						m[mk] = v
+					} else if r < 0 {
+						delete(m, mk)
+					}
+				} else if curr == nil && fpv && indx < last {
+					// 未到末尾，已经没有值了， 创建字段
+					if next := paths[indx+1]; next == "-0" {
+						curr = []any{}
+						m[mk] = curr // 创建数组
+					} else {
+						curr = map[string]any{}
+						m[mk] = curr // 创建字段
+					}
 				}
-			} else if curr == nil && nok && indx < last {
-				// 未到末尾，已经没有值了， 创建字段
-				if next := paths[indx+1]; next == "-0" {
-					curr = []any{}
-					m[mk] = curr // 创建数组
-				} else {
-					curr = map[string]any{}
-					m[mk] = curr // 创建字段
-				}
+				mvfn = func(v any) { m[mk] = v }
 			}
-			mvfn = func(v any) { m[mk] = v }
 		} else if m, ok := curr.(map[string]any); ok {
-			mk := FindByFieldInMap(m, ikey, ikey)
-			curr, _ = m[mk] // 通过 key 获取内容
-			if indx == last && vfn != nil {
-				if v := vfn(); v != nil {
-					m[mk] = v
-				} else {
-					delete(m, mk)
+			for _, mk := range FindByFieldInMap(m, ikey, one) {
+				curr, _ = m[mk] // 通过 key 获取内容
+				if indx == last && vfn != nil {
+					if v, r := vfn(curr); r > 0 {
+						m[mk] = v
+					} else if r < 0 {
+						delete(m, mk)
+					}
+				} else if curr == nil && fpv && indx < last {
+					// 未到末尾，已经没有值了， 创建字段
+					if next := paths[indx+1]; next == "-0" {
+						curr = []any{}
+						m[mk] = curr // 创建数组
+					} else {
+						curr = map[string]any{}
+						m[mk] = curr // 创建字段
+					}
 				}
-			} else if curr == nil && nok && indx < last {
-				// 未到末尾，已经没有值了， 创建字段
-				if next := paths[indx+1]; next == "-0" {
-					curr = []any{}
-					m[mk] = curr // 创建数组
-				} else {
-					curr = map[string]any{}
-					m[mk] = curr // 创建字段
-				}
+				mvfn = func(v any) { m[mk] = v }
 			}
-			mvfn = func(v any) { m[mk] = v }
 		} else if a, ok := curr.([]any); ok {
 			curr = nil
 			var avfn func(int) = nil
 			if ikey != "-0" && indx == last && vfn != nil {
 				avfn = func(i int) {
-					if v := vfn(); v != nil {
-						a[i] = v   // 更新字段
-						mvfn = nil // 无需调用
-					} else if i == 0 {
-						a = a[1:] // 删除第一个
-					} else if i == len(a)-1 {
-						a = a[:i] // 删除最后一个
-					} else {
-						a = append(a[:i], a[i+1:]...) // 中间删除
+					if v, r := vfn(a[i]); r > 0 {
+						a[i] = v // 更新字段
+						// mvfn = nil // 无需调用
+					} else if r < 0 {
+						if i == 0 {
+							a = a[1:] // 删除第一个
+						} else if i == len(a)-1 {
+							a = a[:i] // 删除最后一个
+						} else {
+							a = append(a[:i], a[i+1:]...) // 中间删除
+						}
+						if mvfn != nil {
+							mvfn(a)
+						}
 					}
-					if mvfn != nil {
-						mvfn(a)
-					}
+					mvfn = nil // 清理上级关联
 				}
 			}
 			if ikey == "-0" {
 				// 末尾追加数据
 				if indx == last && vfn != nil {
-					if v := vfn(); v != nil {
+					if v, r := vfn(nil); r > 0 {
 						a = append(a, v)
 						if mvfn != nil {
 							mvfn(a)
@@ -245,7 +258,7 @@ func MapItr(src any, key string, nok bool, vfn func() any) any {
 						i := len(a) - 1
 						mvfn = func(v any) { a[i] = v }
 					}
-				} else if nok && indx < last {
+				} else if fpv && indx < last {
 					// 未到末尾，已经没有值了， 创建字段
 					if next := paths[indx+1]; next == "-0" {
 						curr = []any{}
@@ -280,7 +293,7 @@ func MapItr(src any, key string, nok bool, vfn func() any) any {
 				}
 			} else if strings.HasPrefix(ikey, ".") {
 				// 通过属性检索数据
-				if i := FindByFieldInArr(a, ikey); i >= 0 {
+				for _, i := range FindByFieldInArr(a, ikey, one) {
 					curr = a[i]
 					if avfn != nil {
 						avfn(i)
@@ -383,9 +396,17 @@ func MapParserPath2(path string) []string {
 }
 
 // 从源 map 中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
-func FindByFieldInMap[K comparable](src map[K]any, key string, def K) K {
+func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
+	ks := []K{}
+	if key == "*" {
+		// 匹配所有字段
+		for k := range src {
+			ks = append(ks, k)
+		}
+		return ks
+	}
 	if len(key) == 0 || key[0] != '.' || strings.IndexByte(key, '=') <= 0 {
-		return def
+		return ks
 	}
 	// 使用属性匹配进行查询
 	k2 := strings.SplitN(key[1:], "=", 2)
@@ -403,20 +424,36 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, def K) K {
 		if v3 == nil {
 			continue // 没有属性
 		} else if v3 == k2[1] {
-			return ck // 匹配到结果, 替换原有的 key
+			// 匹配到结果
+			ks = append(ks, ck)
+			if one {
+				break
+			}
 		} else if kre == nil {
 			continue // 没有正则
 		} else if str, sok := v3.(string); sok && kre.MatchString(str) {
-			return ck // 匹配到结果, 替换原有的 key
+			// 匹配到结果
+			ks = append(ks, ck)
+			if one {
+				break
+			}
 		}
 	}
-	return def
+	return ks
 }
 
 // 从数组中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
-func FindByFieldInArr(src []any, key string) int {
+func FindByFieldInArr(src []any, key string, one bool) []int {
+	ks := []int{}
+	if key == "*" {
+		// 匹配所有
+		for i := range src {
+			ks = append(ks, i)
+		}
+		return ks
+	}
 	if len(key) == 0 || key[0] != '.' || strings.IndexByte(key, '=') <= 0 {
-		return -1
+		return ks
 	}
 	// 通过属性检索数据
 	k2 := strings.SplitN(key[1:], "=", 2)
@@ -434,14 +471,22 @@ func FindByFieldInArr(src []any, key string) int {
 		if v3 == nil {
 			continue
 		} else if v3 == k2[1] {
-			return i // 匹配到结果
+			// 匹配到结果
+			ks = append(ks, i)
+			if one {
+				break
+			}
 		} else if kre == nil {
 			continue
 		} else if str, sok := v3.(string); sok && kre.MatchString(str) {
-			return i // 匹配到结果
+			// 匹配到结果
+			ks = append(ks, i)
+			if one {
+				break
+			}
 		}
 	}
-	return -1
+	return ks
 }
 
 // ---------------------------------------------------------------------------------------

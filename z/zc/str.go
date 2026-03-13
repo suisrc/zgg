@@ -16,6 +16,13 @@ import (
 	"unicode"
 )
 
+func If[T any](val bool, tval, fval T) T {
+	if val {
+		return tval
+	}
+	return fval
+}
+
 func EqualFold(s, t string) bool {
 	if len(s) != len(t) {
 		return false

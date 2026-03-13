@@ -48,5 +48,5 @@ func Test_map(t *testing.T) {
 	t.Log("=================== ", zc.MapSet(dmap, "a.b.d", nil))
 	t.Log(z.ToStr2(dmap))
 	t.Log("=================== ", zc.MapAny(dmap, "a.b.x.y.1.[.z=^*.6].z", 0))
-	t.Log("=================== ", zc.MapVal(dmap, "a.b.[.j=^*.2].j"))
+	t.Log("=================== ", zc.MapGet(dmap, "a.b.[.j=^*.2].j"))
 }
