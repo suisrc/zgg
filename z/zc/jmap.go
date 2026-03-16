@@ -215,8 +215,8 @@ func MapItr(src any, key string, fpv bool, vfn func(any) (value any, cover int8)
 // ---------------------------------------------------------------------------------------
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
-// MapKeyStr 和 MapKeyVal 功能相同。基于测试，MapKeyStr效率会更好一些， 百万次查询，相差4s左右。
-func MapKeyStr(src any, key string) map[string]any {
+// MapKeyVar 和 MapKeyVal 功能相同。基于测试， MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
+func MapKeyVal(src any, key string) map[string]any {
 	if src == nil {
 		return map[string]any{}
 	}
@@ -404,8 +404,8 @@ func MapKeyItr(src any, keys ...string) map[string]any {
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
-// MapKeyStr 和 MapKeyVal 功能相同。基于测试，MapKeyStr效率会更好一些， 百万次查询，相差4s左右。
-func MapKeyVal(src any, key string) map[string]any {
+// MapKeyVar 和 MapKeyVal 功能相同。基于测试，MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
+func MapKeyVar(src any, key string) map[string]any {
 	if src == nil {
 		return map[string]any{}
 	}
@@ -647,22 +647,14 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
 	}
 	for ck, v := range src {
 		var v3 any
-		if v2, ok := v.(map[string]any); ok {
+		if k2[0] == "" {
+			v3 = v
+		} else if v2, ok := v.(map[string]any); ok {
 			v3, _ = v2[k2[0]]
 		} else if v2, ok := v.(map[any]any); ok {
 			v3, _ = v2[k2[0]]
 		}
-		if v3 == nil {
-			continue // 没有属性
-		} else if v3 == k2[1] {
-			// 匹配到结果
-			ks = append(ks, ck)
-			if one {
-				break
-			}
-		} else if kre == nil {
-			continue // 没有正则
-		} else if str, sok := v3.(string); sok && kre.MatchString(str) {
+		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
 			// 匹配到结果
 			ks = append(ks, ck)
 			if one {
@@ -671,6 +663,110 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
 		}
 	}
 	return ks
+}
+
+// 执行内容匹配， 暂时只支持 int, int64, float64, string, bool 类型
+func IsMatchByField(val any, src string, kre *regexp.Regexp) bool {
+	if src == val {
+		return true
+	}
+	switch val := val.(type) {
+	case string:
+		if siz := len(src); siz > 1 && src[0] == '\'' && src[siz-1] == '\'' && val == src[1:siz-1] {
+			return true // 特殊写法，只匹配字符串情况
+		}
+		if kre != nil && kre.MatchString(val) {
+			return true
+		}
+		// if len(src) > 0 && src[0] == '~' {
+		// 	return strings.Contains(val, src[1:])
+		// }
+	case bool:
+		if src == "true" || src == "false" {
+			return val == (src == "true")
+		}
+	case int:
+		key := strings.TrimPrefix(src, "int.") // 解决类型匹配问题
+		if len(key) > 0 {
+			if key[0] == '>' {
+				if num, err := strconv.Atoi(key[1:]); err == nil && val > num {
+					return true
+				}
+			} else if key[0] == '<' {
+				if num, err := strconv.Atoi(key[1:]); err == nil && val < num {
+					return true
+				}
+			} else if num, err := strconv.Atoi(key); err == nil && val == num {
+				return true
+			}
+		}
+	// 暂时 忽略 int8 和 int16, 减少计算量， 简化判断逻辑
+	case int32:
+		key := strings.TrimPrefix(src, "i32.") // 解决类型匹配问题
+		if len(key) > 0 {
+			if key[0] == '>' {
+				if num, err := strconv.ParseInt(key[1:], 10, 64); err == nil && int64(val) > num {
+					return true
+				}
+			} else if key[0] == '<' {
+				if num, err := strconv.ParseInt(key[1:], 10, 64); err == nil && int64(val) < num {
+					return true
+				}
+			} else if num, err := strconv.ParseInt(key, 10, 64); err == nil && int64(val) == num {
+				return true
+			}
+		}
+	case int64:
+		key := strings.TrimPrefix(src, "i64.") // 解决类型匹配问题
+		if len(key) > 0 {
+			if key[0] == '>' {
+				if num, err := strconv.ParseInt(key[1:], 10, 64); err == nil && val > num {
+					return true
+				}
+			} else if key[0] == '<' {
+				if num, err := strconv.ParseInt(key[1:], 10, 64); err == nil && val < num {
+					return true
+				}
+			} else if num, err := strconv.ParseInt(key, 10, 64); err == nil && val == num {
+				return true
+			}
+		}
+	case float32:
+		key := strings.TrimPrefix(src, "f32.") // 解决类型匹配问题
+		if len(key) > 0 {
+			if key[0] == '>' {
+				if num, err := strconv.ParseFloat(key[1:], 64); err == nil && float64(val) > num {
+					return true
+				}
+			} else if key[0] == '<' {
+				if num, err := strconv.ParseFloat(key[1:], 64); err == nil && float64(val) < num {
+					return true
+				}
+			} else if num, err := strconv.ParseFloat(key, 64); err == nil && float64(val) == num {
+				return true
+			}
+		}
+	case float64:
+		// 在反序列化，存在 int, int64 -> float64 情况, 暂时不考虑这种情况的出现
+		// if strings.HasPrefix(src, "int.") || strings.HasPrefix(src, "i64.") {
+		// 	key = src[4:] // 修正这类问题， 强制使用 float64， 匹配， 暂时为决定引入此条规则
+		// }
+		key := strings.TrimPrefix(src, "f64.") // 解决类型匹配问题
+		if len(key) > 0 {
+			if key[0] == '>' {
+				if num, err := strconv.ParseFloat(key[1:], 64); err == nil && val > num {
+					return true
+				}
+			} else if key[0] == '<' {
+				if num, err := strconv.ParseFloat(key[1:], 64); err == nil && val < num {
+					return true
+				}
+			} else if num, err := strconv.ParseFloat(key, 64); err == nil && val == num {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // 从数组中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
@@ -698,22 +794,14 @@ func FindByFieldInArr(src []any, key string, one bool) []int {
 	}
 	for i, v := range src {
 		var v3 any = nil
-		if v2, ok := v.(map[string]any); ok {
+		if k2[0] == "" {
+			v3 = v
+		} else if v2, ok := v.(map[string]any); ok {
 			v3, _ = v2[k2[0]]
 		} else if v2, ok := v.(map[any]any); ok {
 			v3, _ = v2[k2[0]]
 		}
-		if v3 == nil {
-			continue
-		} else if v3 == k2[1] {
-			// 匹配到结果
-			ks = append(ks, i)
-			if one {
-				break
-			}
-		} else if kre == nil {
-			continue
-		} else if str, sok := v3.(string); sok && kre.MatchString(str) {
+		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
 			// 匹配到结果
 			ks = append(ks, i)
 			if one {
