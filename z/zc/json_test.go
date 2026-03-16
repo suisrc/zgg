@@ -1,6 +1,7 @@
 package zc_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -204,4 +205,70 @@ func Test_map3(t *testing.T) {
 		zc.MapKeyVal(dmap, "a.b.?.*.j")
 	}
 	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
+}
+
+// go test -v z/zc/json_test.go -run Test_map4
+
+func Test_map4(t *testing.T) {
+	jsons := `
+  {
+    "apiVersion": "networking.k8s.io/v1",
+    "kind": "Ingress",
+    "metadata": {
+      "name": "account-irs",
+      "namespace": "rs-iam"
+    },
+    "spec": {
+      "rules": [
+        {
+          "host": "",
+          "http": {
+            "paths": [
+              {
+                "backend": {
+                  "service": {
+                    "name": "end-fmes-adv-svc",
+                    "port": {
+                      "name": "http"
+                    }
+                  }
+                },
+                "path": "/api/adv",
+                "pathType": "Prefix"
+              },
+              {
+                "backend": {
+                  "service": {
+                    "name": "fnt-iam-account-m1-svc",
+                    "port": {
+                      "name": "http"
+                    }
+                  }
+                },
+                "path": "/m1/",
+                "pathType": "Prefix"
+              },
+              {
+                "backend": {
+                  "service": {
+                    "name": "fnt-account-svc",
+                    "port": {
+                      "name": "http"
+                    }
+                  }
+                },
+                "path": "/",
+                "pathType": "Prefix"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }`
+	jsonv := map[string]any{}
+	json.Unmarshal([]byte(jsons), &jsonv)
+	// t.Log("=================== ", jsonv)
+	t.Log("=================== ", zc.MapKeyVal(jsonv, "spec.rules.*.http.paths.*.backend.service[.name=^fnt-].name"))
+	t.Log("=================== ", zc.MapKeyVal(jsonv, "spec.rules.*.http.paths.*.backend.service.name[.=^fnt-]"))
 }

@@ -342,10 +342,10 @@ func MapKeyItr(src any, keys ...string) map[string]any {
 				})
 			}
 		case []any:
+			matched := []item{}
 			if ikey == "-0" {
 				continue // 忽略-0
 			}
-			matched := []item{}
 			switch {
 			case strings.HasPrefix(ikey, "-"):
 				// 负索引倒序检索
@@ -361,9 +361,9 @@ func MapKeyItr(src any, keys ...string) map[string]any {
 					}
 					matched = append(matched, item{key, curVal})
 				}
-			case strings.HasPrefix(ikey, "."):
+			case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
 				// 按属性检索数组元素
-				ais := FindByFieldInArr(cur, ikey, true)
+				ais := FindByFieldInArr(cur, ikey, false)
 				for _, ai := range ais {
 					curVal := cur[ai]
 					key := strconv.Itoa(ai)
@@ -398,6 +398,7 @@ func MapKeyItr(src any, keys ...string) map[string]any {
 					onex: onex,
 				})
 			}
+			// default: println(reflect.TypeOf(cur))
 		}
 	}
 	return result
@@ -479,63 +480,62 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 			}
 		}
 	case []any:
-		if ikey == "-0" {
+		switch {
+		case ikey == "-0":
 			// ignore
-		} else {
-			if strings.HasPrefix(ikey, "-") {
-				// 倒序检索数据
-				ak := ikey[1:]
-				if i, err := strconv.Atoi(ak); err != nil {
-					// 数字转换失败
-				} else if i > 0 && i <= len(curr) { // 倒序检索
-					ai := len(curr) - i
-					cur := curr[ai]
-					key := strconv.Itoa(ai)
-					if path != "" {
-						key = path + "." + key
-					}
-					dst := MapKeyRec_(cur, key, keys...)
-					if one && len(dst) > 0 {
-						return dst // 找到一个就返回
-					}
-					for k, v := range dst {
-						dest[k] = v
-					}
+		case strings.HasPrefix(ikey, "-"):
+			// 倒序检索数据
+			ak := ikey[1:]
+			if i, err := strconv.Atoi(ak); err != nil {
+				// 数字转换失败
+			} else if i > 0 && i <= len(curr) { // 倒序检索
+				ai := len(curr) - i
+				cur := curr[ai]
+				key := strconv.Itoa(ai)
+				if path != "" {
+					key = path + "." + key
 				}
-			} else if strings.HasPrefix(ikey, ".") {
-				// 通过属性检索数据
-				ais := FindByFieldInArr(curr, ikey, true)
-				for _, ai := range ais {
-					cur := curr[ai]
-					key := strconv.Itoa(ai)
-					if path != "" {
-						key = path + "." + key
-					}
-					dst := MapKeyRec_(cur, key, keys...)
-					if one && len(dst) > 0 {
-						return dst // 找到一个就返回
-					}
-					for k, v := range dst {
-						dest[k] = v
-					}
+				dst := MapKeyRec_(cur, key, keys...)
+				if one && len(dst) > 0 {
+					return dst // 找到一个就返回
 				}
-			} else {
-				if i, err := strconv.Atoi(ikey); err != nil {
-					// 数字转换失败
-				} else if i >= 0 && i < len(curr) {
-					ai := i
-					cur := curr[ai]
-					key := strconv.Itoa(ai)
-					if path != "" {
-						key = path + "." + key
-					}
-					dst := MapKeyRec_(cur, key, keys...)
-					if one && len(dst) > 0 {
-						return dst // 找到一个就返回
-					}
-					for k, v := range dst {
-						dest[k] = v
-					}
+				for k, v := range dst {
+					dest[k] = v
+				}
+			}
+		case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
+			// 通过属性检索数据
+			ais := FindByFieldInArr(curr, ikey, false)
+			for _, ai := range ais {
+				cur := curr[ai]
+				key := strconv.Itoa(ai)
+				if path != "" {
+					key = path + "." + key
+				}
+				dst := MapKeyRec_(cur, key, keys...)
+				if one && len(dst) > 0 {
+					return dst // 找到一个就返回
+				}
+				for k, v := range dst {
+					dest[k] = v
+				}
+			}
+		default:
+			if i, err := strconv.Atoi(ikey); err != nil {
+				// 数字转换失败
+			} else if i >= 0 && i < len(curr) {
+				ai := i
+				cur := curr[ai]
+				key := strconv.Itoa(ai)
+				if path != "" {
+					key = path + "." + key
+				}
+				dst := MapKeyRec_(cur, key, keys...)
+				if one && len(dst) > 0 {
+					return dst // 找到一个就返回
+				}
+				for k, v := range dst {
+					dest[k] = v
 				}
 			}
 		}
@@ -546,80 +546,47 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 // ---------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------
 
-// 支持 key=x.[a.b.c].z.[.name=xxx].v 格式
+// 支持 key=x.[a.b.c].z.[.name=xxx].x[.name=zzz].v 格式
 func MapParserPaths(path string) []string {
-	// 循环方式实现
 	paths := []string{}
 	if path == "" {
 		return paths
 	}
-	curr := path
-	for len(curr) > 0 {
-		// 处理开头连续的点
-		if curr[0] == '.' {
-			curr = curr[1:]
-			continue
+	curr := []rune(path)
+	n := len(curr)
+	i := 0
+	for i < n {
+		// 跳过开头连续的点
+		for i < n && curr[i] == '.' {
+			i++
 		}
-		switch curr[0] {
-		case '[':
-			// 匹配方括号模式
-			idx := strings.IndexByte(curr, ']')
-			if idx < 0 {
-				// 没有匹配的右括号，直接添加剩余部分
-				paths = append(paths, curr)
-				curr = ""
-				continue
-			}
-			// 提取方括号内的内容
-			paths = append(paths, curr[1:idx])
-			// 跳过 ] 继续处理后续
-			curr = curr[idx+1:]
-		default:
-			// 匹配点分隔模式
-			idx := strings.IndexByte(curr, '.')
-			if idx < 0 {
-				// 没有后续点，添加剩余部分
-				paths = append(paths, curr)
-				curr = ""
-				continue
-			}
-			// 提取点前面的内容
-			paths = append(paths, curr[:idx])
-			// 跳过点继续处理后续
-			curr = curr[idx+1:]
+		if i >= n {
+			break
 		}
+		// 处理普通字符开头的段，支持后面跟方括号筛选条件
+		j := i
+		d := 0
+		for j < n {
+			if curr[j] == '[' {
+				d++
+			} else if curr[j] == ']' {
+				d--
+			} else if curr[j] == '.' && d == 0 {
+				// 不在方括号内的点才是分隔符
+				break
+			}
+			j++
+		}
+		// 提取完整路径段（包含后面的所有方括号筛选条件）
+		a := string(curr[i:j])
+		if s := len(a); s > 1 && a[0] == '[' && a[s-1] == ']' {
+			a = a[1 : s-1]
+		}
+		paths = append(paths, a)
+		i = j
 	}
+	// println(ToStr(paths))
 	return paths
-}
-
-// 推荐使用 MapParserPaths 函数， 原则循环优先于递归
-func MapParserPath2(path string) []string {
-	// 递归方式实现
-	if path == "" {
-		return []string{}
-	}
-	if path[0] == '.' {
-		path = path[1:] // 删除 .
-	}
-	if path == "" {
-		return []string{}
-	}
-	if path[0] == '[' {
-		if idx := strings.IndexByte(path, ']'); idx < 0 {
-			return []string{path} // 后面不存在 [ ] 了
-		} else {
-			curr := path[1:idx]
-			next := MapParserPath2(path[idx+1:])
-			return append([]string{curr}, next...)
-		}
-	}
-	if idx := strings.IndexByte(path, '.'); idx < 0 {
-		return []string{path} // 后面不存在 . 了
-	} else {
-		curr := path[:idx]
-		next := MapParserPath2(path[idx:])
-		return append([]string{curr}, next...) // slices.Insert()
-	}
 }
 
 // 从源 map 中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
@@ -636,11 +603,46 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
 		}
 		return ks
 	}
-	if len(key) == 0 || key[0] != '.' || strings.IndexByte(key, '=') <= 0 {
+	if len(key) == 0 || strings.IndexByte(key, '=') <= 0 {
+		return ks
+	}
+	if idx := strings.Index(key, "[."); idx > 0 && key[len(key)-1] == ']' {
+		// key[.name=xxx] 已知 key， 确定 key 对应的内容
+		ck, ok := any(key[:idx]).(K) // key 类型转换
+		if !ok {
+			return ks
+		}
+		k2 := strings.SplitN(key[idx+2:len(key)-1], "=", 2)
+		if len(k2) != 2 {
+			return ks
+		}
+		var kre *regexp.Regexp // ^ 开头启动正则表达式匹配
+		if sz := len(k2[1]); sz > 0 && k2[1][0] == '^' {
+			kre, _ = regexp.Compile(k2[1]) // 正则表达式失败，也会使用 str 匹配
+		}
+		v := src[ck] // 直接指定
+		var v3 any
+		if k2[0] == "" {
+			v3 = v
+		} else if v2, ok := v.(map[string]any); ok {
+			v3, _ = v2[k2[0]]
+		} else if v2, ok := v.(map[any]any); ok {
+			v3, _ = v2[k2[0]]
+		}
+		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
+			ks = append(ks, ck) // 匹配到结果
+		}
+		return ks
+	}
+	// [.name=xxx] 格式， 需要寻找 key 对应的内容
+	if key[0] != '.' {
 		return ks
 	}
 	// 使用属性匹配进行查询
 	k2 := strings.SplitN(key[1:], "=", 2)
+	if len(k2) != 2 {
+		return ks
+	}
 	var kre *regexp.Regexp // ^ 开头启动正则表达式匹配
 	if sz := len(k2[1]); sz > 0 && k2[1][0] == '^' {
 		kre, _ = regexp.Compile(k2[1]) // 正则表达式失败，也会使用 str 匹配
@@ -655,8 +657,7 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
 			v3, _ = v2[k2[0]]
 		}
 		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
-			// 匹配到结果
-			ks = append(ks, ck)
+			ks = append(ks, ck) // 匹配到结果
 			if one {
 				break
 			}
@@ -788,6 +789,9 @@ func FindByFieldInArr(src []any, key string, one bool) []int {
 	}
 	// 通过属性检索数据
 	k2 := strings.SplitN(key[1:], "=", 2)
+	if len(k2) != 2 {
+		return ks
+	}
 	var kre *regexp.Regexp // ^ 开头启动正则表达式匹配
 	if sz := len(k2[1]); sz > 0 && k2[1][0] == '^' {
 		kre, _ = regexp.Compile(k2[1]) // 正则表达式失败，也会使用 str 匹配
