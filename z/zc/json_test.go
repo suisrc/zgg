@@ -112,6 +112,8 @@ func Test_map2(t *testing.T) {
 		},
 	}
 	t.Log("=================== ", zc.MapKeyVal(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapKeyVal(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapKeyVar(dmap, "a.b.*"))
 	t.Log("=================== ", zc.MapKeyVar(dmap, "a.b.*"))
 	t.Log("=================== ")
 	t.Log("=================== ", zc.MapKeyVal(dmap, "a.b.*.j"))
@@ -271,4 +273,23 @@ func Test_map4(t *testing.T) {
 	// t.Log("=================== ", jsonv)
 	t.Log("=================== ", zc.MapKeyVal(jsonv, "spec.rules.*.http.paths.*.backend.service[.name=^fnt-].name"))
 	t.Log("=================== ", zc.MapKeyVal(jsonv, "spec.rules.*.http.paths.*.backend.service.name[.=^fnt-]"))
+}
+
+// go test -v z/zc/json_test.go -run Test_map5
+
+func Test_map5(t *testing.T) {
+	dmap := map[string]any{
+		"a": map[string]any{
+			"b": []any{
+				map[string]any{
+					"q": map[string]any{
+						"j": 123.456,
+					},
+				},
+			},
+		},
+	}
+
+	t.Log("=================== ", zc.MapSet(dmap, "a.b.-0", map[string]any{}))
+	t.Log(zc.ToStr2(dmap))
 }

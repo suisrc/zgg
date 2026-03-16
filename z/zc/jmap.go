@@ -8,23 +8,32 @@ import (
 	"strings"
 )
 
-// map any
-type HA map[string]any
+func Ptr[T any](v T) *T {
+	return &v
+}
 
-// map str
-type HM map[string]string
-
-// key and any
-type KA struct {
+type Pair struct {
 	K string
 	V any
 }
 
-// key and value
-type KV[K comparable, V any] struct {
-	K K
-	V V
+func (aa *Pair) Set(key string, val any) {
+	aa.K, aa.V = key, val
 }
+
+// V = nil 标识删除， 否则使用 V 进行替换，一般用户 Set 方法或函数
+func (aa *Pair) SetV(key string, _ any) (any, int8) {
+	aa.K = key
+	return aa.V, If[int8](aa.V == nil, -1, 1)
+}
+
+type PairSlice []Pair
+
+func (aa *PairSlice) Set(key string, val any) {
+	*aa = append(*aa, Pair{key, val})
+}
+
+// ---------------------------------------------------------------------------------------
 
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
@@ -55,22 +64,22 @@ func MapGet(src map[string]any, key string) any {
 	return MapItr(src, key, false, nil)
 }
 
-// 从 map 中获取字段的值， 获取所有匹配的数据
-func MapAll(src map[string]any, key string) []any {
-	return nil
-}
-
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段，
 // 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增。
 func MapSet(src map[string]any, key string, val any) any {
-	return MapItr(src, key, false, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
+	return MapItr(src, key, false, (&Pair{V: val}).SetV)
 }
 
 // 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
 // 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径，
 // -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险。
 func MapNew(src map[string]any, key string, val any) any {
-	return MapItr(src, key, val != nil, func(_ any) (any, int8) { return val, If[int8](val == nil, -1, 1) })
+	return MapItr(src, key, val != nil, (&Pair{V: val}).SetV)
+}
+
+// 删除 map 中的值， 如果是基础类型，可以用 MapSet(src, key, nil) 进行删除， 该方法专用于集合对象删除
+func MapDel[T ~string | ~[]any | ~map[any]any | ~map[string]any | ~chan any](src map[string]any, key string) any {
+	return MapItr(src, key, false, func(_ string, val any) (any, int8) { return nil, If[int8](val == nil || len(val.(T)) == 0, -1, 0) })
 }
 
 // ---------------------------------------------------------------------------------------
@@ -79,7 +88,7 @@ func MapNew(src map[string]any, key string, val any) any {
 // 支持 key=key.-1.env.[.name=(^)xxx].key.key， Iterator or Traverse or Recursion
 // cover: = 0 忽略， > 1 覆盖， < 0 删除,
 // fnk: fix path value, 修复路径上的所有值。
-func MapItr(src any, key string, fpv bool, vfn func(any) (value any, cover int8)) any {
+func MapItr(src any, key string, fpv bool, vfn func(string, any) (value any, cover int8)) any {
 	if src == nil {
 		return nil
 	}
@@ -87,140 +96,26 @@ func MapItr(src any, key string, fpv bool, vfn func(any) (value any, cover int8)
 	if len(keys) == 0 {
 		return src
 	}
-	last := len(keys) - 1    // 末尾标记
+	path := ""
+	pkey := keys
 	var setv func(any) = nil // 赋值回调
 	curr := src
-	for indx, ikey := range keys {
+	for _, ikey := range keys {
 		if curr == nil {
 			return nil
 		}
+		pkey = pkey[1:]
 		switch cur := curr.(type) {
-		case map[any]any:
-			mk := any(ikey)
-			if mks := FindByFieldInMap(cur, ikey, true); len(mks) > 0 {
-				mk = mks[0] // 优先检索
-			}
-			curr, _ = cur[mk]
-			if indx == last && vfn != nil {
-				if v, r := vfn(curr); r > 0 {
-					cur[mk] = v
-				} else if r < 0 {
-					delete(cur, mk)
-				}
-			} else if curr == nil && fpv && indx < last {
-				// 未到末尾，已经没有值了， 创建字段
-				if next := keys[indx+1]; next == "-0" {
-					curr = []any{}
-					cur[mk] = curr // 创建数组
-				} else {
-					curr = map[string]any{}
-					cur[mk] = curr // 创建字段
-				}
-			}
-			if vfn != nil {
-				setv = func(v any) { cur[mk] = v }
-			}
 		case map[string]any:
-			mk := ikey
-			if mks := FindByFieldInMap(cur, ikey, true); len(mks) > 0 {
-				mk = mks[0] // 优先检索
-			}
-			curr, _ = cur[mk] // 通过 key 获取内容
-			if indx == last && vfn != nil {
-				if v, r := vfn(curr); r > 0 {
-					cur[mk] = v
-				} else if r < 0 {
-					delete(cur, mk)
-				}
-			} else if curr == nil && fpv && indx < last {
-				// 未到末尾，已经没有值了， 创建字段
-				if next := keys[indx+1]; next == "-0" {
-					curr = []any{}
-					cur[mk] = curr // 创建数组
-				} else {
-					curr = map[string]any{}
-					cur[mk] = curr // 创建字段
-				}
-			}
-			if vfn != nil {
-				setv = func(v any) { cur[mk] = v }
-			}
+			path, curr, setv = _map_itr_next_map(cur, ikey, path, pkey, fpv, vfn)
+		case map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
+			path, curr, setv = _map_itr_next_map(cur, ikey, path, pkey, fpv, vfn)
 		case []any:
-			curr = nil
-			if ikey == "-0" {
-				if vfn != nil {
-					// 末尾追加数据
-					if indx == last {
-						if v, r := vfn(nil); r > 0 {
-							cur = append(cur, v)
-							if setv != nil {
-								setv(cur)
-							}
-							i := len(cur) - 1
-							setv = func(v any) { cur[i] = v }
-						}
-					} else if fpv && indx < last {
-						// 未到末尾，已经没有值了， 创建字段
-						if next := keys[indx+1]; next == "-0" {
-							curr = []any{}
-							cur = append(cur, curr) // 创建数组
-						} else {
-							curr = map[string]any{}
-							cur = append(cur, curr) // 创建字段
-						}
-						if setv != nil {
-							setv(cur)
-						}
-						ai := len(cur) - 1
-						setv = func(v any) { cur[ai] = v }
-					}
-				}
-			} else {
-				ai := -1
-				if strings.HasPrefix(ikey, "-") {
-					// 倒序检索数据
-					ak := ikey[1:]
-					if i, err := strconv.Atoi(ak); err != nil {
-						// 数字转换失败
-					} else if i > 0 && i <= len(cur) { // 倒序检索
-						ai = len(cur) - i
-					}
-				} else if strings.HasPrefix(ikey, ".") {
-					// 通过属性检索数据
-					ais := FindByFieldInArr(cur, ikey, true)
-					if len(ais) > 0 {
-						ai = ais[0]
-					}
-				} else {
-					if i, err := strconv.Atoi(ikey); err != nil {
-						// 数字转换失败
-					} else if i >= 0 && i < len(cur) {
-						ai = i
-					}
-				}
-				if ai >= 0 {
-					curr = cur[ai]
-					if indx == last && vfn != nil {
-						if v, r := vfn(cur[ai]); r > 0 {
-							cur[ai] = v // 更新字段
-						} else if r < 0 {
-							if ai == 0 {
-								cur = cur[1:] // 删除第一个
-							} else if ai == len(cur)-1 {
-								cur = cur[:ai] // 删除最后一个
-							} else {
-								cur = append(cur[:ai], cur[ai+1:]...) // 中间删除
-							}
-							if setv != nil {
-								setv(cur)
-							}
-						}
-					}
-					if vfn != nil {
-						setv = func(v any) { cur[ai] = v }
-					}
-				}
-			}
+			path, curr, setv = _map_itr_next_ars(cur, ikey, path, pkey, fpv, vfn, setv)
+		case []map[string]any:
+			path, curr, setv = _map_itr_next_ars(cur, ikey, path, pkey, fpv, vfn, setv)
+		case []map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
+			path, curr, setv = _map_itr_next_ars(cur, ikey, path, pkey, fpv, vfn, setv)
 		default:
 			// 其他类型暂不支持
 			curr = nil
@@ -229,25 +124,159 @@ func MapItr(src any, key string, fpv bool, vfn func(any) (value any, cover int8)
 	return curr
 }
 
+func _map_itr_next_map[K comparable](cur map[K]any, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8)) (string, any, func(any)) {
+	var mk K
+	var ck string
+	if mks := FindByFieldInMap(cur, ikey, true); len(mks) > 0 {
+		mk = mks[0] // 优先检索
+		if ik, ok := any(mk).(string); ok {
+			ck = ik
+		} else {
+			ck = fmt.Sprintf("%v", mk)
+		}
+	} else if ik, ok := any(ikey).(K); ok {
+		mk = ik // 兼容 string 类型
+		ck = ikey
+	} else {
+		return path, nil, nil // 找不到字段
+	}
+	// 处理路径
+	if strings.IndexByte(ck, '.') > 0 {
+		ck = "[" + ck + "]"
+	}
+	if path != "" {
+		ck = path + "." + ck
+	}
+	path = ck
+	// 处理数据
+	curr, _ := cur[mk]
+	if plen := len(pkey); plen == 0 && vfn != nil {
+		if v, r := vfn(path, curr); r > 0 {
+			cur[mk] = v
+		} else if r < 0 {
+			delete(cur, mk)
+		}
+	} else if curr == nil && fpv && plen > 0 {
+		// 未到末尾，已经没有值了， 创建字段
+		if next := pkey[0]; next == "-0" {
+			curr = []any{}
+			cur[mk] = curr // 创建数组
+		} else {
+			curr = map[string]any{}
+			cur[mk] = curr // 创建字段
+		}
+	}
+	var vset func(any) = nil
+	if vfn != nil {
+		vset = func(v any) { cur[mk] = v }
+	}
+	return path, curr, vset
+}
+
+func _map_itr_next_ars[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8), setv func(any)) (string, any, func(any)) {
+	var curr any = nil
+	var vset func(any) = nil
+	if ikey == "-0" {
+		path += ".-0"
+		if vfn != nil {
+			// 末尾追加数据
+			if plen := len(pkey); plen == 0 {
+				if v, r := vfn(path, nil); r > 0 {
+					cur = append(cur, v.(T))
+					if setv != nil {
+						setv(cur)
+					}
+					i := len(cur) - 1
+					vset = func(v any) { cur[i] = v.(T) }
+				}
+			} else if fpv && plen > 0 {
+				// 未到末尾，已经没有值了， 创建字段
+				if next := pkey[0]; next == "-0" {
+					curr = []any{}
+					cur = append(cur, curr.(T)) // 创建数组
+					// 这里存在风险，直接多维数组， 必须是 [][][]...any 类型
+				} else {
+					curr = map[string]any{}
+					cur = append(cur, curr.(T)) // 创建字段
+				}
+				if setv != nil {
+					setv(cur)
+				}
+				ai := len(cur) - 1
+				vset = func(v any) { cur[ai] = v.(T) }
+			}
+		}
+	} else {
+		ai := -1
+		if strings.HasPrefix(ikey, "-") {
+			// 倒序检索数据
+			ak := ikey[1:]
+			if i, err := strconv.Atoi(ak); err != nil {
+				// 数字转换失败
+			} else if i > 0 && i <= len(cur) { // 倒序检索
+				ai = len(cur) - i
+			}
+		} else if strings.HasPrefix(ikey, ".") {
+			// 通过属性检索数据
+			ais := FindByFieldInArr(cur, ikey, true)
+			if len(ais) > 0 {
+				ai = ais[0]
+			}
+		} else {
+			if i, err := strconv.Atoi(ikey); err != nil {
+				// 数字转换失败
+			} else if i >= 0 && i < len(cur) {
+				ai = i
+			}
+		}
+		if ai >= 0 {
+			path += "." + strconv.Itoa(ai)
+			curr = cur[ai]
+			if len(pkey) == 0 && vfn != nil {
+				if v, r := vfn(path, curr); r > 0 {
+					cur[ai] = v.(T) // 更新字段
+				} else if r < 0 {
+					if ai == 0 {
+						cur = cur[1:] // 删除第一个
+					} else if ai == len(cur)-1 {
+						cur = cur[:ai] // 删除最后一个
+					} else {
+						cur = append(cur[:ai], cur[ai+1:]...) // 中间删除
+					}
+					if setv != nil {
+						setv(cur)
+					}
+				}
+			}
+			if vfn != nil {
+				vset = func(v any) { cur[ai] = v.(T) }
+			}
+		} else {
+			curr = nil
+		}
+	}
+	return path, curr, vset
+}
+
 // ---------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
 // MapKeyVar 和 MapKeyVal 功能相同。基于测试， MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
-func MapKeyVal(src any, key string) []KA {
+func MapKeyVal(src any, key string) []Pair {
 	if src == nil {
-		return []KA{}
+		return []Pair{}
 	}
 	keys := MapParserPaths(key)
 	return MapKeyItr(src, keys...)
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any
-func MapKeyItr(src any, keys ...string) []KA {
-	result := []KA{}
+func MapKeyItr(src any, keys ...string) []Pair {
+	pairs := []Pair{}
 	// 边界条件处理，与原逻辑完全一致
 	if len(keys) == 0 {
-		return result
+		return pairs
 	}
 	// 遍历栈元素：保存单次处理的上下文
 	type node struct {
@@ -255,7 +284,7 @@ func MapKeyItr(src any, keys ...string) []KA {
 		elem any      // 当前处理的对象
 		path string   // 当前已拼接的路径
 		keys []string // 剩余待匹配的key列表
-		onex *bool    // 是否匹配到
+		x1st *bool    // 是否匹配到
 	}
 	// 数组查询结果
 	type item struct {
@@ -265,213 +294,168 @@ func MapKeyItr(src any, keys ...string) []KA {
 	// 初始化栈，放入初始参数
 	path := ""
 	stack := []*node{{elem: src, path: path, keys: keys}}
-	hasx := false
+	x1st := false
 	for len(stack) > 0 {
 		// 弹出栈顶元素（LIFO，保证遍历顺序与原递归一致）
 		curr := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		if curr.onex != nil && *curr.onex {
-			continue
+		if curr.x1st != nil && *curr.x1st {
+			continue // ? 情况，内容已经处理
 		}
 		// 没有剩余key，直接存入结果
 		if len(curr.keys) == 0 {
 			if curr.path != "" {
-				result = append(result, KA{K: curr.path, V: curr.elem})
-				if hasx {
-					// 通知上层 one '?' 模块，内容已经找到
+				pairs = append(pairs, Pair{curr.path, curr.elem})
+				if x1st {
+					// 通知上层 lst '?' 模块，内容已经找到
 					for curr.from != nil {
 						curr = curr.from
-						if curr.onex != nil {
-							*curr.onex = true
+						if curr.x1st != nil {
+							*curr.x1st = true
 						}
 					}
 				}
 			}
-			continue
+			continue // 结束当前层
 		}
 		ikey := curr.keys[0]
-		var onex *bool
+		var xlst *bool = nil
 		if ikey == "?" {
-			onez := false
-			onex = &onez
-			hasx = true
+			xlst, x1st = Ptr(false), true
 		}
-		remainingKeys := curr.keys[1:]
+		rkey := curr.keys[1:]
 		switch cur := curr.elem.(type) {
 		case map[any]any:
-			// 查找匹配的key
-			mks := FindByFieldInMap(cur, ikey, false)
-			if len(mks) == 0 {
-				mks = []any{ikey}
-			}
-			// 倒序遍历保证执行顺序与原递归一致
-			for i := len(mks) - 1; i >= 0; i-- {
-				ma := mks[i]
-				curVal, ok := cur[ma]
-				if !ok {
-					continue
-				}
-				// 拼接路径
-				mk := fmt.Sprintf("%v", ma)
-				key := mk
-				if strings.IndexByte(key, '.') >= 0 {
-					key = "[" + key + "]"
-				}
-				if curr.path != "" {
-					key = curr.path + "." + key
-				}
-				// 普通场景压入栈继续处理
-				stack = append(stack, &node{
-					from: curr,
-					elem: curVal,
-					path: key,
-					keys: remainingKeys,
-					onex: onex,
-				})
-			}
+			_map_key_itr_map(cur, curr.path, ikey, func(key string, val any) {
+				stack = append(stack, &node{curr, val, key, rkey, xlst})
+			})
 		case map[string]any:
-			// 查找匹配的key
-			mks := FindByFieldInMap(cur, ikey, false)
-			if len(mks) == 0 {
-				mks = []string{ikey}
-			}
-			// 倒序遍历保证执行顺序与原递归一致
-			for i := len(mks) - 1; i >= 0; i-- {
-				mk := mks[i]
-				curVal, ok := cur[mk]
-				if !ok {
-					continue
-				}
-				// 拼接路径
-				key := mk
-				if strings.IndexByte(key, '.') >= 0 {
-					key = "[" + key + "]"
-				}
-				if curr.path != "" {
-					key = curr.path + "." + key
-				}
-				// 普通场景压入栈继续处理
-				stack = append(stack, &node{
-					from: curr,
-					elem: curVal,
-					path: key,
-					keys: remainingKeys,
-					onex: onex,
-				})
-			}
+			_map_key_itr_map(cur, curr.path, ikey, func(key string, val any) {
+				stack = append(stack, &node{curr, val, key, rkey, xlst})
+			})
 		case []any:
-			matched := []item{}
-			if ikey == "-0" {
-				continue // 忽略-0
-			}
-			switch {
-			case strings.HasPrefix(ikey, "-"):
-				// 负索引倒序检索
-				ak := ikey[1:]
-				i, err := strconv.Atoi(ak)
-				if err == nil && i > 0 && i <= len(cur) {
-					ai := len(cur) - i
-					curVal := cur[ai]
-					// 拼接路径
-					key := strconv.Itoa(ai)
-					if curr.path != "" {
-						key = curr.path + "." + key
-					}
-					matched = append(matched, item{key, curVal})
-				}
-			case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
-				// 按属性检索数组元素
-				ais := FindByFieldInArr(cur, ikey, false)
-				for _, ai := range ais {
-					curVal := cur[ai]
-					key := strconv.Itoa(ai)
-					if curr.path != "" {
-						key = curr.path + "." + key
-					}
-					matched = append(matched, item{key, curVal})
-				}
-			default:
-				// 正索引检索
-				i, err := strconv.Atoi(ikey)
-				if err == nil && i >= 0 && i < len(cur) {
-					curVal := cur[i]
-					key := strconv.Itoa(i)
-					if curr.path != "" {
-						key = curr.path + "." + key
-					}
-					matched = append(matched, item{key, curVal})
-				}
-			}
-			// 倒序遍历保证执行顺序与原递归一致
-			for i := len(matched) - 1; i >= 0; i-- {
-				item := matched[i]
-				curVal := item.val
-				key := item.key
-				// 普通场景压入栈继续处理
-				stack = append(stack, &node{
-					from: curr,
-					elem: curVal,
-					path: key,
-					keys: remainingKeys,
-					onex: onex,
-				})
-			}
-			// default: println(reflect.TypeOf(cur))
+			_map_key_itr_ars(cur, curr.path, ikey, func(key string, val any) {
+				stack = append(stack, &node{curr, val, key, rkey, xlst})
+			})
+		case []map[any]any:
+			_map_key_itr_ars(cur, curr.path, ikey, func(key string, val any) {
+				stack = append(stack, &node{curr, val, key, rkey, xlst})
+			})
+		case []map[string]any:
+			_map_key_itr_ars(cur, curr.path, ikey, func(key string, val any) {
+				stack = append(stack, &node{curr, val, key, rkey, xlst})
+			})
+		default:
+			// ignore
 		}
 	}
-	return result
+	return pairs
+}
+
+func _map_key_itr_map[K comparable](cur map[K]any, path, ikey string, setv func(string, any)) {
+	// 查找匹配的key
+	mks := FindByFieldInMap(cur, ikey, false)
+	if len(mks) == 0 {
+		if key, ok := any(ikey).(K); ok {
+			mks = []K{key}
+		}
+	}
+	// 倒序遍历保证执行顺序与原递归一致
+	for i := len(mks) - 1; i >= 0; i-- {
+		key := mks[i]
+		val, ok := cur[key]
+		if !ok {
+			continue
+		}
+		pkey, ok := any(key).(string)
+		if !ok {
+			pkey = fmt.Sprintf("%v", key)
+		}
+		if strings.IndexByte(pkey, '.') >= 0 {
+			pkey = "[" + pkey + "]"
+		}
+		if path != "" {
+			pkey = path + "." + pkey
+		}
+		// 场景压入栈继续处理
+		setv(pkey, val)
+	}
+}
+
+func _map_key_itr_ars[T any](cur []T, path, ikey string, setv func(string, any)) {
+	if ikey == "-0" {
+		return
+	}
+	switch {
+	case strings.HasPrefix(ikey, "-"):
+		// 负索引倒序检索
+		ak := ikey[1:]
+		i, err := strconv.Atoi(ak)
+		if err == nil && i > 0 && i <= len(cur) {
+			ai := len(cur) - i
+			val := cur[ai]
+			// 拼接路径
+			key := strconv.Itoa(ai)
+			if path != "" {
+				key = path + "." + key
+			}
+			setv(key, val)
+		}
+	case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
+		// 按属性检索数组元素
+		ais := FindByFieldInArr(cur, ikey, false)
+		for i := len(ais) - 1; i >= 0; i-- {
+			ai := ais[i]
+			val := cur[ai]
+			key := strconv.Itoa(ai)
+			if path != "" {
+				key = path + "." + key
+			}
+			setv(key, val)
+		}
+	default:
+		// 正索引检索
+		i, err := strconv.Atoi(ikey)
+		if err == nil && i >= 0 && i < len(cur) {
+			val := cur[i]
+			key := strconv.Itoa(i)
+			if path != "" {
+				key = path + "." + key
+			}
+			setv(key, val)
+		}
+	}
+
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
 // MapKeyVar 和 MapKeyVal 功能相同。基于测试，MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
-func MapKeyVar(src any, key string) []KA {
+func MapKeyVar(src any, key string) []Pair {
 	if src == nil {
-		return []KA{}
+		return []Pair{}
 	}
 	keys := MapParserPaths(key)
 	return MapKeyRec_(src, "", keys...)
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any
-func MapKeyRec(src any, keys ...string) []KA {
+func MapKeyRec(src any, keys ...string) []Pair {
 	return MapKeyRec_(src, "", keys...)
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion
-func MapKeyRec_(curr any, path string, keys ...string) []KA {
+func MapKeyRec_(curr any, path string, keys ...string) []Pair {
 	if len(keys) == 0 && path == "" {
-		return []KA{}
+		return []Pair{}
 	}
 	if len(keys) == 0 {
-		return []KA{{K: path, V: curr}}
+		return []Pair{{path, curr}}
 	}
-	dest := []KA{} // 返回值列表
+	dest := []Pair{} // 返回值列表
 	ikey := keys[0]
 	keys = keys[1:]
-	one := ikey == "?"
+	xlst := ikey == "?"
 	switch curr := curr.(type) {
-	case map[any]any:
-		mks := FindByFieldInMap(curr, ikey, false)
-		if len(mks) == 0 {
-			mks = []any{ikey} // 使用默认值到 key
-		}
-		for _, ma := range mks {
-			mk := fmt.Sprintf("%v", ma)
-			if cur, cok := curr[ma]; cok {
-				key := mk
-				if strings.IndexByte(key, '.') >= 0 {
-					key = "[" + key + "]"
-				}
-				if path != "" {
-					key = path + "." + key
-				}
-				dst := MapKeyRec_(cur, key, keys...)
-				if one && len(dst) > 0 {
-					return dst // 找到一个就返回
-				}
-				dest = append(dest, dst...)
-			}
-		}
 	case map[string]any:
 		mks := FindByFieldInMap(curr, ikey, false)
 		if len(mks) == 0 {
@@ -487,7 +471,7 @@ func MapKeyRec_(curr any, path string, keys ...string) []KA {
 					key = path + "." + key
 				}
 				dst := MapKeyRec_(cur, key, keys...)
-				if one && len(dst) > 0 {
+				if xlst && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
 				dest = append(dest, dst...)
@@ -510,7 +494,7 @@ func MapKeyRec_(curr any, path string, keys ...string) []KA {
 					key = path + "." + key
 				}
 				dst := MapKeyRec_(cur, key, keys...)
-				if one && len(dst) > 0 {
+				if xlst && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
 				dest = append(dest, dst...)
@@ -525,7 +509,7 @@ func MapKeyRec_(curr any, path string, keys ...string) []KA {
 					key = path + "." + key
 				}
 				dst := MapKeyRec_(cur, key, keys...)
-				if one && len(dst) > 0 {
+				if xlst && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
 				dest = append(dest, dst...)
@@ -541,7 +525,7 @@ func MapKeyRec_(curr any, path string, keys ...string) []KA {
 					key = path + "." + key
 				}
 				dst := MapKeyRec_(cur, key, keys...)
-				if one && len(dst) > 0 {
+				if xlst && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
 				dest = append(dest, dst...)
@@ -598,14 +582,14 @@ func MapParserPaths(path string) []string {
 }
 
 // 从源 map 中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
-// src: 检索的 map, key: 属性字段， one: 是否只返回一个结果, 比 key = *, ? 优先级高
-func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
+// src: 检索的 map, key: 属性字段， lst: 是否只返回一个结果, 比 key = *, ? 优先级高
+func FindByFieldInMap[K comparable](src map[K]any, key string, lst bool) []K {
 	ks := []K{}
 	if key == "*" || key == "?" {
 		// 匹配所有字段, * 所有， ？匹配到1个就返回
 		for k := range src {
 			ks = append(ks, k)
-			if one {
+			if lst {
 				break
 			}
 		}
@@ -666,7 +650,7 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, one bool) []K {
 		}
 		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
 			ks = append(ks, ck) // 匹配到结果
-			if one {
+			if lst {
 				break
 			}
 		}
@@ -779,14 +763,14 @@ func IsMatchByField(val any, src string, kre *regexp.Regexp) bool {
 }
 
 // 从数组中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
-// src: 检索的 数组, key: 属性字段， one: 是否只返回一个结果, 比 key = *, ? 优先级高
-func FindByFieldInArr(src []any, key string, one bool) []int {
+// src: 检索的 数组, key: 属性字段， lst: 是否只返回一个结果, 比 key = *, ? 优先级高
+func FindByFieldInArr[T any](src []T, key string, lst bool) []int {
 	ks := []int{}
 	if key == "*" || key == "?" {
 		// 匹配所有
 		for i := range src {
 			ks = append(ks, i)
-			if one {
+			if lst {
 				break
 			}
 		}
@@ -808,15 +792,15 @@ func FindByFieldInArr(src []any, key string, one bool) []int {
 		var v3 any = nil
 		if k2[0] == "" {
 			v3 = v
-		} else if v2, ok := v.(map[string]any); ok {
+		} else if v2, ok := any(v).(map[string]any); ok {
 			v3, _ = v2[k2[0]]
-		} else if v2, ok := v.(map[any]any); ok {
+		} else if v2, ok := any(v).(map[any]any); ok {
 			v3, _ = v2[k2[0]]
 		}
 		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
 			// 匹配到结果
 			ks = append(ks, i)
-			if one {
+			if lst {
 				break
 			}
 		}
