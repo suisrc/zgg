@@ -8,6 +8,24 @@ import (
 	"strings"
 )
 
+// map any
+type HA map[string]any
+
+// map str
+type HM map[string]string
+
+// key and any
+type KA struct {
+	K string
+	V any
+}
+
+// key and value
+type KV[K comparable, V any] struct {
+	K K
+	V V
+}
+
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
 	val := MapItr(src, key, false, nil)
@@ -216,17 +234,17 @@ func MapItr(src any, key string, fpv bool, vfn func(any) (value any, cover int8)
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
 // MapKeyVar 和 MapKeyVal 功能相同。基于测试， MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
-func MapKeyVal(src any, key string) map[string]any {
+func MapKeyVal(src any, key string) []KA {
 	if src == nil {
-		return map[string]any{}
+		return []KA{}
 	}
 	keys := MapParserPaths(key)
 	return MapKeyItr(src, keys...)
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any
-func MapKeyItr(src any, keys ...string) map[string]any {
-	result := make(map[string]any)
+func MapKeyItr(src any, keys ...string) []KA {
+	result := []KA{}
 	// 边界条件处理，与原逻辑完全一致
 	if len(keys) == 0 {
 		return result
@@ -258,7 +276,7 @@ func MapKeyItr(src any, keys ...string) map[string]any {
 		// 没有剩余key，直接存入结果
 		if len(curr.keys) == 0 {
 			if curr.path != "" {
-				result[curr.path] = curr.elem
+				result = append(result, KA{K: curr.path, V: curr.elem})
 				if hasx {
 					// 通知上层 one '?' 模块，内容已经找到
 					for curr.from != nil {
@@ -406,28 +424,28 @@ func MapKeyItr(src any, keys ...string) map[string]any {
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
 // MapKeyVar 和 MapKeyVal 功能相同。基于测试，MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
-func MapKeyVar(src any, key string) map[string]any {
+func MapKeyVar(src any, key string) []KA {
 	if src == nil {
-		return map[string]any{}
+		return []KA{}
 	}
 	keys := MapParserPaths(key)
 	return MapKeyRec_(src, "", keys...)
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any
-func MapKeyRec(src any, keys ...string) map[string]any {
+func MapKeyRec(src any, keys ...string) []KA {
 	return MapKeyRec_(src, "", keys...)
 }
 
 // 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion
-func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
+func MapKeyRec_(curr any, path string, keys ...string) []KA {
 	if len(keys) == 0 && path == "" {
-		return map[string]any{}
+		return []KA{}
 	}
 	if len(keys) == 0 {
-		return map[string]any{path: curr}
+		return []KA{{K: path, V: curr}}
 	}
-	dest := map[string]any{} // 返回值列表
+	dest := []KA{} // 返回值列表
 	ikey := keys[0]
 	keys = keys[1:]
 	one := ikey == "?"
@@ -451,9 +469,7 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 				if one && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
-				for k, v := range dst {
-					dest[k] = v
-				}
+				dest = append(dest, dst...)
 			}
 		}
 	case map[string]any:
@@ -474,9 +490,7 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 				if one && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
-				for k, v := range dst {
-					dest[k] = v
-				}
+				dest = append(dest, dst...)
 			}
 		}
 	case []any:
@@ -499,9 +513,7 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 				if one && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
-				for k, v := range dst {
-					dest[k] = v
-				}
+				dest = append(dest, dst...)
 			}
 		case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
 			// 通过属性检索数据
@@ -516,9 +528,7 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 				if one && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
-				for k, v := range dst {
-					dest[k] = v
-				}
+				dest = append(dest, dst...)
 			}
 		default:
 			if i, err := strconv.Atoi(ikey); err != nil {
@@ -534,9 +544,7 @@ func MapKeyRec_(curr any, path string, keys ...string) map[string]any {
 				if one && len(dst) > 0 {
 					return dst // 找到一个就返回
 				}
-				for k, v := range dst {
-					dest[k] = v
-				}
+				dest = append(dest, dst...)
 			}
 		}
 	}
