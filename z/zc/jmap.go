@@ -27,17 +27,49 @@ func (aa *Pair) SetV(key string, _ any) (any, int8) {
 	return aa.V, If[int8](aa.V == nil, -1, 1)
 }
 
+func (aa *Pair) Set1(key string, val any) (any, int8, bool) {
+	vv := aa.V
+	aa.K, aa.V = key, val
+	return vv, If[int8](vv == nil, -1, 1), false
+}
+
 type PairSlice []Pair
 
-func (aa *PairSlice) Set(key string, val any) {
+func (aa *PairSlice) Add(key string, val any) bool {
 	*aa = append(*aa, Pair{key, val})
+	return true
 }
+
+func (aa *PairSlice) Sets(key string, val any) (any, int8, bool) {
+	aa.Add(key, val)
+	if (*aa)[0].K != "" {
+		return nil, -1, true
+	}
+	vv := (*aa)[0].V
+	return vv, If[int8](vv == nil, -1, 1), true
+}
+
+func SliceDelete[S ~[]E, E any](s S, i int) S {
+	// slices.Delete(s, i, i+1)
+	if i < 0 && i >= len(s) {
+		return nil
+	}
+	j := i + 1
+	oldlen := len(s)
+	s = append(s[:i], s[j:]...)
+	clear(s[len(s):oldlen]) // zero/nil out the obsolete elements, for GC
+	return s
+}
+
+// func SliceInsert[S ~[]E, E any](s S, i int, val E) S {
+// 	return slices.Insert(s, i, val)
+// }
 
 // ---------------------------------------------------------------------------------------
 
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
-	val := MapItr(src, key, false, nil)
+	val := MapIterator(src, false, nil, key)
 	if val == nil {
 		return def
 	}
@@ -49,52 +81,48 @@ func MapDef[T any](src map[string]any, key string, def T) T {
 
 // 将任意类型转换为 T 类型, 尽量转换， 这里处理了 string 和 number bool 类型间的附加关系
 func MapAny[T any](src map[string]any, key string, def T) T {
-	val := MapItr(src, key, false, nil)
+	val := MapIterator(src, false, nil, key)
 	return ToAny(val, def)
 }
 
 // 将任意类型转换为 int 类型
 func MapInt(src map[string]any, key string, def int) int {
-	val := MapItr(src, key, false, nil)
+	val := MapIterator(src, false, nil, key)
 	return ToInt(val, def)
 }
 
 // 从 map 中获取字段的值， 原始数据， 同 MapItr(src, key, false, nil) 操作
 func MapGet(src map[string]any, key string) any {
-	return MapItr(src, key, false, nil)
+	return MapIterator(src, false, nil, key)
 }
 
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段，
 // 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增。
 func MapSet(src map[string]any, key string, val any) any {
-	return MapItr(src, key, false, (&Pair{V: val}).SetV)
+	return MapIterator(src, false, (&Pair{V: val}).SetV, key)
 }
 
 // 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
 // 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径，
 // -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险。
 func MapNew(src map[string]any, key string, val any) any {
-	return MapItr(src, key, val != nil, (&Pair{V: val}).SetV)
+	return MapIterator(src, val != nil, (&Pair{V: val}).SetV, key)
 }
 
 // 删除 map 中的值， 如果是基础类型，可以用 MapSet(src, key, nil) 进行删除， 该方法专用于集合对象删除
 func MapDel[T ~string | ~[]any | ~map[any]any | ~map[string]any | ~chan any](src map[string]any, key string) any {
-	return MapItr(src, key, false, func(_ string, val any) (any, int8) { return nil, If[int8](val == nil || len(val.(T)) == 0, -1, 0) })
+	return MapIterator(src, false, func(_ string, val any) (any, int8) { return nil, If[int8](val == nil || len(val.(T)) == 0, -1, 0) }, key)
 }
 
 // ---------------------------------------------------------------------------------------
-// ---------------------------------------------------------------------------------------
 
 // 支持 key=key.-1.env.[.name=(^)xxx].key.key， Iterator or Traverse or Recursion
-// cover: = 0 忽略， > 1 覆盖， < 0 删除,
-// fnk: fix path value, 修复路径上的所有值。
-func MapItr(src any, key string, fpv bool, vfn func(string, any) (value any, cover int8)) any {
-	if src == nil {
+// cover: = 0 忽略， > 1 覆盖， < 0 删除, fpv: fix path value, 修复路径上的所有值。
+func MapIterator(src any, fpv bool, vfn func(string, any) (value any, cover int8), keys ...string) any {
+	if len(keys) == 0 || src == nil {
 		return nil
-	}
-	keys := MapParserPaths(key) // strings.Split(key, ".")
-	if len(keys) == 0 {
-		return src
+	} else if len(keys) == 1 && strings.ContainsRune(keys[0], '.') {
+		keys = MapParserPaths(keys[0])
 	}
 	path := ""
 	pkey := keys
@@ -107,15 +135,15 @@ func MapItr(src any, key string, fpv bool, vfn func(string, any) (value any, cov
 		pkey = pkey[1:]
 		switch cur := curr.(type) {
 		case map[string]any:
-			path, curr, setv = mapItrMap(cur, ikey, path, pkey, fpv, vfn)
+			path, curr, setv = mapIteratorMap(cur, ikey, path, pkey, fpv, vfn)
 		case []any:
-			path, curr, setv = mapItrArs(cur, ikey, path, pkey, fpv, vfn, setv)
-		case map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
-			path, curr, setv = mapItrMap(cur, ikey, path, pkey, fpv, vfn)
-		case []map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
-			path, curr, setv = mapItrArs(cur, ikey, path, pkey, fpv, vfn, setv)
+			path, curr, setv = mapIteratorArr(cur, ikey, path, pkey, fpv, vfn, setv)
+		case map[any]any:
+			path, curr, setv = mapIteratorMap(cur, ikey, path, pkey, fpv, vfn)
+		case []map[any]any:
+			path, curr, setv = mapIteratorArr(cur, ikey, path, pkey, fpv, vfn, setv)
 		case []map[string]any:
-			path, curr, setv = mapItrArs(cur, ikey, path, pkey, fpv, vfn, setv)
+			path, curr, setv = mapIteratorArr(cur, ikey, path, pkey, fpv, vfn, setv)
 		default:
 			// 其他类型暂不支持
 			curr = nil
@@ -124,7 +152,7 @@ func MapItr(src any, key string, fpv bool, vfn func(string, any) (value any, cov
 	return curr
 }
 
-func mapItrMap[K comparable](cur map[K]any, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8)) (string, any, func(any)) {
+func mapIteratorMap[K comparable](cur map[K]any, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8)) (string, any, func(any)) {
 	var mk K
 	var ck string
 	if mks := FindByFieldInMap(cur, ikey, true); len(mks) > 0 {
@@ -134,6 +162,8 @@ func mapItrMap[K comparable](cur map[K]any, ikey, path string, pkey []string, fp
 		} else {
 			ck = fmt.Sprintf("%v", mk)
 		}
+	} else if IsMatchFuzzyKey(ikey) {
+		return path, nil, nil // 找不到字段
 	} else if ik, ok := any(ikey).(K); ok {
 		mk = ik // 兼容 string 类型
 		ck = ikey
@@ -173,7 +203,7 @@ func mapItrMap[K comparable](cur map[K]any, ikey, path string, pkey []string, fp
 	return path, curr, vset
 }
 
-func mapItrArs[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8), setv func(any)) (string, any, func(any)) {
+func mapIteratorArr[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8), setv func(any)) (string, any, func(any)) {
 	var curr any = nil
 	var vset func(any) = nil
 	if ikey == "-0" {
@@ -236,13 +266,7 @@ func mapItrArs[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn f
 				if v, r := vfn(path, curr); r > 0 {
 					cur[ai] = v.(T) // 更新字段
 				} else if r < 0 {
-					if ai == 0 {
-						cur = cur[1:] // 删除第一个
-					} else if ai == len(cur)-1 {
-						cur = cur[:ai] // 删除最后一个
-					} else {
-						cur = append(cur[:ai], cur[ai+1:]...) // 中间删除
-					}
+					cur = SliceDelete(cur, ai)
 					if setv != nil {
 						setv(cur)
 					}
@@ -256,283 +280,6 @@ func mapItrArs[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn f
 		}
 	}
 	return path, curr, vset
-}
-
-// ---------------------------------------------------------------------------------------
-// ---------------------------------------------------------------------------------------
-
-// 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
-// MapKeyVar 和 MapKeyVal 功能相同。基于测试， MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
-func MapKeyVal(src any, key string) []Pair {
-	if src == nil {
-		return []Pair{}
-	}
-	keys := MapParserPaths(key)
-	return MapKeyItr(src, keys...)
-}
-
-// 检索属于规范的 key 列表和对应的值，返回 map[string]any
-func MapKeyItr(src any, keys ...string) []Pair {
-	pairs := []Pair{}
-	// 边界条件处理，与原逻辑完全一致
-	if len(keys) == 0 {
-		return pairs
-	}
-	// 遍历栈元素：保存单次处理的上下文
-	type node struct {
-		from *node
-		elem any      // 当前处理的对象
-		path string   // 当前已拼接的路径
-		keys []string // 剩余待匹配的key列表
-		x1st *bool    // 是否匹配到
-	}
-	// 数组查询结果
-	type item struct {
-		key string
-		val any
-	}
-	// 初始化栈，放入初始参数
-	path := ""
-	stack := []*node{{elem: src, path: path, keys: keys}}
-	x1st := false
-	for len(stack) > 0 {
-		// 弹出栈顶元素（LIFO，保证遍历顺序与原递归一致）
-		curr := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if curr.x1st != nil && *curr.x1st {
-			continue // ? 情况，内容已经处理
-		}
-		// 没有剩余key，直接存入结果
-		if len(curr.keys) == 0 {
-			if curr.path != "" {
-				pairs = append(pairs, Pair{curr.path, curr.elem})
-				if x1st {
-					// 通知上层 lst '?' 模块，内容已经找到
-					for curr.from != nil {
-						curr = curr.from
-						if curr.x1st != nil {
-							*curr.x1st = true
-						}
-					}
-				}
-			}
-			continue // 结束当前层
-		}
-		ikey := curr.keys[0]
-		var xlst *bool = nil
-		if ikey == "?" {
-			xlst, x1st = Ptr(false), true
-		}
-		rkey := curr.keys[1:]
-		switch cur := curr.elem.(type) {
-		case map[string]any:
-			mapKeyItrMap(cur, curr.path, ikey, func(key string, val any) {
-				stack = append(stack, &node{curr, val, key, rkey, xlst})
-			})
-		case []any:
-			mapKeyItrArs(cur, curr.path, ikey, func(key string, val any) {
-				stack = append(stack, &node{curr, val, key, rkey, xlst})
-			})
-		case map[any]any:
-			mapKeyItrMap(cur, curr.path, ikey, func(key string, val any) {
-				stack = append(stack, &node{curr, val, key, rkey, xlst})
-			})
-		case []map[any]any:
-			mapKeyItrArs(cur, curr.path, ikey, func(key string, val any) {
-				stack = append(stack, &node{curr, val, key, rkey, xlst})
-			})
-		case []map[string]any:
-			mapKeyItrArs(cur, curr.path, ikey, func(key string, val any) {
-				stack = append(stack, &node{curr, val, key, rkey, xlst})
-			})
-		default:
-			// ignore
-		}
-	}
-	return pairs
-}
-
-func mapKeyItrMap[K comparable](cur map[K]any, path, ikey string, setv func(string, any)) {
-	// 查找匹配的key
-	mks := FindByFieldInMap(cur, ikey, false)
-	if len(mks) == 0 {
-		if key, ok := any(ikey).(K); ok {
-			mks = []K{key}
-		}
-	}
-	// 倒序遍历保证执行顺序与原递归一致
-	for i := len(mks) - 1; i >= 0; i-- {
-		key := mks[i]
-		val, ok := cur[key]
-		if !ok {
-			continue
-		}
-		pkey, ok := any(key).(string)
-		if !ok {
-			pkey = fmt.Sprintf("%v", key)
-		}
-		if strings.IndexByte(pkey, '.') >= 0 {
-			pkey = "[" + pkey + "]"
-		}
-		if path != "" {
-			pkey = path + "." + pkey
-		}
-		// 场景压入栈继续处理
-		setv(pkey, val)
-	}
-}
-
-func mapKeyItrArs[T any](cur []T, path, ikey string, setv func(string, any)) {
-	if ikey == "-0" {
-		return
-	}
-	switch {
-	case strings.HasPrefix(ikey, "-"):
-		// 负索引倒序检索
-		ak := ikey[1:]
-		i, err := strconv.Atoi(ak)
-		if err == nil && i > 0 && i <= len(cur) {
-			ai := len(cur) - i
-			val := cur[ai]
-			// 拼接路径
-			key := strconv.Itoa(ai)
-			if path != "" {
-				key = path + "." + key
-			}
-			setv(key, val)
-		}
-	case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
-		// 按属性检索数组元素
-		ais := FindByFieldInArr(cur, ikey, false)
-		for i := len(ais) - 1; i >= 0; i-- {
-			ai := ais[i]
-			val := cur[ai]
-			key := strconv.Itoa(ai)
-			if path != "" {
-				key = path + "." + key
-			}
-			setv(key, val)
-		}
-	default:
-		// 正索引检索
-		i, err := strconv.Atoi(ikey)
-		if err == nil && i >= 0 && i < len(cur) {
-			val := cur[i]
-			key := strconv.Itoa(i)
-			if path != "" {
-				key = path + "." + key
-			}
-			setv(key, val)
-		}
-	}
-
-}
-
-// 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion，
-// MapKeyVar 和 MapKeyVal 功能相同。基于测试，MapKeyVal 效率会更好一些， 百万次查询，相差30%左右。
-func MapKeyVar(src any, key string) []Pair {
-	if src == nil {
-		return []Pair{}
-	}
-	keys := MapParserPaths(key)
-	return MapKeyRec_(src, "", keys...)
-}
-
-// 检索属于规范的 key 列表和对应的值，返回 map[string]any
-func MapKeyRec(src any, keys ...string) []Pair {
-	return MapKeyRec_(src, "", keys...)
-}
-
-// 检索属于规范的 key 列表和对应的值，返回 map[string]any, Iterator or Traverse or Recursion
-func MapKeyRec_(curr any, path string, keys ...string) []Pair {
-	if len(keys) == 0 && path == "" {
-		return []Pair{}
-	}
-	if len(keys) == 0 {
-		return []Pair{{path, curr}}
-	}
-	dest := []Pair{} // 返回值列表
-	ikey := keys[0]
-	keys = keys[1:]
-	xlst := ikey == "?"
-	switch curr := curr.(type) {
-	case map[string]any:
-		mks := FindByFieldInMap(curr, ikey, false)
-		if len(mks) == 0 {
-			mks = []string{ikey} // 使用默认值到 key
-		}
-		for _, mk := range mks {
-			if cur, cok := curr[mk]; cok {
-				key := mk
-				if strings.IndexByte(key, '.') >= 0 {
-					key = "[" + key + "]"
-				}
-				if path != "" {
-					key = path + "." + key
-				}
-				dst := MapKeyRec_(cur, key, keys...)
-				if xlst && len(dst) > 0 {
-					return dst // 找到一个就返回
-				}
-				dest = append(dest, dst...)
-			}
-		}
-	case []any:
-		switch {
-		case ikey == "-0":
-			// ignore
-		case strings.HasPrefix(ikey, "-"):
-			// 倒序检索数据
-			ak := ikey[1:]
-			if i, err := strconv.Atoi(ak); err != nil {
-				// 数字转换失败
-			} else if i > 0 && i <= len(curr) { // 倒序检索
-				ai := len(curr) - i
-				cur := curr[ai]
-				key := strconv.Itoa(ai)
-				if path != "" {
-					key = path + "." + key
-				}
-				dst := MapKeyRec_(cur, key, keys...)
-				if xlst && len(dst) > 0 {
-					return dst // 找到一个就返回
-				}
-				dest = append(dest, dst...)
-			}
-		case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
-			// 通过属性检索数据
-			ais := FindByFieldInArr(curr, ikey, false)
-			for _, ai := range ais {
-				cur := curr[ai]
-				key := strconv.Itoa(ai)
-				if path != "" {
-					key = path + "." + key
-				}
-				dst := MapKeyRec_(cur, key, keys...)
-				if xlst && len(dst) > 0 {
-					return dst // 找到一个就返回
-				}
-				dest = append(dest, dst...)
-			}
-		default:
-			if i, err := strconv.Atoi(ikey); err != nil {
-				// 数字转换失败
-			} else if i >= 0 && i < len(curr) {
-				ai := i
-				cur := curr[ai]
-				key := strconv.Itoa(ai)
-				if path != "" {
-					key = path + "." + key
-				}
-				dst := MapKeyRec_(cur, key, keys...)
-				if xlst && len(dst) > 0 {
-					return dst // 找到一个就返回
-				}
-				dest = append(dest, dst...)
-			}
-		}
-	}
-	return dest
 }
 
 // ---------------------------------------------------------------------------------------
@@ -582,14 +329,14 @@ func MapParserPaths(path string) []string {
 }
 
 // 从源 map 中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
-// src: 检索的 map, key: 属性字段， lst: 是否只返回一个结果, 比 key = *, ? 优先级高
-func FindByFieldInMap[K comparable](src map[K]any, key string, lst bool) []K {
+// src: 检索的 map, key: 属性字段， oly: 是否只返回一个结果, 比 key = *, ? 随机取一个
+func FindByFieldInMap[K comparable](src map[K]any, key string, oly bool) []K {
 	ks := []K{}
 	if key == "*" || key == "?" {
 		// 匹配所有字段, * 所有， ？匹配到1个就返回
 		for k := range src {
 			ks = append(ks, k)
-			if lst {
+			if oly {
 				break
 			}
 		}
@@ -621,7 +368,7 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, lst bool) []K {
 		} else if v2, ok := v.(map[any]any); ok {
 			v3, _ = v2[k2[0]]
 		}
-		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
+		if v3 != nil && IsMatchMapField(v3, k2[1], kre) {
 			ks = append(ks, ck) // 匹配到结果
 		}
 		return ks
@@ -648,9 +395,9 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, lst bool) []K {
 		} else if v2, ok := v.(map[any]any); ok {
 			v3, _ = v2[k2[0]]
 		}
-		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
+		if v3 != nil && IsMatchMapField(v3, k2[1], kre) {
 			ks = append(ks, ck) // 匹配到结果
-			if lst {
+			if oly {
 				break
 			}
 		}
@@ -658,8 +405,19 @@ func FindByFieldInMap[K comparable](src map[K]any, key string, lst bool) []K {
 	return ks
 }
 
+func IsMatchFuzzyKey(ikey string) bool {
+	if ikey == "*" || ikey == "?" {
+		return true // 匹配模式， 忽略
+	}
+	if ll := len(ikey); ll > 0 && strings.ContainsRune(ikey, '=') && //
+		(ikey[0] == '.' || strings.Index(ikey, "[.") > 0 && ikey[ll-1] == ']') {
+		return true // .xxx=xxx 开头 或者 x[.xxx=xxx] 格式， 忽略
+	}
+	return false
+}
+
 // 执行内容匹配， 暂时只支持 int, int64, float64, string, bool 类型
-func IsMatchByField(val any, src string, kre *regexp.Regexp) bool {
+func IsMatchMapField(val any, src string, kre *regexp.Regexp) bool {
 	if src == val {
 		return true
 	}
@@ -763,14 +521,14 @@ func IsMatchByField(val any, src string, kre *regexp.Regexp) bool {
 }
 
 // 从数组中查找字段， 更具字段属性进行匹配， key 必须是 .name=xxx | .name=^reg 格式
-// src: 检索的 数组, key: 属性字段， lst: 是否只返回一个结果, 比 key = *, ? 优先级高
-func FindByFieldInArr[T any](src []T, key string, lst bool) []int {
+// src: 检索的 数组, key: 属性字段， only: 是否只返回一个结果, 比 key = *, ? 优先级高
+func FindByFieldInArr[T any](src []T, key string, oly bool) []int {
 	ks := []int{}
 	if key == "*" || key == "?" {
 		// 匹配所有
 		for i := range src {
 			ks = append(ks, i)
-			if lst {
+			if oly {
 				break
 			}
 		}
@@ -797,10 +555,10 @@ func FindByFieldInArr[T any](src []T, key string, lst bool) []int {
 		} else if v2, ok := any(v).(map[any]any); ok {
 			v3, _ = v2[k2[0]]
 		}
-		if v3 != nil && IsMatchByField(v3, k2[1], kre) {
+		if v3 != nil && IsMatchMapField(v3, k2[1], kre) {
 			// 匹配到结果
 			ks = append(ks, i)
-			if lst {
+			if oly {
 				break
 			}
 		}

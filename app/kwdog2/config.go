@@ -11,8 +11,9 @@ var (
 		Proxy2 ProxyConfig
 	}{}
 
-	RecordFunc = gte.ToRecord0
-	AuthzcFunc = gte.NewAuthzF1kin
+	AuthzDefaultFunc  = gte.NewAuthzF1kin
+	RecordFrowardFunc = gte.ToRecord0
+	RecordReverseFunc = gte.ToRecord1
 )
 
 func Init3(ifn1 InitializKwdogFunc, ifn2 InitializProxyFunc) {

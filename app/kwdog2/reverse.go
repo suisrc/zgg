@@ -21,6 +21,7 @@ type KwdogConfig struct {
 	AuthSkip bool              `json:"askip"`   // 默认不跳过, 可以忽略鉴权
 	Routers  map[string]string `json:"routers"` // 其他路由
 	Rtrack   bool              `json:"rtrack"`  // 追踪路由
+	Rauthz   string            `json:"rauthz"`  // 追踪路由
 	Sites    []string          `json:"sites"`   // 站点列表， 用于标记 _xc
 	Syslog   string            `json:"syslog"`  // 日志发送地址
 	LogNet   string            `json:"logudp"`  // 日志发送协议
@@ -42,13 +43,14 @@ func InitKwdog(ifn InitializKwdogFunc) {
 	flag.BoolVar(&C.Kwdog2.AuthSkip, "k2askip", false, "在存在鉴权头部信息时，是否跳过鉴权")
 	flag.Var(z.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
 	flag.BoolVar(&C.Kwdog2.Rtrack, "k2rlog", false, "是否记录其他路由的日志")
+	flag.StringVar(&C.Kwdog2.Rauthz, "k2rauth", "", "是否记录其他路由的日志")
 	flag.Var(z.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
 	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址， none: 表示不记录日志")
 	flag.StringVar(&C.Kwdog2.LogNet, "k2lognet", "udp", "日志发送协议")
 	flag.IntVar(&C.Kwdog2.LogPri, "k2logpri", 0, "日志优先级")
 	flag.BoolVar(&C.Kwdog2.LogTty, "k2logtty", false, "是否打印日志")
 	flag.BoolVar(&C.Kwdog2.LogBody, "k2logbody", false, "记录日志中的Body")
-	flag.IntVar(&C.Kwdog2.Record, "k2record", 0, "记录级别")
+	flag.IntVar(&C.Kwdog2.Record, "k2record", -1, "记录级别")
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
 		if C.Kwdog2.Disabled {
@@ -58,14 +60,14 @@ func InitKwdog(ifn InitializKwdogFunc) {
 
 		// ...
 		switch C.Kwdog2.Record {
-		// case 0: RecordFunc = gte.ToRecord0
+		case 0:
+			RecordReverseFunc = gte.ToRecord0
 		case 1:
-			RecordFunc = gte.ToRecord1
+			RecordReverseFunc = gte.ToRecord1
 		}
 
 		var err error
 		api := &KwdogApi{Config: C.Kwdog2}
-
 		if api.Config.Syslog != "none" {
 			api.RecordPool = gte.NewRecordSyslog(
 				api.Config.Syslog,
@@ -73,7 +75,7 @@ func InitKwdog(ifn InitializKwdogFunc) {
 				api.Config.LogPri,
 				api.Config.LogTty,
 				api.Config.LogBody,
-				RecordFunc,
+				RecordReverseFunc,
 			)
 		}
 		api.BufferPool = gtw.NewBufferPool(32*1024, 0)
@@ -87,19 +89,34 @@ func InitKwdog(ifn InitializKwdogFunc) {
 		}
 		api.GtwDefault.ProxyName = "kwdog2-gateway"
 		api.GtwDefault.RecordPool = api.RecordPool
-		api.GtwDefault.Authorizer = AuthzcFunc(
+		api.GtwDefault.Authorizer = AuthzDefaultFunc(
 			api.Config.Sites,
 			api.Config.AuthAddr,
 			api.Config.AuthSkip,
 		)
-		// api.Authorizer = gte.NewLoggerOnly(api.Sites)
+		switch C.Kwdog2.Rauthz {
+		case "", "none", "no", "disable":
+			// ignore
+		case "default":
+			api.Authorizer = api.GtwDefault.Authorizer
+		case "logger":
+			api.Authorizer = gte.NewAuthLogger(api.Config.Sites)
+		default:
+			if strings.HasPrefix(api.Config.Rauthz, "https://") ||
+				strings.HasPrefix(api.Config.Rauthz, "http://") {
+				api.Authorizer = AuthzDefaultFunc(
+					api.Config.Sites,
+					api.Config.Rauthz,
+					api.Config.AuthSkip,
+				)
+			}
+		}
 		for kk := range api.Config.Routers {
 			api.RouterKey = append(api.RouterKey, kk)
 		}
 		// api.RoutersKey 按字符串长度倒序
 		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
 		z.Println("[_kwdog2_]: routers", api.RouterKey)
-
 		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}
 
 		if ifn != nil {
@@ -135,6 +152,12 @@ func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	aa._svc_lock.Lock()
 	defer aa._svc_lock.Unlock()
 	vv := aa.Config.Routers[kk]
+	share := false
+	if strings.HasPrefix(vv, "def+") {
+		// 需要网关处理
+		share = true
+		vv = vv[4:]
+	}
 	gw, err := gtw.NewTargetGateway2(vv, aa.BufferPool) // 创建目标URL
 	if err != nil {
 		return nil, err
@@ -143,7 +166,12 @@ func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 		aa.RouterMap = make(map[string]gtw.IGateway)
 	}
 	gw.ProxyName = strings.ReplaceAll(kk, "/", "_") + "-gateway"
-	if aa.Config.Rtrack {
+	if share {
+		// 共享默认网关配置
+		gw.RecordPool = aa.GtwDefault.RecordPool
+		gw.Authorizer = aa.GtwDefault.Authorizer
+	} else if aa.Config.Rtrack {
+		// 记录其他网关日志
 		gw.RecordPool = aa.RecordPool
 		gw.Authorizer = aa.Authorizer
 	}
@@ -160,7 +188,7 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 
 	for _, kk := range aa.RouterKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
-			continue
+			continue // 数量少， 可以这么处理
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			if z.IsDebug() {

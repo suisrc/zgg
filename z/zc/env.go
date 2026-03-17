@@ -42,34 +42,29 @@ func (aa *ENV) Decode(val any, tag string) error {
 		if val, err := StrToBV(tag.Field.Type, venv); err == nil {
 			tag.Value.Set(reflect.ValueOf(val))
 		} else if vkey[len(vkey)-1] == 'S' {
-			// 此方案必须保障配置的联系性， 否则， 配置项将无法正确处理
-			// for idx := 0; ; idx++ {
-			// 	if venv = os.Getenv(vkey + "_" + strconv.Itoa(idx)); venv == "" {
-			// 		break
-			// 	}
-			// 	arr = append(arr, venv)
-			// }
-			//
 			// 判断 vkey_0 是否存在，如果存在，处理所有的环境变了，查询已 vkey_开头的参数，进行处理
 			// 这种方式的优势在于， 需要确定 vkey_0 存在， 并且需要执行集合处理，尽量避免过多次遍历
-			arr := []string{}
+			// ignore+ 标记忽略当前数据
+			vvs := []string{}
 			if venv = os.Getenv(vkey + "_0"); venv != "" {
+				pkey := vkey + "_"
 				for _, vv := range os.Environ() {
-					if strings.HasPrefix(vv, vkey+"_") {
-						vv2 := strings.SplitN(vv, "=", 2)
-						if len(vv2) == 2 && vv2[1] != "" {
-							arr = append(arr, vv2[1])
+					if strings.HasPrefix(vv, pkey) {
+						if vv2 := strings.SplitN(vv, "=", 2); len(vv2) != 2 {
+						} else if vvv := vv2[1]; vvv == "" || strings.HasPrefix(vvv, "ignore+") {
+						} else {
+							vvs = append(vvs, vvv)
 						}
 					}
 				}
 			}
-			if len(arr) > 0 {
+			if len(vvs) > 0 {
 				if tag.Field.Type.Kind() == reflect.Map && //
 					tag.Field.Type.Key().Kind() == reflect.String && //
 					tag.Field.Type.Elem().Kind() == reflect.String {
 					// tag.Field.Type = map[string]string
 					vvv := map[string]string{}
-					for _, vv := range arr {
+					for _, vv := range vvs {
 						vv = strings.TrimSpace(vv)
 						if vv == "" {
 							continue
@@ -82,7 +77,7 @@ func (aa *ENV) Decode(val any, tag string) error {
 						}
 					}
 					tag.Value.Set(reflect.ValueOf(vvv))
-				} else if val, err := ToBasicValue(tag.Field.Type, arr); err == nil {
+				} else if val, err := ToBasicValue(tag.Field.Type, vvs); err == nil {
 					tag.Value.Set(reflect.ValueOf(val))
 				}
 				// 由于原始的MAP是没有顺序的，这里强调的是一种有续的map形式， 功能待定
@@ -91,7 +86,7 @@ func (aa *ENV) Decode(val any, tag string) error {
 				// 	tag.Field.Type.Elem().Elem().Kind() == reflect.String {
 				// 	// tag.Field.Type = [][2]string
 				// 	vvv := [][2]string{}
-				// 	for _, vv := range arr {
+				// 	for _, vv := range vvs {
 				// 		vv = strings.TrimSpace(vv)
 				// 		if vv == "" {
 				// 			continue

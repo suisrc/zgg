@@ -50,7 +50,7 @@ func InitProxy(ifn InitializProxyFunc) {
 	flag.IntVar(&C.Proxy2.LogPri, "p2logpri", 0, "日志优先级")
 	flag.BoolVar(&C.Proxy2.LogTty, "p2logtty", false, "是否打印日志")
 	flag.BoolVar(&C.Proxy2.LogBody, "p2logbody", false, "记录日志中的Body")
-	flag.IntVar(&C.Proxy2.Record, "p2record", 0, "记录级别")
+	flag.IntVar(&C.Proxy2.Record, "p2record", -1, "记录级别")
 
 	z.Register("12-proxy2", func(zgg *z.Zgg) z.Closed {
 		if C.Proxy2.Disabled {
@@ -60,8 +60,10 @@ func InitProxy(ifn InitializProxyFunc) {
 
 		// ...
 		switch C.Proxy2.Record {
+		case 0:
+			RecordFrowardFunc = gte.ToRecord0
 		case 1:
-			RecordFunc = gte.ToRecord1
+			RecordFrowardFunc = gte.ToRecord1
 		}
 
 		api := new(Proxy2Api)
@@ -87,8 +89,14 @@ func (api *Proxy2Api) Init(cfg ProxyConfig) error {
 	api.GtwDefault.ProxyName = "proxy2-gateway"
 
 	if cfg.Syslog != "none" {
-		api.GtwDefault.RecordPool = gte.NewRecordSyslog(cfg.Syslog, cfg.LogNet, cfg.LogPri, //
-			cfg.LogTty, cfg.LogBody, RecordFunc)
+		api.GtwDefault.RecordPool = gte.NewRecordSyslog(
+			cfg.Syslog,
+			cfg.LogNet,
+			cfg.LogPri,
+			cfg.LogTty,
+			cfg.LogBody,
+			RecordFrowardFunc,
+		)
 	}
 
 	if cfg.CrtCA == "" || cfg.KeyCA == "" {
