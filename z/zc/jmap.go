@@ -107,15 +107,15 @@ func MapItr(src any, key string, fpv bool, vfn func(string, any) (value any, cov
 		pkey = pkey[1:]
 		switch cur := curr.(type) {
 		case map[string]any:
-			path, curr, setv = _map_itr_next_map(cur, ikey, path, pkey, fpv, vfn)
-		case map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
-			path, curr, setv = _map_itr_next_map(cur, ikey, path, pkey, fpv, vfn)
+			path, curr, setv = mapItrMap(cur, ikey, path, pkey, fpv, vfn)
 		case []any:
-			path, curr, setv = _map_itr_next_ars(cur, ikey, path, pkey, fpv, vfn, setv)
-		case []map[string]any:
-			path, curr, setv = _map_itr_next_ars(cur, ikey, path, pkey, fpv, vfn, setv)
+			path, curr, setv = mapItrArs(cur, ikey, path, pkey, fpv, vfn, setv)
+		case map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
+			path, curr, setv = mapItrMap(cur, ikey, path, pkey, fpv, vfn)
 		case []map[any]any: // 虽然 key 是 any 类型，但是实体必须是 string
-			path, curr, setv = _map_itr_next_ars(cur, ikey, path, pkey, fpv, vfn, setv)
+			path, curr, setv = mapItrArs(cur, ikey, path, pkey, fpv, vfn, setv)
+		case []map[string]any:
+			path, curr, setv = mapItrArs(cur, ikey, path, pkey, fpv, vfn, setv)
 		default:
 			// 其他类型暂不支持
 			curr = nil
@@ -124,7 +124,7 @@ func MapItr(src any, key string, fpv bool, vfn func(string, any) (value any, cov
 	return curr
 }
 
-func _map_itr_next_map[K comparable](cur map[K]any, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8)) (string, any, func(any)) {
+func mapItrMap[K comparable](cur map[K]any, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8)) (string, any, func(any)) {
 	var mk K
 	var ck string
 	if mks := FindByFieldInMap(cur, ikey, true); len(mks) > 0 {
@@ -173,7 +173,7 @@ func _map_itr_next_map[K comparable](cur map[K]any, ikey, path string, pkey []st
 	return path, curr, vset
 }
 
-func _map_itr_next_ars[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8), setv func(any)) (string, any, func(any)) {
+func mapItrArs[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8), setv func(any)) (string, any, func(any)) {
 	var curr any = nil
 	var vset func(any) = nil
 	if ikey == "-0" {
@@ -325,24 +325,24 @@ func MapKeyItr(src any, keys ...string) []Pair {
 		}
 		rkey := curr.keys[1:]
 		switch cur := curr.elem.(type) {
-		case map[any]any:
-			_map_key_itr_map(cur, curr.path, ikey, func(key string, val any) {
-				stack = append(stack, &node{curr, val, key, rkey, xlst})
-			})
 		case map[string]any:
-			_map_key_itr_map(cur, curr.path, ikey, func(key string, val any) {
+			mapKeyItrMap(cur, curr.path, ikey, func(key string, val any) {
 				stack = append(stack, &node{curr, val, key, rkey, xlst})
 			})
 		case []any:
-			_map_key_itr_ars(cur, curr.path, ikey, func(key string, val any) {
+			mapKeyItrArs(cur, curr.path, ikey, func(key string, val any) {
+				stack = append(stack, &node{curr, val, key, rkey, xlst})
+			})
+		case map[any]any:
+			mapKeyItrMap(cur, curr.path, ikey, func(key string, val any) {
 				stack = append(stack, &node{curr, val, key, rkey, xlst})
 			})
 		case []map[any]any:
-			_map_key_itr_ars(cur, curr.path, ikey, func(key string, val any) {
+			mapKeyItrArs(cur, curr.path, ikey, func(key string, val any) {
 				stack = append(stack, &node{curr, val, key, rkey, xlst})
 			})
 		case []map[string]any:
-			_map_key_itr_ars(cur, curr.path, ikey, func(key string, val any) {
+			mapKeyItrArs(cur, curr.path, ikey, func(key string, val any) {
 				stack = append(stack, &node{curr, val, key, rkey, xlst})
 			})
 		default:
@@ -352,7 +352,7 @@ func MapKeyItr(src any, keys ...string) []Pair {
 	return pairs
 }
 
-func _map_key_itr_map[K comparable](cur map[K]any, path, ikey string, setv func(string, any)) {
+func mapKeyItrMap[K comparable](cur map[K]any, path, ikey string, setv func(string, any)) {
 	// 查找匹配的key
 	mks := FindByFieldInMap(cur, ikey, false)
 	if len(mks) == 0 {
@@ -382,7 +382,7 @@ func _map_key_itr_map[K comparable](cur map[K]any, path, ikey string, setv func(
 	}
 }
 
-func _map_key_itr_ars[T any](cur []T, path, ikey string, setv func(string, any)) {
+func mapKeyItrArs[T any](cur []T, path, ikey string, setv func(string, any)) {
 	if ikey == "-0" {
 		return
 	}
