@@ -1,27 +1,66 @@
 package zc
 
+// 这是第三个版本的 MAP 检索器， 支持多路径检索
+// MapTraverse    只读器
+// MapTraverseSet 读写器， 存在上下链关系，比只读器内存消耗更大
+
 import (
 	"fmt"
 	"strconv"
 	"strings"
 )
 
-// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
-func MapVal(src any, keys ...string) Pair {
-	pairs := MapTraverse(src, 1, keys...) // 遍历栈元素：保存单次处理的上下文
+// 使用循环的方式检索一个符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapGet1(src any, keys ...string) Pair {
+	pairs := MapTraverse(src, 1, keys...)
 	if len(pairs) == 0 {
 		return Pair{}
 	}
 	return pairs[0]
+	// pair := Pair{}
+	// MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
+	// 	pair.K, pair.V = k, v
+	// 	return nil, 0, false
+	// }, keys...)
+	// return pair
 }
 
 // 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
-func MapVals(src any, keys ...string) []Pair {
-	return MapTraverse(src, -1, keys...) // 遍历栈元素：保存单次处理的上下文
+func MapGets(src any, keys ...string) []Pair {
+	return MapTraverse(src, -1, keys...)
+	// pairs := PairSlice{}
+	// MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
+	// 	pairs = append(pairs, Pair{k, v})
+	// 	return nil, 0, true
+	// }, keys...)
+	// return pairs
 }
 
-// [只读模式], MapRecursion 和 MapTraverse 功能相同。
-// 当前只基于 map[string]any, []any, map[any]any, []map[any]any, []map[string]any。 max < 0 获取所有的值。
+// 使用循环的方式检索一个符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapSet1(src any, val any, keys ...string) Pair {
+	pair := Pair{}
+	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
+		pair.K, pair.V = k, v
+		return val, If[int8](val == nil, -1, 1), false
+	}, keys...)
+	return pair
+}
+
+// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapSets(src any, val any, keys ...string) []Pair {
+	pairs := PairSlice{}
+	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
+		pairs = append(pairs, Pair{k, v})
+		return val, If[int8](val == nil, -1, 1), true
+	}, keys...)
+	return pairs
+}
+
+// ---------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------
+
+// [只读模式] 当前只基于 map[string]any, []any, map[any]any, []map[any]any, []map[string]any。 max < 0 获取所有的值。
 func MapTraverse(src any, max int, keys ...string) []Pair {
 	dest := []Pair{}
 	if len(keys) == 0 || src == nil || max == 0 {
@@ -73,77 +112,10 @@ func MapTraverse(src any, max int, keys ...string) []Pair {
 			mapTraverseMap(cur, false, curr.path, ikey, func(path string, _ string, val any) {
 				stack = append(stack, &node{val, path, rkey, only})
 			})
-			// mks := FindByFieldInMap(cur, ikey, false)
-			// if len(mks) == 0 {
-			// 	if IsMatchFuzzyKey(ikey) {
-			// 		continue // 匹配模式， 忽略
-			// 	} else {
-			// 		mks = []string{ikey}
-			// 	}
-			// }
-			// // 倒序遍历保证执行顺序与原递归一致
-			// for i := len(mks) - 1; i >= 0; i-- {
-			// 	key := mks[i]
-			// 	val, exist := cur[key]
-			// 	if !exist {
-			// 		continue
-			// 	}
-			// 	pkey, ok := any(key).(string)
-			// 	if !ok {
-			// 		pkey = fmt.Sprintf("%v", key)
-			// 	}
-			// 	if strings.IndexByte(pkey, '.') >= 0 {
-			// 		pkey = "[" + pkey + "]"
-			// 	}
-			// 	if curr.path != "" {
-			// 		pkey = curr.path + "." + pkey
-			// 	}
-			// 	// 场景压入栈继续处理
-			// 	stack = append(stack, &node{val, pkey, rkey, only})
-			// }
 		case []any:
 			mapTraverseArr(cur, false, curr.path, ikey, func(path string, _ int, val any) {
 				stack = append(stack, &node{val, path, rkey, only})
 			})
-			// if ikey == "-0" {
-			// 	continue
-			// }
-			// switch {
-			// case strings.HasPrefix(ikey, "-"):
-			// 	// 负索引倒序检索
-			// 	if i, err := strconv.Atoi(ikey[1:]); err == nil && i > 0 && i <= len(cur) {
-			// 		idx := len(cur) - i
-			// 		val := cur[idx]
-			// 		pkey := strconv.Itoa(idx)
-			// 		if curr.path != "" {
-			// 			pkey = curr.path + "." + pkey
-			// 		}
-			// 		stack = append(stack, &node{val, pkey, rkey, only})
-			// 	}
-			// case strings.HasPrefix(ikey, ".") || ikey == "*" || ikey == "?":
-			// 	// 按属性检索数组元素
-			// 	ais := FindByFieldInArr(cur, ikey, false)
-			// 	for i := len(ais) - 1; i >= 0; i-- {
-			// 		idx := ais[i]
-			// 		val := cur[idx]
-			// 		pkey := strconv.Itoa(idx)
-			// 		if curr.path != "" {
-			// 			pkey = curr.path + "." + pkey
-			// 		}
-			// 		stack = append(stack, &node{val, pkey, rkey, only})
-			// 	}
-			// default:
-			// 	// 正索引检索
-			// 	idx, err := strconv.Atoi(ikey)
-			// 	if err == nil && idx >= 0 && idx < len(cur) {
-			// 		val := cur[idx]
-			// 		pkey := strconv.Itoa(idx)
-			// 		if curr.path != "" {
-			// 			pkey = curr.path + "." + pkey
-			// 		}
-			// 		stack = append(stack, &node{val, pkey, rkey, only})
-			// 	}
-			// }
 		case map[any]any:
 			mapTraverseMap(cur, false, curr.path, ikey, func(path string, _ any, val any) {
 				stack = append(stack, &node{val, path, rkey, only})
@@ -248,49 +220,9 @@ func mapTraverseArr[T any](cur []T, fpv bool, path, ikey string, setv func(strin
 }
 
 // ---------------------------------------------------------------------------------------
-// 只读取一个结果， (any 处理值, int8[-1 删除， 0 不变， 1 替换], bool[是否继续变量])
-
-// 使用循环的方式检索一个符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
-func MapGet1(src any, keys ...string) Pair {
-	pair := Pair{}
-	MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
-		pair.K, pair.V = k, v
-		return nil, 0, false
-	}, keys...)
-	return pair
-}
-
-// 使用循环的方式检索一个符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
-func MapSet1(src any, val any, keys ...string) Pair {
-	pair := Pair{}
-	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
-		pair.K, pair.V = k, v
-		return val, If[int8](val == nil, -1, 1), false
-	}, keys...)
-	return pair
-}
-
-// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
-func MapGets(src any, keys ...string) []Pair {
-	pairs := PairSlice{}
-	MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
-		pairs = append(pairs, Pair{k, v})
-		return nil, 0, true
-	}, keys...)
-	return pairs
-}
-
-// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
-func MapSets(src any, val any, keys ...string) []Pair {
-	pairs := PairSlice{}
-	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
-		pairs = append(pairs, Pair{k, v})
-		return val, If[int8](val == nil, -1, 1), true
-	}, keys...)
-	return pairs
-}
 
 // [读写模式], 基于循环的方式，对值进行匹配， 也可以使用这个方法进行值获取
+// vfn (any 处理值, int8[-1 删除， 0 不变， 1 替换], bool[是否继续遍历])
 func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), keys ...string) {
 	if len(keys) == 0 || vfn == nil || src == nil {
 		return
@@ -305,7 +237,9 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 		// 弹出栈顶元素（LIFO，保证遍历顺序与原递归一致）
 		curr := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		if !fpv && curr.elem == nil || curr.x1st != nil && *curr.x1st || len(curr.keys) == 0 && curr.path == "" {
+		if !fpv && curr.elem == nil && len(curr.keys) > 0 || //
+			curr.x1st != nil && *curr.x1st || //
+			len(curr.keys) == 0 && curr.path == "" {
 			continue // 不满足处理条件， 跳过结果
 		}
 		// 没有剩余key，直接存入结果
@@ -353,23 +287,23 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 		}
 		switch cur := curr.elem.(type) {
 		case map[string]any:
-			mapTraverseMap(cur, fpv, curr.path, ikey, func(path string, key string, val any) {
+			mapTraverseMap(cur, fpv || len(rkey) == 0, curr.path, ikey, func(path string, key string, val any) {
 				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, key, 0})
 			})
 		case []any:
-			mapTraverseArr(cur, fpv, curr.path, ikey, func(path string, idx int, val any) {
+			mapTraverseArr(cur, fpv || len(rkey) == 0, curr.path, ikey, func(path string, idx int, val any) {
 				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, nil, idx})
 			})
 		case map[any]any:
-			mapTraverseMap(cur, fpv, curr.path, ikey, func(path string, key any, val any) {
+			mapTraverseMap(cur, fpv || len(rkey) == 0, curr.path, ikey, func(path string, key any, val any) {
 				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, key, 0})
 			})
 		case []map[any]any:
-			mapTraverseArr(cur, fpv, curr.path, ikey, func(path string, idx int, val any) {
+			mapTraverseArr(cur, fpv || len(rkey) == 0, curr.path, ikey, func(path string, idx int, val any) {
 				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, nil, idx})
 			})
 		case []map[string]any:
-			mapTraverseArr(cur, fpv, curr.path, ikey, func(path string, idx int, val any) {
+			mapTraverseArr(cur, fpv || len(rkey) == 0, curr.path, ikey, func(path string, idx int, val any) {
 				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, nil, idx})
 			})
 		default:

@@ -10,7 +10,11 @@ import (
 
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
-	val := MapIterator(src, false, nil, key)
+	pairs := MapTraverse(src, 1, key)
+	if len(pairs) == 0 {
+		return def
+	}
+	val := pairs[0].V
 	if val == nil {
 		return def
 	}
@@ -18,207 +22,151 @@ func MapDef[T any](src map[string]any, key string, def T) T {
 		return vv
 	}
 	return def
+	// val := MapIterator(src, false, nil, key)
 }
 
 // 将任意类型转换为 T 类型, 尽量转换， 这里处理了 string 和 number bool 类型间的附加关系
 func MapAny[T any](src map[string]any, key string, def T) T {
-	return ToAny(MapIterator(src, false, nil, key), def)
+	pairs := MapTraverse(src, 1, key)
+	if len(pairs) == 0 {
+		return def
+	}
+	return ToAny(pairs[0].V, def)
+	// val := MapIterator(src, false, nil, key)
 }
 
 // 将任意类型转换为 int 类型
 func MapInt(src map[string]any, key string, def int) int {
-	return ToInt(MapIterator(src, false, nil, key), def)
+	pairs := MapTraverse(src, 1, key)
+	if len(pairs) == 0 {
+		return def
+	}
+	return ToInt(pairs[0].V, def)
+	// val := MapIterator(src, false, nil, key)
 }
 
-// 从 map 中获取字段的值， 原始数据， 同 MapItr(src, key, false, nil) 操作
+// 从 map 中获取字段的值， 原始数据
 func MapGet(src map[string]any, key string) any {
-	return MapIterator(src, false, nil, key)
+	pairs := MapTraverse(src, 1, key)
+	if len(pairs) == 0 {
+		return nil
+	}
+	return pairs[0].V
+	// val := MapIterator(src, false, nil, key)
 }
 
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段，
-// 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增。
+// 多用于 删除 或 已有字段覆盖, 父路径不存在，无法新增。
 func MapSet(src map[string]any, key string, val any) any {
-	return MapIterator(src, false, func(_ string, _ any) (any, int8) { return val, If[int8](val == nil, -1, 1) }, key)
+	pair := Pair{}
+	MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
+		pair.K, pair.V = k, v
+		return val, If[int8](val == nil, -1, 1), false
+	}, key)
+	return pair.V
+	// return MapIterator(src, false, func(_ string, _ any) (any, int8) {
+	// 	return val, If[int8](val == nil, -1, 1)
+	// }, key)
 }
 
 // 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
-// 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径，
-// -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险。
+// 数组必须是 -0(追加)， 否则不会创建字段; 父路径不存在，会自动创建；
+// 父路径中自动创建部分，数组是 []any 类型， MAP 是 map[string]any
 func MapNew(src map[string]any, key string, val any) any {
-	return MapIterator(src, true, func(_ string, _ any) (any, int8) { return val, 1 }, key)
+	pair := Pair{}
+	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
+		pair.K, pair.V = k, v
+		return val, 1, false
+	}, key)
+	return pair.V
+	// return MapIterator(src, true, func(_ string, _ any) (any, int8) { return val, 1 }, key)
 }
 
-// 删除 map 中的值， 如果是基础类型，可以用 MapSet(src, key, nil) 进行删除， 该方法专用于集合对象删除
-func MapEmp[T ~string | ~[]any | ~map[any]any | ~map[string]any | ~chan any](src map[string]any, key string) any {
-	return MapIterator(src, false, func(_ string, val any) (any, int8) { return nil, If[int8](val == nil || len(val.(T)) == 0, -1, 0) }, key)
+type LenType interface {
+	~string | ~[]any | ~map[any]any | ~map[string]any | ~chan any
 }
 
-// ---------------------------------------------------------------------------------------
-
-// [读写模式], 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name， Iterator or Traverse or Recursion
-func MapIterator(src any, fpv bool, vfn func(string, any) (value any, cover int8), keys ...string) any {
-	if len(keys) == 0 || src == nil {
-		return nil
-	} else if len(keys) == 1 && strings.ContainsRune(keys[0], '.') {
-		keys = MapParserPaths(keys[0])
-	}
-	path := ""
-	pkey := keys
-	var setv func(any) = nil // 赋值回调
-	curr := src
-	for _, ikey := range keys {
-		if curr == nil {
-			return nil
+// 删除集合类型，是空的情况, nil 直接删除
+func MapDelSet[T LenType](src map[string]any, key string) []string {
+	pairs := []string{}
+	MapTraverseSet(src, false, func(kk string, val any) (any, int8, bool) {
+		if val == nil {
+			pairs = append(pairs, kk)
+			return nil, -1, true
 		}
-		pkey = pkey[1:]
-		switch cur := curr.(type) {
-		case map[string]any:
-			path, curr, setv = mapIteratorMap(cur, ikey, path, pkey, fpv, vfn)
-		case []any:
-			path, curr, setv = mapIteratorArr(cur, ikey, path, pkey, fpv, vfn, setv)
-		case map[any]any:
-			path, curr, setv = mapIteratorMap(cur, ikey, path, pkey, fpv, vfn)
-		case []map[any]any:
-			path, curr, setv = mapIteratorArr(cur, ikey, path, pkey, fpv, vfn, setv)
-		case []map[string]any:
-			path, curr, setv = mapIteratorArr(cur, ikey, path, pkey, fpv, vfn, setv)
-		default:
-			// 其他类型暂不支持
-			curr = nil
+		if vv, ok := val.(T); ok && len(vv) == 0 {
+			pairs = append(pairs, kk)
+			return nil, -1, true
 		}
-	}
-	return curr
+		return nil, 0, true
+	}, key)
+	return pairs
 }
 
-func mapIteratorMap[K comparable](cur map[K]any, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8)) (string, any, func(any)) {
-	var mk K
-	var ck string
-	if mks := FindByFieldInMap(cur, ikey, true); len(mks) > 0 {
-		mk = mks[0] // 优先检索
-		if ik, ok := any(mk).(string); ok {
-			ck = ik
-		} else {
-			ck = fmt.Sprintf("%v", mk)
+// func MapDelSet[T LenType](src map[string]any, key string) []string {
+// 	pairs := []string{}
+// 	MapIterator(src, false, func(kk string, val any) (any, int8) {
+// 		if val == nil {
+// 			pairs = append(pairs, kk)
+// 			return nil, -1
+// 		}
+// 		if vv, ok := val.(T); ok && len(vv) == 0 {
+// 			pairs = append(pairs, kk)
+// 			return nil, -1
+// 		}
+// 		return nil, 0
+// 	}, key)
+// 	return pairs
+// }
+
+// 删除任意类型，是空的情况, nil 直接删除
+func MapDelEmp(src map[string]any, key string) []string {
+	pairs := []string{}
+	MapIterator(src, false, func(kk string, val any) (any, int8) {
+		if val == nil {
+			pairs = append(pairs, kk)
+			return nil, -1
 		}
-	} else if IsMatchFuzzyKey(ikey) {
-		return path, nil, nil // 找不到字段
-	} else if ik, ok := any(ikey).(K); ok {
-		mk = ik // 兼容 string 类型
-		ck = ikey
-	} else {
-		return path, nil, nil // 找不到字段
-	}
-	// 处理路径
-	if strings.IndexByte(ck, '.') > 0 {
-		ck = "[" + ck + "]"
-	}
-	if path != "" {
-		ck = path + "." + ck
-	}
-	path = ck
-	// 处理数据
-	curr, _ := cur[mk]
-	if plen := len(pkey); plen == 0 && vfn != nil {
-		if v, r := vfn(path, curr); r > 0 {
-			cur[mk] = v
-		} else if r < 0 {
-			delete(cur, mk)
+		// 不适用 switch val := val.(type)， 因为无法穷举所有的类型
+		ref := reflect.ValueOf(val)
+		// 引用指针, 当前不会存在这种情况
+		// for ref.Kind() == reflect.Ptr { if ref.IsNil() { return nil, -1 }; ref = ref.Elem() }
+		// 判断数组类型
+		switch ref.Kind() {
+		case reflect.String, reflect.Array, reflect.Slice, reflect.Map, reflect.Chan:
+			if ref.Len() == 0 {
+				pairs = append(pairs, kk)
+				return nil, -1
+			}
 		}
-	} else if curr == nil && fpv && plen > 0 {
-		// 未到末尾，已经没有值了， 创建字段
-		if next := pkey[0]; next == "-0" {
-			curr = []any{}
-			cur[mk] = curr // 创建数组
-		} else {
-			curr = map[string]any{}
-			cur[mk] = curr // 创建字段
-		}
-	}
-	var vset func(any) = nil
-	if vfn != nil {
-		vset = func(v any) { cur[mk] = v }
-	}
-	return path, curr, vset
+		return nil, 0
+	}, key)
+	return pairs
 }
 
-func mapIteratorArr[T any](cur []T, ikey, path string, pkey []string, fpv bool, vfn func(string, any) (any, int8), setv func(any)) (string, any, func(any)) {
-	var curr any = nil
-	var vset func(any) = nil
-	if ikey == "-0" {
-		path += ".-0"
-		if vfn != nil {
-			// 末尾追加数据
-			if plen := len(pkey); plen == 0 {
-				if v, r := vfn(path, nil); r > 0 {
-					cur = append(cur, v.(T))
-					if setv != nil {
-						setv(cur)
-					}
-					i := len(cur) - 1
-					vset = func(v any) { cur[i] = v.(T) }
-				}
-			} else if fpv && plen > 0 {
-				// 未到末尾，已经没有值了， 创建字段
-				if next := pkey[0]; next == "-0" {
-					curr = []any{}
-					cur = append(cur, curr.(T)) // 创建数组
-					// 这里存在风险，直接多维数组， 必须是 [][][]...any 类型
-				} else {
-					curr = map[string]any{}
-					cur = append(cur, curr.(T)) // 创建字段
-				}
-				if setv != nil {
-					setv(cur)
-				}
-				ai := len(cur) - 1
-				vset = func(v any) { cur[ai] = v.(T) }
-			}
-		}
-	} else {
-		ai := -1
-		if strings.HasPrefix(ikey, "-") {
-			// 倒序检索数据
-			ak := ikey[1:]
-			if i, err := strconv.Atoi(ak); err != nil {
-				// 数字转换失败
-			} else if i > 0 && i <= len(cur) { // 倒序检索
-				ai = len(cur) - i
-			}
-		} else if strings.HasPrefix(ikey, ".") {
-			// 通过属性检索数据
-			ais := FindByFieldInArr(cur, ikey, true)
-			if len(ais) > 0 {
-				ai = ais[0]
-			}
-		} else {
-			if i, err := strconv.Atoi(ikey); err != nil {
-				// 数字转换失败
-			} else if i >= 0 && i < len(cur) {
-				ai = i
-			}
-		}
-		if ai >= 0 {
-			path += "." + strconv.Itoa(ai)
-			curr = cur[ai]
-			if len(pkey) == 0 && vfn != nil {
-				if v, r := vfn(path, curr); r > 0 {
-					cur[ai] = v.(T) // 更新字段
-				} else if r < 0 {
-					cur = SliceDelete(cur, ai)
-					if setv != nil {
-						setv(cur)
-					}
-				}
-			}
-			if vfn != nil {
-				vset = func(v any) { cur[ai] = v.(T) }
-			}
-		} else {
-			curr = nil
-		}
-	}
-	return path, curr, vset
-}
+// func MapDelEmp(src map[string]any, key string) []string {
+// 	pairs := []string{}
+// 	MapIterator(src, false, func(kk string, val any) (any, int8) {
+// 		if val == nil {
+// 			pairs = append(pairs, kk)
+// 			return nil, -1
+// 		}
+// 		// 不适用 switch val := val.(type)， 因为无法穷举所有的类型
+// 		ref := reflect.ValueOf(val)
+// 		// 引用指针, 当前不会存在这种情况
+// 		// for ref.Kind() == reflect.Ptr { if ref.IsNil() { return nil, -1 }; ref = ref.Elem() }
+// 		// 判断数组类型
+// 		switch ref.Kind() {
+// 		case reflect.String, reflect.Array, reflect.Slice, reflect.Map, reflect.Chan:
+// 			if ref.Len() == 0 {
+// 				pairs = append(pairs, kk)
+// 				return nil, -1
+// 			}
+// 		}
+// 		return nil, 0
+// 	}, key)
+// 	return pairs
+// }
 
 // ---------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------

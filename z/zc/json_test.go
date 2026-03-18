@@ -75,13 +75,13 @@ func Test_map1(t *testing.T) {
 	zc.MapNew(dmap, "a.b.x.y.-1.-0.z", "234")
 	t.Log("=================== ", zc.MapGet(dmap, "a.b.[.j=^*.2].j"))
 	t.Log("=================== ", zc.MapGet(dmap, "a.b.[.j=>122].j"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.=123]"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.='123']"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.=int.123]"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.=i64.123]"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.=f64.123]"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.=f32.123]"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.[.=i32.123]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.=123]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.='123']"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.=int.123]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.=i64.123]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.=f64.123]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.=f32.123]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.[.=i32.123]"))
 	t.Log("=================== ")
 	t.Log("=================== ", zc.MapSet(dmap, "a.b.d", nil))
 	t.Log("=================== ", zc.MapAny(dmap, "a.b.x.y.1.[.z=^*.6].z", 0))
@@ -124,52 +124,52 @@ func Test_map2(t *testing.T) {
 			},
 		},
 	}
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*"))
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*.j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*.j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*.j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*.[.j=^*.2]"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*.[.j=^*.2]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*.[.j=^*.2]"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*.[.j=^*.2]"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*.[.j=^3]"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*.[.j=^3]"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*.[.j=^3]"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*.[.j=^3]"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*.[.j=^1].j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*.[.j=^1].j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*.[.j=^1].j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*.[.j=^1].j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?.j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.?.j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a", "b", "?", "j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a", "b", "?", "j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a", "b", "?", "j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a", "b", "?", "j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a", "b", "*", "j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a", "b", "*", "j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a", "b", "*", "j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a", "b", "*", "j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*.*.j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*.*.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*.*.j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*.*.j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.*.?.j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.*.?.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*.?.j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.*.?.j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.*.j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.*.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?.*.j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.?.*.j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.?.j"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.?.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?.?.j"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.?.?.j"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.?.?"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.?.?"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?.?.?"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.?.?.?"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.?.?.?"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.?.?.?"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?.?.?.?"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.?.?.?.?"))
 	t.Log("=================== ")
-	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.?.*"))
-	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.?.*"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?.?.*"))
+	t.Log("=================== ", zc.MapGetsV2(dmap, "a.b.?.?.*"))
 }
 
 // go test -v z/zc/json_test.go -run Test_map3
@@ -211,16 +211,9 @@ func Test_map3(t *testing.T) {
 	}
 	now := time.Now()
 	for range 100_000 {
-		zc.MapVars(dmap, "a.b.*.*.j")
-		zc.MapVars(dmap, "a.b.*.?.j")
-		zc.MapVars(dmap, "a.b.?.*.j")
-	}
-	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
-	now = time.Now()
-	for range 100_000 {
-		zc.MapVals(dmap, "a.b.*.*.j")
-		zc.MapVals(dmap, "a.b.*.?.j")
-		zc.MapVals(dmap, "a.b.?.*.j")
+		zc.MapGetsV2(dmap, "a.b.*.*.j")
+		zc.MapGetsV2(dmap, "a.b.*.?.j")
+		zc.MapGetsV2(dmap, "a.b.?.*.j")
 	}
 	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
 	now = time.Now()
@@ -294,8 +287,8 @@ func Test_map4(t *testing.T) {
 	jsonv := map[string]any{}
 	json.Unmarshal([]byte(jsons), &jsonv)
 	// t.Log("=================== ", jsonv)
-	t.Log("=================== ", zc.MapVals(jsonv, "spec.rules.*.http.paths.*.backend.service[.name=^fnt-].name"))
-	t.Log("=================== ", zc.MapVals(jsonv, "spec.rules.*.http.paths.*.backend.service.name[.=^fnt-]"))
+	t.Log("=================== ", zc.MapGets(jsonv, "spec.rules.*.http.paths.*.backend.service[.name=^fnt-].name"))
+	t.Log("=================== ", zc.MapGets(jsonv, "spec.rules.*.http.paths.*.backend.service.name[.=^fnt-]"))
 }
 
 // go test -v z/zc/json_test.go -run Test_map5
@@ -314,6 +307,7 @@ func Test_map5(t *testing.T) {
 	}
 
 	t.Log("=================== ", zc.MapSet(dmap, "a.b.-0", map[string]any{}))
+	t.Log("=================== ", zc.MapSet(dmap, "a.b.0.m", 123))
 	t.Log(zc.ToStr2(dmap))
 }
 
@@ -394,4 +388,28 @@ func Test_map8(t *testing.T) {
 	t.Log(zc.ToStr2(dmap))
 	t.Log("=================== ", zc.MapNew(dmap, "a.b.0.w.-0.s", nil))
 	t.Log(zc.ToStr2(dmap))
+}
+
+// go test -v z/zc/json_test.go -run Test_map9
+
+func Test_map9(t *testing.T) {
+	dmap := map[string]any{
+		"a": map[string]any{
+			"b": []any{
+				map[string]any{
+					"q": map[string]any{
+						"j": 123.456,
+					},
+				},
+				map[string]any{},
+				map[string]any{},
+			},
+		},
+	}
+	t.Log("=================== ", zc.MapDelEmp(dmap, "a.b.1"))
+	t.Log(zc.ToStr(dmap))
+	t.Log("=================== ", zc.MapDelSet[map[any]any](dmap, "a.b.1"))
+	t.Log(zc.ToStr(dmap))
+	t.Log("=================== ", zc.MapDelSet[map[string]any](dmap, "a.b.1"))
+	t.Log(zc.ToStr(dmap))
 }
