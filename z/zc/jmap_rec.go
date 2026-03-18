@@ -16,7 +16,7 @@ func MapVars(src any, keys ...string) []Pair {
 	return MapRecursion(src, "", keys...)
 }
 
-// [只读模式], MapRecursion 和 MapTraverse 功能相同。基于测试， MapTraverse 效率会更好一些， 百万次查询，相差30%左右性能。
+// [只读模式], MapRecursion 和 MapTraverse 功能相同。
 // 当前只基于 map[string]any 和 []any 进行处理。推荐使用 MapTraverse
 func MapRecursion(curr any, path string, keys ...string) []Pair {
 	if curr == nil || len(keys) == 0 && path == "" {

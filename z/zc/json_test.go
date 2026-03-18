@@ -167,6 +167,9 @@ func Test_map2(t *testing.T) {
 	t.Log("=================== ")
 	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.?.?.?"))
 	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.?.?.?"))
+	t.Log("=================== ")
+	t.Log("=================== ", zc.MapVals(dmap, "a.b.?.?.*"))
+	t.Log("=================== ", zc.MapVars(dmap, "a.b.?.?.*"))
 }
 
 // go test -v z/zc/json_test.go -run Test_map3
@@ -207,17 +210,24 @@ func Test_map3(t *testing.T) {
 		},
 	}
 	now := time.Now()
-	for range 1_000_000 {
+	for range 100_000 {
+		zc.MapVars(dmap, "a.b.*.*.j")
+		zc.MapVars(dmap, "a.b.*.?.j")
+		zc.MapVars(dmap, "a.b.?.*.j")
+	}
+	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
+	now = time.Now()
+	for range 100_000 {
 		zc.MapVals(dmap, "a.b.*.*.j")
 		zc.MapVals(dmap, "a.b.*.?.j")
 		zc.MapVals(dmap, "a.b.?.*.j")
 	}
 	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
 	now = time.Now()
-	for range 1_000_000 {
-		zc.MapVars(dmap, "a.b.*.*.j")
-		zc.MapVars(dmap, "a.b.*.?.j")
-		zc.MapVars(dmap, "a.b.?.*.j")
+	for range 100_000 {
+		zc.MapGets(dmap, "a.b.*.*.j")
+		zc.MapGets(dmap, "a.b.*.?.j")
+		zc.MapGets(dmap, "a.b.?.*.j")
 	}
 	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
 }
