@@ -8,65 +8,6 @@ import (
 	"strings"
 )
 
-func Ptr[T any](v T) *T {
-	return &v
-}
-
-type Pair struct {
-	K string
-	V any
-}
-
-func (aa *Pair) Set(key string, val any) {
-	aa.K, aa.V = key, val
-}
-
-// V = nil 标识删除， 否则使用 V 进行替换，一般用户 Set 方法或函数
-func (aa *Pair) SetV(key string, _ any) (any, int8) {
-	aa.K = key
-	return aa.V, If[int8](aa.V == nil, -1, 1)
-}
-
-func (aa *Pair) Set1(key string, val any) (any, int8, bool) {
-	vv := aa.V
-	aa.K, aa.V = key, val
-	return vv, If[int8](vv == nil, -1, 1), false
-}
-
-type PairSlice []Pair
-
-func (aa *PairSlice) Add(key string, val any) bool {
-	*aa = append(*aa, Pair{key, val})
-	return true
-}
-
-func (aa *PairSlice) Sets(key string, val any) (any, int8, bool) {
-	aa.Add(key, val)
-	if (*aa)[0].K != "" {
-		return nil, -1, true
-	}
-	vv := (*aa)[0].V
-	return vv, If[int8](vv == nil, -1, 1), true
-}
-
-func SliceDelete[S ~[]E, E any](s S, i int) S {
-	// slices.Delete(s, i, i+1)
-	if i < 0 && i >= len(s) {
-		return nil
-	}
-	j := i + 1
-	oldlen := len(s)
-	s = append(s[:i], s[j:]...)
-	clear(s[len(s):oldlen]) // zero/nil out the obsolete elements, for GC
-	return s
-}
-
-// func SliceInsert[S ~[]E, E any](s S, i int, val E) S {
-// 	return slices.Insert(s, i, val)
-// }
-
-// ---------------------------------------------------------------------------------------
-
 // 只有类型匹配才返回，否则直接 def
 func MapDef[T any](src map[string]any, key string, def T) T {
 	val := MapIterator(src, false, nil, key)
@@ -81,14 +22,12 @@ func MapDef[T any](src map[string]any, key string, def T) T {
 
 // 将任意类型转换为 T 类型, 尽量转换， 这里处理了 string 和 number bool 类型间的附加关系
 func MapAny[T any](src map[string]any, key string, def T) T {
-	val := MapIterator(src, false, nil, key)
-	return ToAny(val, def)
+	return ToAny(MapIterator(src, false, nil, key), def)
 }
 
 // 将任意类型转换为 int 类型
 func MapInt(src map[string]any, key string, def int) int {
-	val := MapIterator(src, false, nil, key)
-	return ToInt(val, def)
+	return ToInt(MapIterator(src, false, nil, key), def)
 }
 
 // 从 map 中获取字段的值， 原始数据， 同 MapItr(src, key, false, nil) 操作
@@ -99,25 +38,24 @@ func MapGet(src map[string]any, key string) any {
 // 覆盖 map 中的值，如果 val 为 nil 则删除字段，
 // 多用于 删除 或 已有字段覆盖, 可用户新增，但是父路径不存在，无法新增。
 func MapSet(src map[string]any, key string, val any) any {
-	return MapIterator(src, false, (&Pair{V: val}).SetV, key)
+	return MapIterator(src, false, func(_ string, _ any) (any, int8) { return val, If[int8](val == nil, -1, 1) }, key)
 }
 
 // 覆盖 map 中的值，如果路径不存在，创建字段，前提 val 不为 nil，
 // 如果要创建， 数组必须是 -0(追加)， 否则不会创建字段， 多用于新增， 可修复父路径，
 // -0 表示创建 []any, 否则创建 map[ string ]any，如果使用数组，存在路径失败的风险。
 func MapNew(src map[string]any, key string, val any) any {
-	return MapIterator(src, val != nil, (&Pair{V: val}).SetV, key)
+	return MapIterator(src, true, func(_ string, _ any) (any, int8) { return val, 1 }, key)
 }
 
 // 删除 map 中的值， 如果是基础类型，可以用 MapSet(src, key, nil) 进行删除， 该方法专用于集合对象删除
-func MapDel[T ~string | ~[]any | ~map[any]any | ~map[string]any | ~chan any](src map[string]any, key string) any {
+func MapEmp[T ~string | ~[]any | ~map[any]any | ~map[string]any | ~chan any](src map[string]any, key string) any {
 	return MapIterator(src, false, func(_ string, val any) (any, int8) { return nil, If[int8](val == nil || len(val.(T)) == 0, -1, 0) }, key)
 }
 
 // ---------------------------------------------------------------------------------------
 
-// 支持 key=key.-1.env.[.name=(^)xxx].key.key， Iterator or Traverse or Recursion
-// cover: = 0 忽略， > 1 覆盖， < 0 删除, fpv: fix path value, 修复路径上的所有值。
+// [读写模式], 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name， Iterator or Traverse or Recursion
 func MapIterator(src any, fpv bool, vfn func(string, any) (value any, cover int8), keys ...string) any {
 	if len(keys) == 0 || src == nil {
 		return nil
@@ -283,6 +221,35 @@ func mapIteratorArr[T any](cur []T, ikey, path string, pkey []string, fpv bool, 
 }
 
 // ---------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------
+
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+type Pair struct {
+	K string
+	V any
+}
+
+type PairSlice []Pair
+
+// slices.Delete(s, i, i+1)
+func SliceDelete[S ~[]E, E any](s S, i int) S {
+	if i < 0 && i >= len(s) {
+		return nil
+	}
+	j := i + 1
+	oldlen := len(s)
+	s = append(s[:i], s[j:]...)
+	clear(s[len(s):oldlen]) // zero/nil out the obsolete elements, for GC
+	return s
+}
+
+// func SliceInsert[S ~[]E, E any](s S, i int, val E) S {
+// 	return slices.Insert(s, i, val)
+// }
+
 // ---------------------------------------------------------------------------------------
 
 // 支持 key=x.[a.b.c].z.[.name=xxx].x[.name=zzz].v 格式

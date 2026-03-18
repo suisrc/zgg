@@ -215,9 +215,9 @@ func Test_map3(t *testing.T) {
 	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
 	now = time.Now()
 	for range 1_000_000 {
-		zc.MapVals(dmap, "a.b.*.*.j")
-		zc.MapVals(dmap, "a.b.*.?.j")
-		zc.MapVals(dmap, "a.b.?.*.j")
+		zc.MapVars(dmap, "a.b.*.*.j")
+		zc.MapVars(dmap, "a.b.*.?.j")
+		zc.MapVars(dmap, "a.b.?.*.j")
 	}
 	t.Log("=================== ", time.Now().UnixMilli()-now.UnixMilli())
 }
@@ -322,20 +322,66 @@ func Test_map6(t *testing.T) {
 		},
 	}
 
-	t.Log("=================== ", zc.MapSet1(dmap, true, map[string]any{}, "a.b.-0"))
-	t.Log("=================== ", zc.MapSet1(dmap, true, 123456, "a.b.0.q.j"))
-	t.Log("=================== ", zc.MapSet1(dmap, true, 123456, "a.b.0.q.s"))
+	t.Log("=================== ", zc.MapSet1(dmap, map[string]any{}, "a.b.-0"))
+	t.Log("=================== ", zc.MapSet1(dmap, 123456, "a.b.0.q.j"))
+	t.Log("=================== ", zc.MapSet1(dmap, 123456, "a.b.0.q.s"))
 	t.Log(zc.ToStr2(dmap))
-	t.Log("=================== ", zc.MapSets(dmap, true, 456789, "a.b.0.q.*"))
+	t.Log("=================== ", zc.MapSets(dmap, 456789, "a.b.0.q.*"))
 	t.Log(zc.ToStr2(dmap))
-	t.Log("=================== ", zc.MapSets(dmap, true, 345678, "a.b.0.q.?"))
+	t.Log("=================== ", zc.MapSets(dmap, 345678, "a.b.0.q.?"))
 	t.Log(zc.ToStr2(dmap))
-	t.Log("=================== ", zc.MapSets(dmap, true, 456789, "a.b.0.q.v.s.v"))
-	t.Log("=================== ", zc.MapSets(dmap, true, 456789, "a.b.0.v.-0.s"))
-	t.Log("=================== ", zc.MapSets(dmap, true, 123456, "a.b.0.v.-0.s"))
+	t.Log("=================== ", zc.MapSets(dmap, 456789, "a.b.0.q.v.s.v"))
+	t.Log("=================== ", zc.MapSets(dmap, 456789, "a.b.0.v.-0.s"))
+	t.Log("=================== ", zc.MapSets(dmap, 123456, "a.b.0.v.-0.s"))
 	t.Log(zc.ToStr2(dmap))
-	t.Log("=================== ", zc.MapSets(dmap, false, 123456, "a.b.0.w.-0.s"))
+	t.Log("=================== ", zc.MapSets(dmap, 123456, "a.b.0.w.-0.s"))
 	t.Log(zc.ToStr2(dmap))
-	t.Log("=================== ", zc.MapSets(dmap, true, 123456, "a.b.0.w.-0.s"))
+	t.Log("=================== ", zc.MapSets(dmap, 123456, "a.b.0.w.-0.s"))
+	t.Log(zc.ToStr2(dmap))
+}
+
+// go test -v z/zc/json_test.go -run Test_map7
+
+func Test_map7(t *testing.T) {
+	dmap := map[string]any{
+		"a": map[string]any{
+			"b": []any{
+				map[string]any{
+					"q": map[string]any{
+						"j": 123.456,
+					},
+				},
+			},
+		},
+	}
+
+	t.Log("=================== ", zc.MapSet1(dmap, map[string]any{"x": 456}, "a.b.-0"))
+	t.Log("=================== ", zc.MapGet1(dmap, "a.b.0.q.j"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.*"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.?"))
+	t.Log("=================== ", zc.MapGets(dmap, "a.b.1"))
+	t.Log("=================== ", zc.MapSet1(dmap, 123567, "a.b.*"))
+	t.Log(zc.ToStr2(dmap))
+	t.Log("=================== ", zc.MapSets(dmap, 123, "a.b.*"))
+	t.Log(zc.ToStr2(dmap))
+}
+
+// go test -v z/zc/json_test.go -run Test_map8
+
+func Test_map8(t *testing.T) {
+	dmap := map[string]any{
+		"a": map[string]any{
+			"b": []any{
+				map[string]any{
+					"q": map[string]any{
+						"j": 123.456,
+					},
+				},
+			},
+		},
+	}
+	t.Log("=================== ", zc.MapSets(dmap, nil, "a.b.0.w.-0.s"))
+	t.Log(zc.ToStr2(dmap))
+	t.Log("=================== ", zc.MapNew(dmap, "a.b.0.w.-0.s", nil))
 	t.Log(zc.ToStr2(dmap))
 }

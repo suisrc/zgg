@@ -10,7 +10,6 @@ import (
 	"log"
 	"testing"
 
-	"github.com/suisrc/zgg/z"
 	"github.com/suisrc/zgg/z/zc"
 )
 
@@ -18,13 +17,13 @@ import (
 
 func Test_log0(t *testing.T) {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-	log.Println("test")
+	t.Log("test")
 }
 
 // go test -v z/zc/log_test.go -run Test_log1
 
 func Test_log1(t *testing.T) {
-	z.Println("test")
+	t.Log("test")
 }
 
 // go test -v z/zc/log_test.go -run Test_log2
@@ -44,13 +43,13 @@ func Test_log2(t *testing.T) {
 	// 测试调用者信息
 	fmt.Println("\n调用者信息:")
 	info := zc.GetCallerMethodInfo(0)
-	fmt.Printf("%+v\n", z.ToStr(info))
+	fmt.Printf("%+v\n", zc.ToStr(info))
 }
 
 // 普通函数
 func foo() {
 	info := zc.GetCurrentMethodInfo()
-	fmt.Printf("普通函数信息: %+v\n", z.ToStr(info))
+	fmt.Printf("普通函数信息: %+v\n", zc.ToStr(info))
 }
 
 // 测试结构体
@@ -61,13 +60,13 @@ type User struct {
 // 值方法
 func (u User) GetName() string {
 	info := zc.GetCurrentMethodInfo()
-	fmt.Printf("值方法信息: %+v\n", z.ToStr(info))
+	fmt.Printf("值方法信息: %+v\n", zc.ToStr(info))
 	return u.Name
 }
 
 // 指针方法
 func (u *User) SetName(name string) {
 	info := zc.GetCurrentMethodInfo()
-	fmt.Printf("指针方法信息: %+v\n", z.ToStr(info))
+	fmt.Printf("指针方法信息: %+v\n", zc.ToStr(info))
 	u.Name = name
 }

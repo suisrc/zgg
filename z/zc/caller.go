@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+func If[T any](val bool, tval, fval T) T {
+	if val {
+		return tval
+	}
+	return fval
+}
+
 var (
 	rePtrCaller = regexp.MustCompile(`^\(\*(.*)\)\.(.*)$`)
 	reValCaller = regexp.MustCompile(`^(.*)\.(.*)$`)

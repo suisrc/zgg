@@ -6,19 +6,25 @@ import (
 	"strings"
 )
 
-// 检索属于规范的 key 列表和对应的值，返回 []Pair
-func MapVals(src any, keys ...string) []Pair {
-	rst := PairSlice{}
-	MapTraverse(src, rst.Add, keys...) // 遍历栈元素：保存单次处理的上下文
-	return rst
+// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapVal(src any, keys ...string) Pair {
+	pairs := MapTraverse(src, 1, keys...) // 遍历栈元素：保存单次处理的上下文
+	if len(pairs) == 0 {
+		return Pair{}
+	}
+	return pairs[0]
 }
 
-// 检索属于规范的 key 列表和对应的值，返回 any, Iterator or Traverse or Recursion
-// MapRecursion 和 MapTraverse 功能相同。基于测试， MapTraverse 效率会更好一些， 百万次查询，相差30%左右。
-// vfn = nil: 只取一个， 否则通过 vfn 返回所有，而当前函数返回最后一个值
-func MapTraverse(src any, vfn func(string, any) bool, keys ...string) any {
-	var dest any = nil
-	if len(keys) == 0 || src == nil {
+// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapVals(src any, keys ...string) []Pair {
+	return MapTraverse(src, -1, keys...) // 遍历栈元素：保存单次处理的上下文
+}
+
+// [只读模式], MapRecursion 和 MapTraverse 功能相同。基于测试， MapTraverse 效率会更好一些， 百万次查询，相差30%左右性能。
+// 当前只基于 map[string]any, []any, map[any]any, []map[any]any, []map[string]any。 max < 0 获取所有的值。
+func MapTraverse(src any, max int, keys ...string) []Pair {
+	dest := []Pair{}
+	if len(keys) == 0 || src == nil || max == 0 {
 		return dest
 	} else if len(keys) == 1 && strings.ContainsRune(keys[0], '.') {
 		keys = MapParserPaths(keys[0])
@@ -43,12 +49,12 @@ func MapTraverse(src any, vfn func(string, any) bool, keys ...string) any {
 		}
 		// 没有剩余key，直接存入结果
 		if len(curr.keys) == 0 {
-			dest = curr.elem
-			if vfn == nil {
-				return dest // vfn 为空只处理一个结果
-			}
-			if next := vfn(curr.path, curr.elem); !next {
-				return dest // 强制中断遍历, 返回结果
+			dest = append(dest, Pair{curr.path, curr.elem})
+			if max > 0 {
+				max--
+				if max == 0 {
+					return dest
+				}
 			}
 			if has1st {
 				// 通知上层 [1st -> '?'] 模块，内容已经找到
@@ -183,19 +189,50 @@ func mapTraverseArr[T any](cur []T, fpv bool, path, ikey string, setv func(strin
 	}
 }
 
-func MapSet1(src any, fpv bool, val any, keys ...string) Pair {
-	pair := Pair{V: val}
-	MapTraverseSet(src, fpv, pair.Set1, keys...)
+// ---------------------------------------------------------------------------------------
+// 只读取一个结果， (any 处理值, int8[-1 删除， 0 不变， 1 替换], bool[是否继续变量])
+
+// 使用循环的方式检索一个符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapGet1(src any, keys ...string) Pair {
+	pair := Pair{}
+	MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
+		pair.K, pair.V = k, v
+		return nil, 0, false
+	}, keys...)
 	return pair
 }
 
-func MapSets(src any, fpv bool, val any, keys ...string) []Pair {
-	pairs := PairSlice{{V: val}}
-	MapTraverseSet(src, fpv, pairs.Sets, keys...)
-	return pairs[1:]
+// 使用循环的方式检索一个符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapSet1(src any, val any, keys ...string) Pair {
+	pair := Pair{}
+	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
+		pair.K, pair.V = k, v
+		return val, If[int8](val == nil, -1, 1), false
+	}, keys...)
+	return pair
 }
 
-// 检索属于规范的 key 列表和对应的值，返回 any, Iterator or Traverse or Recursion
+// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapGets(src any, keys ...string) []Pair {
+	pairs := PairSlice{}
+	MapTraverseSet(src, false, func(k string, v any) (any, int8, bool) {
+		pairs = append(pairs, Pair{k, v})
+		return nil, 0, true
+	}, keys...)
+	return pairs
+}
+
+// 使用循环的方式检索所有符合条件的内容， 支持 xxx.-1.*.?.[.name=^re].k[.name=^re].name
+func MapSets(src any, val any, keys ...string) []Pair {
+	pairs := PairSlice{}
+	MapTraverseSet(src, true, func(k string, v any) (any, int8, bool) {
+		pairs = append(pairs, Pair{k, v})
+		return val, If[int8](val == nil, -1, 1), true
+	}, keys...)
+	return pairs
+}
+
+// [读写模式], 基于循环的方式，对值进行匹配， 也可以使用这个方法进行值获取
 func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), keys ...string) {
 	if len(keys) == 0 || vfn == nil || src == nil {
 		return
@@ -204,7 +241,7 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 	}
 	// 遍历栈元素：保存单次处理的上下文
 	// 初始化栈，放入初始参数
-	stack := []*map_node{{elem: src, path: "", keys: keys}}
+	stack := []*mapTraverseNode{{elem: src, path: "", keys: keys}}
 	has1st := false
 	for len(stack) > 0 {
 		// 弹出栈顶元素（LIFO，保证遍历顺序与原递归一致）
@@ -217,9 +254,9 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 		if len(curr.keys) == 0 {
 			value, cover, next := vfn(curr.path, curr.elem)
 			if cover > 0 {
-				curr.set(value)
+				curr.update(value)
 			} else if cover < 0 {
-				curr.del()
+				curr.delete()
 			}
 			if !next {
 				return // 强制中断遍历, 返回结果
@@ -247,10 +284,10 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 		if fpv && curr.elem == nil {
 			if ikey == "-0" {
 				pkey := If(curr.path == "", "0", curr.path+".0")
-				stack = append(stack, &map_node{curr, nil, pkey, rkey, x1st, nil, -1})
+				stack = append(stack, &mapTraverseNode{curr, nil, pkey, rkey, x1st, nil, -1})
 			} else {
 				pkey := If(curr.path == "", ikey, curr.path+"."+ikey)
-				stack = append(stack, &map_node{curr, nil, pkey, rkey, x1st, ikey, 0})
+				stack = append(stack, &mapTraverseNode{curr, nil, pkey, rkey, x1st, ikey, 0})
 			}
 			continue
 		} else if curr.elem == nil {
@@ -259,23 +296,23 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 		switch cur := curr.elem.(type) {
 		case map[string]any:
 			mapTraverseMap(cur, fpv, curr.path, ikey, func(path string, key string, val any) {
-				stack = append(stack, &map_node{curr, val, path, rkey, x1st, key, 0})
+				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, key, 0})
 			})
 		case []any:
 			mapTraverseArr(cur, fpv, curr.path, ikey, func(path string, idx int, val any) {
-				stack = append(stack, &map_node{curr, val, path, rkey, x1st, nil, idx})
+				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, nil, idx})
 			})
 		case map[any]any:
 			mapTraverseMap(cur, fpv, curr.path, ikey, func(path string, key any, val any) {
-				stack = append(stack, &map_node{curr, val, path, rkey, x1st, key, 0})
+				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, key, 0})
 			})
 		case []map[any]any:
 			mapTraverseArr(cur, fpv, curr.path, ikey, func(path string, idx int, val any) {
-				stack = append(stack, &map_node{curr, val, path, rkey, x1st, nil, idx})
+				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, nil, idx})
 			})
 		case []map[string]any:
 			mapTraverseArr(cur, fpv, curr.path, ikey, func(path string, idx int, val any) {
-				stack = append(stack, &map_node{curr, val, path, rkey, x1st, nil, idx})
+				stack = append(stack, &mapTraverseNode{curr, val, path, rkey, x1st, nil, idx})
 			})
 		default:
 			// ignore
@@ -283,8 +320,8 @@ func MapTraverseSet(src any, fpv bool, vfn func(string, any) (any, int8, bool), 
 	}
 }
 
-type map_node struct {
-	from *map_node
+type mapTraverseNode struct {
+	from *mapTraverseNode
 	elem any      // 当前处理的对象
 	path string   // 当前已拼接的路径
 	keys []string // 剩余待匹配的key列表
@@ -293,20 +330,20 @@ type map_node struct {
 	iidx int
 }
 
-func (aa *map_node) set(val any) {
+func (aa *mapTraverseNode) update(val any) {
 	if aa.from == nil {
 		return
 	}
 	if aa.from.elem == nil {
 		if aa.ikey == nil {
 			aa.from.elem = []any{}
-			aa.from.set(aa.from.elem)
+			aa.from.update(aa.from.elem)
 		} else if _, ok := aa.ikey.(string); ok {
 			aa.from.elem = map[string]any{}
-			aa.from.set(aa.from.elem)
+			aa.from.update(aa.from.elem)
 		} else {
 			aa.from.elem = []map[any]any{}
-			aa.from.set(aa.from.elem)
+			aa.from.update(aa.from.elem)
 		}
 	}
 	switch cur := aa.from.elem.(type) {
@@ -314,7 +351,7 @@ func (aa *map_node) set(val any) {
 		cur[aa.ikey.(string)] = val
 	case []any:
 		if aa.iidx < 0 {
-			aa.from.set(append(cur, val))
+			aa.from.update(append(cur, val))
 		} else {
 			cur[aa.iidx] = val
 		}
@@ -323,7 +360,7 @@ func (aa *map_node) set(val any) {
 	case []map[any]any:
 		if val, ok := val.(map[any]any); ok {
 			if aa.iidx < 0 {
-				aa.from.set(append(cur, val))
+				aa.from.update(append(cur, val))
 			} else {
 				cur[aa.iidx] = val
 			}
@@ -331,7 +368,7 @@ func (aa *map_node) set(val any) {
 	case []map[string]any:
 		if val, ok := val.(map[string]any); ok {
 			if aa.iidx < 0 {
-				aa.from.set(append(cur, val))
+				aa.from.update(append(cur, val))
 			} else {
 				cur[aa.iidx] = val
 			}
@@ -341,7 +378,7 @@ func (aa *map_node) set(val any) {
 	}
 }
 
-func (aa *map_node) del() {
+func (aa *mapTraverseNode) delete() {
 	if aa.from == nil {
 		return
 	}
@@ -350,17 +387,17 @@ func (aa *map_node) del() {
 		delete(cur, aa.ikey.(string))
 	case []any:
 		if vv := SliceDelete(cur, aa.iidx); vv != nil {
-			aa.from.set(vv)
+			aa.from.update(vv)
 		}
 	case map[any]any:
 		delete(cur, aa.ikey)
 	case []map[any]any:
 		if vv := SliceDelete(cur, aa.iidx); vv != nil {
-			aa.from.set(vv)
+			aa.from.update(vv)
 		}
 	case []map[string]any:
 		if vv := SliceDelete(cur, aa.iidx); vv != nil {
-			aa.from.set(vv)
+			aa.from.update(vv)
 		}
 	default:
 		// ignore
