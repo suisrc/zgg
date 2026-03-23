@@ -41,6 +41,8 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 			continue // 非特殊标记
 		}
 		switch vv[:2] {
+		case "@!":
+			continue // 忽略标记位，用于前置特殊场景下的匹配
 		case "@=":
 			// 确定验证文件，要求 路径完成相同, 否则跳过
 			if kk == rr.URL.Path {
@@ -52,7 +54,7 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 		case "@:":
 			// 扩展请求头上的信息, 增加路由标记 KEY
 			rr.Header.Set("X-Req-RouteKey", vv[2:])
-			// 不终止请求， 继续后面的业务请求
+			return false // 不终止请求， 继续后面的业务请求
 		case "@>":
 			if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 				continue // 路由重定向 不处理 _getbasepath 请求
@@ -67,7 +69,7 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 			} else {
 				// 路径重定向， 跳转到新的路径, 隐式重定向，地址不变，服务不变，直接修改 rr.URL.Path， 内部重定向
 				rr.URL.Path, rr.URL.RawPath = vv[2:], ""
-				// 不终止请求， 继续后面的业务请求
+				return false // 不终止请求， 继续后面的业务请求
 			}
 		case "@^":
 			if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
@@ -162,7 +164,7 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 			z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(basepath))
 		}
 		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(basepath)))
-		return true
+		return true // 终止服务
 	}
 	return false
 }
