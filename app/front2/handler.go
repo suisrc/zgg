@@ -88,10 +88,10 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	}
 	// 按字符串长度倒序
 	api.RouterKey = []string{}
-	api.RouterXey = []string{}
+	api.ActionKey = []string{}
 	for kk, vv := range api.Config.Routers {
 		if strings.HasPrefix(vv, "@") {
-			api.RouterXey = append(api.RouterXey, kk)
+			api.ActionKey = append(api.ActionKey, kk)
 		} else {
 			api.RouterKey = append(api.RouterKey, kk)
 		}
@@ -99,8 +99,8 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	if len(api.RouterKey) > 1 {
 		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
 	}
-	if len(api.RouterXey) > 1 {
-		slices.SortFunc(api.RouterXey, func(l string, r string) int { return -len(l) + len(r) })
+	if len(api.ActionKey) > 1 {
+		slices.SortFunc(api.ActionKey, func(l string, r string) int { return -len(l) + len(r) })
 	}
 	// 首页索引
 	api.IndexsKey = []string{}
@@ -112,9 +112,9 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	}
 	// 输出日志
 	if log != "" {
-		z.Println(api.LogKey+":  indexs", api.IndexsKey)
 		z.Println(api.LogKey+": routers", api.RouterKey)
-		z.Println(api.LogKey+": routerx", api.RouterXey)
+		z.Println(api.LogKey+": actions", api.ActionKey)
+		z.Println(api.LogKey+": indexes", api.IndexsKey)
 	}
 	return api
 }
@@ -127,7 +127,7 @@ type IndexApi struct {
 	FileFS    map[string]fs.FileInfo
 	RouterMap map[string]http.Handler
 	RouterKey []string
-	RouterXey []string // 路由的特殊标记， X-Req-RouteKey， 必须是以@开头
+	ActionKey []string // 路由的特殊标记， X-Req-RouteKey， 必须是以@开头
 	_svc_lock sync.RWMutex
 	ServeFS   http.Handler // 直接服务, 优先级高，用于自定义配置
 }
@@ -183,7 +183,7 @@ func (aa *IndexApi) Serve(zrc *z.Ctx) {
 // 路由规则复杂：需要支持动态参数、通配符或前缀匹配。
 // 路由频繁更新：TrieTree 的插入和删除操作效率更高（O(k) vs O(n)）
 func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
-	for _, kk := range aa.RouterXey {
+	for _, kk := range aa.ActionKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue // 非路由内容
 		}
@@ -209,7 +209,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 				// 路径重定向， 跳转到新的路径, 显式重定向，使用 303 跳转， 注意 301 重定向是永久重定向，不再此范畴内
 				http.Redirect(rw, rr, vv[3:], http.StatusSeeOther)
 				return // 终止服务
-			} else if strings.HasPrefix(vv, "@&http") {
+			} else if strings.HasPrefix(vv, "@>http") {
 				http.Redirect(rw, rr, vv[2:], http.StatusSeeOther)
 				return // 终止服务
 			} else {

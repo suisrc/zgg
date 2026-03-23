@@ -67,7 +67,7 @@ GET {{BASE}}/api1/test
 
 // -----------------------------------------------
 // kwdog2
-@BASE=http://127.0.0.1:12006
+# @BASE=http://127.0.0.1:12006
 ### 其他服务
 GET {{BASE}}/get/?x=123
 Cookie: _xc=XC.1.00.1766767400.f1kin.9fyokoanxvi2
@@ -134,3 +134,27 @@ X-Request-Tag: test.dev
     "__container_image": "docker.io/kong/httpbin:0.2.3",
     "__app_name": "httpbin"
 }]
+
+// -----------------------------------------------
+
+### 
+GET {{BASE}}/xxxx
+Content-Type: application/json
+Authorization: Token 1234
+
+### 
+GET {{BASE}}/aaaa
+Content-Type: application/json
+
+### 
+GET {{BASE}}/bbbb
+Content-Type: application/json
+
+
+### 
+GET {{BASE}}/cccc
+Content-Type: application/json
+
+### 
+GET {{BASE}}/dddd
+Content-Type: application/json
