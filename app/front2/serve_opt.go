@@ -13,7 +13,7 @@ import (
 
 func (aa *IndexApi) ServeRouter(rw http.ResponseWriter, rr *http.Request) bool {
 	for _, kk := range aa.RouterKey {
-		if !strings.HasPrefix(rr.URL.Path, kk) {
+		if !z.HasPathPrefix(rr.URL.Path, kk) {
 			continue
 		}
 		if z.IsDebug() {
@@ -33,7 +33,7 @@ func (aa *IndexApi) ServeRouter(rw http.ResponseWriter, rr *http.Request) bool {
 
 func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 	for _, kk := range aa.ActionKey {
-		if !strings.HasPrefix(rr.URL.Path, kk) {
+		if !z.HasPathPrefix(rr.URL.Path, kk) {
 			continue // 非路由内容
 		}
 		vv := aa.Config.Routers[kk]

@@ -187,7 +187,7 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 
 	for _, kk := range aa.RouterKey {
-		if !strings.HasPrefix(rr.URL.Path, kk) {
+		if !z.HasPathPrefix(rr.URL.Path, kk) {
 			continue // 数量少， 可以这么处理
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {

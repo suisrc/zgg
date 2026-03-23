@@ -152,3 +152,16 @@ func WriteRespBytes(rw http.ResponseWriter, ctype string, code int, data []byte)
 	rw.WriteHeader(code)
 	rw.Write(data)
 }
+
+func HasPathPrefix(path string, pre string) bool {
+	if len(path) == 0 {
+		return len(pre) == 0
+	}
+	if len(pre) == 0 || path == pre {
+		return true
+	}
+	if pre[len(pre)-1] == '/' {
+		return strings.HasPrefix(path, pre)
+	}
+	return strings.HasPrefix(path, pre+"/")
+}
