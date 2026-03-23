@@ -38,62 +38,6 @@ type ProxyRequest struct {
 	Out *http.Request
 }
 
-// SetURL routes the outbound request to the scheme, host, and base path
-// provided in target. If the target's path is "/base" and the incoming
-// request was for "/dir", the target request will be for "/base/dir".
-//
-// SetURL rewrites the outbound Host header to match the target's host.
-// To preserve the inbound request's Host header (the default behavior
-// of [NewSingleHostReverseProxy]):
-//
-//	rewriteFunc := func(r *httputil.ProxyRequest) {
-//		r.SetURL(url)
-//		r.Out.Host = r.In.Host
-//	}
-func (r *ProxyRequest) SetURL(target *url.URL) {
-	RewriteRequestURL(r.Out, target)
-	r.Out.Host = ""
-}
-
-// NewSingleProxy returns a new [ReverseProxy] that routes
-// URLs to the scheme, host, and base path provided in target. If the
-// target's path is "/base" and the incoming request was for "/dir",
-// the target request will be for /base/dir.
-//
-// NewSingleProxy does not rewrite the Host header.
-//
-// To customize the ReverseProxy behavior beyond what
-// NewSingleProxy provides, use ReverseProxy directly
-// with a Rewrite function. The ProxyRequest SetURL method
-// may be used to route the outbound request. (Note that SetURL,
-// unlike NewSingleProxy, rewrites the Host header
-// of the outbound request by default.)
-//
-//	proxy := &ReverseProxy{
-//		Rewrite: func(r *ProxyRequest) {
-//			r.SetURL(target)
-//			r.Out.Host = r.In.Host // if desired
-//		},
-//	}
-func NewSingleProxy(target *url.URL) *ReverseProxy {
-	director := func(req *http.Request) {
-		RewriteRequestURL(req, target)
-	}
-	return &ReverseProxy{Director: director}
-}
-
-func RewriteRequestURL(req *http.Request, target *url.URL) {
-	targetQuery := target.RawQuery
-	req.URL.Scheme = target.Scheme
-	req.URL.Host = target.Host
-	req.URL.Path, req.URL.RawPath = joinURLPath(target, req.URL)
-	if targetQuery == "" || req.URL.RawQuery == "" {
-		req.URL.RawQuery = targetQuery + req.URL.RawQuery
-	} else {
-		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
-	}
-}
-
 // SetXForwarded sets the X-Forwarded-For, X-Forwarded-Host, and
 // X-Forwarded-Proto headers of the outbound request.
 //
@@ -244,39 +188,6 @@ type ReverseProxy struct {
 type BufferPool interface {
 	Get() []byte
 	Put([]byte)
-}
-
-func singleJoiningSlash(a, b string) string {
-	aslash := strings.HasSuffix(a, "/")
-	bslash := strings.HasPrefix(b, "/")
-	switch {
-	case aslash && bslash:
-		return a + b[1:]
-	case !aslash && !bslash:
-		return a + "/" + b
-	}
-	return a + b
-}
-
-func joinURLPath(a, b *url.URL) (path, rawpath string) {
-	if a.RawPath == "" && b.RawPath == "" {
-		return singleJoiningSlash(a.Path, b.Path), ""
-	}
-	// Same as singleJoiningSlash, but uses EscapedPath to determine
-	// whether a slash should be added
-	apath := a.EscapedPath()
-	bpath := b.EscapedPath()
-
-	aslash := strings.HasSuffix(apath, "/")
-	bslash := strings.HasPrefix(bpath, "/")
-
-	switch {
-	case aslash && bslash:
-		return a.Path + b.Path[1:], apath + bpath[1:]
-	case !aslash && !bslash:
-		return a.Path + "/" + b.Path, apath + "/" + bpath
-	}
-	return a.Path + b.Path, apath + bpath
 }
 
 func CopyHeader(dst, src http.Header) {

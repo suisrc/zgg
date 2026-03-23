@@ -1,15 +1,31 @@
 package front2
 
+// 请求会扩展 Header 信息
+// X-Req-RootPath: 识别/匹配 的根目录信息
+// X-Req-RouteKey: 路由中的非定向指定，而是路由 Key 信息
+// Routers: 路由特殊规则说明， 以 @ 开头会激活路由的处理模式
+//    @= 全匹配模式， 要求 key=URL.Path, 返回值Content-Type: text/plain; charset=utf-8
+//    @: 请求头标记， 会在请求头 X-Req-RouteKey 增加标记， 便于后面路由处理
+//    @> 路由重定向， @>http/@>~ 使用 303 重定向路由地址, 否则修改路由的 URL.Path，为指定的路由
+//    @^ 请求重定向， @^~ 使用 router 模式，否认使用 request 模式
+//    @... 其他，格式为： @xxx[#code(,content-type)] 完全之定义返回的内容，可使用 {{rid}} 参数
+
 import (
 	"flag"
+	"fmt"
+	"io"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
@@ -72,19 +88,33 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	}
 	// 按字符串长度倒序
 	api.RouterKey = []string{}
-	for kk := range api.Config.Routers {
-		api.RouterKey = append(api.RouterKey, kk)
+	api.RouterXey = []string{}
+	for kk, vv := range api.Config.Routers {
+		if strings.HasPrefix(vv, "@") {
+			api.RouterXey = append(api.RouterXey, kk)
+		} else {
+			api.RouterKey = append(api.RouterKey, kk)
+		}
 	}
-	slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
+	if len(api.RouterKey) > 1 {
+		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
+	}
+	if len(api.RouterXey) > 1 {
+		slices.SortFunc(api.RouterXey, func(l string, r string) int { return -len(l) + len(r) })
+	}
+	// 首页索引
 	api.IndexsKey = []string{}
 	for kk := range api.Config.Indexs {
 		api.IndexsKey = append(api.IndexsKey, kk)
 	}
-	slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
+	if len(api.IndexsKey) > 1 {
+		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
+	}
 	// 输出日志
 	if log != "" {
 		z.Println(api.LogKey+":  indexs", api.IndexsKey)
 		z.Println(api.LogKey+": routers", api.RouterKey)
+		z.Println(api.LogKey+": routerx", api.RouterXey)
 	}
 	return api
 }
@@ -97,6 +127,7 @@ type IndexApi struct {
 	FileFS    map[string]fs.FileInfo
 	RouterMap map[string]http.Handler
 	RouterKey []string
+	RouterXey []string // 路由的特殊标记， X-Req-RouteKey， 必须是以@开头
 	_svc_lock sync.RWMutex
 	ServeFS   http.Handler // 直接服务, 优先级高，用于自定义配置
 }
@@ -110,11 +141,22 @@ func (aa *IndexApi) GetProxy(kk string) http.Handler {
 	return aa.RouterMap[kk]
 }
 
-func (aa *IndexApi) NewProxy(kk string) (http.Handler, error) {
+func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
 	aa._svc_lock.Lock()
 	defer aa._svc_lock.Unlock()
-	vv := aa.Config.Routers[kk]
-	proxy, err := gtw.NewTargetProxy(vv) // 创建目标URL
+	if vv == "" {
+		vv = aa.Config.Routers[kk]
+		if vv == "" {
+			return nil, fmt.Errorf("router not found: %s", kk)
+		}
+	}
+	var proxy http.Handler
+	var err error
+	if strings.HasPrefix(vv, "domain+") {
+		proxy, err = gtw.NewDomainProxy(vv[7:], "") // 创建目标URL
+	} else {
+		proxy, err = gtw.NewTargetProxy(vv) // 创建目标URL
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -141,25 +183,119 @@ func (aa *IndexApi) Serve(zrc *z.Ctx) {
 // 路由规则复杂：需要支持动态参数、通配符或前缀匹配。
 // 路由频繁更新：TrieTree 的插入和删除操作效率更高（O(k) vs O(n)）
 func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
+	for _, kk := range aa.RouterXey {
+		if !strings.HasPrefix(rr.URL.Path, kk) {
+			continue // 非路由内容
+		}
+		vv := aa.Config.Routers[kk]
+		if len(vv) < 2 {
+			continue // 非特殊标记
+		}
+		switch vv[:2] {
+		case "@=":
+			// 确定验证文件，要求 路径完成相同, 否则跳过
+			if kk == rr.URL.Path {
+				z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(vv[2:]))
+			} else {
+				http.Error(rw, "404 Path Not Match,", http.StatusNotFound)
+			}
+			return // 终止服务
+		case "@:":
+			// 扩展请求头上的信息, 增加路由标记 KEY
+			rr.Header.Set("X-Req-RouteKey", vv[2:])
+			// 不终止请求， 继续后面的业务请求
+		case "@>":
+			if strings.HasPrefix(vv, "@>~") {
+				// 路径重定向， 跳转到新的路径, 显式重定向，使用 303 跳转， 注意 301 重定向是永久重定向，不再此范畴内
+				http.Redirect(rw, rr, vv[3:], http.StatusSeeOther)
+				return // 终止服务
+			} else if strings.HasPrefix(vv, "@&http") {
+				http.Redirect(rw, rr, vv[2:], http.StatusSeeOther)
+				return // 终止服务
+			} else {
+				// 路径重定向， 跳转到新的路径, 隐式重定向，地址不变，服务不变，直接修改 rr.URL.Path， 内部重定向
+				rr.URL.Path, rr.URL.RawPath = vv[2:], ""
+				// 不终止请求， 继续后面的业务请求
+			}
+		case "@^":
+			// 请求重定向， 不建议这样使用，建议使用 router 直接路由。这只是一种特殊的路由方式
+			apath, rpath := aa.GetAbsRootPath(rr)
+			if z.IsDebug() {
+				z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rpath)
+			}
+			if strings.HasPrefix(vv, "@^~") {
+				rr.URL.Path, rr.URL.RawPath = apath, ""
+				target := strings.TrimSuffix(vv[3:], "/")
+				if proxy := aa.GetProxy(target); proxy != nil {
+					proxy.ServeHTTP(rw, rr) // next
+				} else if proxy, err := aa.NewProxy(target, target); err != nil {
+					http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
+				} else {
+					proxy.ServeHTTP(rw, rr) // next
+				}
+			} else {
+				target := strings.TrimSuffix(vv[2:], "/")
+				path := target + apath
+				resp, err := http.Get(path)
+				if err != nil {
+					z.Println(aa.LogKey+": error, redirect to:", path, rr.URL.Path, err.Error())
+					http.Redirect(rw, rr, path, http.StatusMovedPermanently)
+				} else {
+					if ctype := resp.Header.Get("Content-Type"); strings.HasPrefix(ctype, "application/octet-stream") {
+						resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+					}
+					if rpath != "" {
+						rw.Header().Set("X-Request-Rp", rpath) // 通过 CDN 加载的索引文件，存在 /rootpath 未替换的问题
+						// X-Request-Rp 与 X-Req-RootPath 区分, 防止被意外替换, X-Req-RootPath 来自上级路由业务的内容
+					}
+					maps.Copy(rw.Header(), resp.Header)
+					rw.WriteHeader(resp.StatusCode)
+					io.Copy(rw, resp.Body)
+				}
+			}
+			return // 终止服务
+		default:
+			if strings.HasPrefix(vv, "@@") {
+				vv = vv[1:] // 跳过特殊标记， 用于解决包含 @=， @:， @$, @&， @~ 等特殊情况
+			}
+			// @开头，在 RouterXey 中已经标记，这里不做特殊处理， 不建议这么配置，为了兼容之前的旧系统配置
+			// 置顶语返回格式，格式 @xxx[#code(,content-type)]
+			vs := strings.SplitN(vv[1:], "#", 2)
+			code := http.StatusOK
+			var ctype string
+			if len(vs) != 2 {
+				// 格式 @xxx 使用 200,text/plain 默认方式响应
+				ctype = "text/plain; charset=utf-8"
+			} else if cts := strings.SplitN(vs[1], ",", 2); len(cts) != 2 {
+				// 格式 @xxx#code 使用 text/plain 默认方式响应
+				if stt, _ := strconv.Atoi(vs[1]); stt >= 200 && stt < 600 {
+					code = stt
+				}
+				ctype = "text/plain; charset=utf-8"
+			} else {
+				// 格式 @xxx#code,content-type 完全自定义相应内容
+				if status, _ := strconv.Atoi(cts[0]); status >= 200 && status < 600 {
+					code = status
+				}
+				ctype = cts[1]
+			}
+			data := strings.ReplaceAll(vs[0], "{{rid}}", z.GetTraceID(rr))
+			z.WriteRespBytes(rw, ctype, code, []byte(data))
+			return // 终止服务
+			// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
+		}
+	}
 	// 后端路由代理
 	for _, kk := range aa.RouterKey {
 		if !strings.HasPrefix(rr.URL.Path, kk) {
 			continue
-		}
-		if kk == rr.URL.Path {
-			// 确定验证文件， 如果是验证文件， 直接返回 vv 内容
-			if vv := aa.Config.Routers[kk]; strings.HasPrefix(vv, "@") {
-				z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(vv[1:]))
-				// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
-				return
-			}
 		}
 		if z.IsDebug() {
 			z.Printf(aa.LogKey+": %s[%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
-		} else if proxy, err := aa.NewProxy(kk); err != nil {
+		} else if proxy, err := aa.NewProxy(kk, ""); err != nil {
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		} else {
 			proxy.ServeHTTP(rw, rr) // next
@@ -191,16 +327,18 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		return
 	}
 	// --------------------------------------------------------------
-	// 前端资源文件访问
+	// 前端资源文件识别
 	rp := FixReqPath(rr, aa.IndexsKey, "")
 	if z.IsDebug() {
 		z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
+	// 代理文件系统访问
 	if aa.ServeFS != nil {
 		rr.Header.Set("X-Req-RootPath", rp) // 标记请求根路径
 		aa.ServeFS.ServeHTTP(rw, rr)
 		return
 	}
+	// 当前文件系统访问
 	if aa.HttpFS == nil {
 		http.Error(rw, "404 Not Found", http.StatusNotFound)
 		return
@@ -210,4 +348,33 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	} else {
 		aa.TryIndexContent(rw, rr, rp)
 	}
+}
+
+// 获取 abspath 和 rootpath 路径
+func (aa *IndexApi) GetAbsRootPath(rr *http.Request) (string, string) {
+	apath := ""
+	rpath := FixReqPath(rr, aa.IndexsKey, "")
+	if ext := filepath.Ext(rr.URL.Path); ext != "" {
+		apath = rr.URL.Path // 文件资源
+	} else {
+		if rpath != "" {
+			// 寻找指定索引文件
+			apath, _ = aa.Config.Indexs[rpath]
+		} else {
+			// 通过匹配查询索引文件
+			for _, kk := range aa.IndexsKey {
+				if rr.URL.Path == kk || zc.HasPrefixFold(rr.URL.Path, kk+"/") {
+					apath = aa.Config.Indexs[kk] // 匹配到, 使用 v 代替 index
+					break
+				}
+			}
+		}
+	}
+	if apath == "" {
+		apath = aa.Config.Index
+	}
+	if !strings.HasPrefix(apath, "/") {
+		apath = "/" + apath
+	}
+	return apath, rpath
 }

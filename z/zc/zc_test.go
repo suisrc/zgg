@@ -60,9 +60,9 @@ type Data struct {
 	} `json:"s"`
 }
 
-// go test -v z/zc/zc_test.go -run Test_toml
+// go test -v z/zc/zc_test.go -run Test_toml1
 
-func Test_toml(t *testing.T) {
+func Test_toml1(t *testing.T) {
 	text, _ := os.ReadFile("zc_test.toml")
 	data := zc.NewTOML(text).Map()
 	log.Println(zc.ToStr2(data))
