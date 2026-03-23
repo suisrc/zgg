@@ -154,14 +154,21 @@ func WriteRespBytes(rw http.ResponseWriter, ctype string, code int, data []byte)
 }
 
 func HasPathPrefix(path string, pre string) bool {
-	if len(path) == 0 {
-		return len(pre) == 0
+	if elen := len(pre); elen == 0 {
+		return true // 对比 pre 为空，直接返回 true
+	} else if alen := len(path); alen == 0 {
+		return false // 参考 path 为空，直接返回 false
+	} else if alen < elen || path[:elen] != pre {
+		return false // pre 不是 path 前缀，返回 false
+	} else {
+		return alen == elen || path[elen] == '/'
 	}
-	if len(pre) == 0 || path == pre {
-		return true
-	}
-	if pre[len(pre)-1] == '/' {
-		return strings.HasPrefix(path, pre)
-	}
-	return strings.HasPrefix(path, pre+"/")
+	// 检索一次完成，之前的方法(如下)需要检索2次字符串(== 和 HasPrefix)
+	// if len(pre) == 0 || path == pre {
+	// 	return true
+	// }
+	// if pre[len(pre)-1] == '/' {
+	// 	return strings.HasPrefix(path, pre)
+	// }
+	// return strings.HasPrefix(path, pre+"/")
 }
