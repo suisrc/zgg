@@ -7,7 +7,7 @@ package front2
 //    @= 全匹配模式， 要求 key=URL.Path, 返回值Content-Type: text/plain; charset=utf-8
 //    @: 请求头标记， 会在请求头 X-Req-RouteKey 增加标记， 便于后面路由处理
 //    @> 路由重定向， @>http/@>~ 使用 303 重定向路由地址, 否则修改路由的 URL.Path，为指定的路由
-//    @^ 请求重定向， @^~ 使用 router 模式，否认使用 request 模式
+//    @^ 请求重定向， @^~ 使用 router 模式(支持所有请求)，否认使用 request 模式(只支持GET请求)
 //    @... 其他，格式为： @xxx[#code(,content-type)] 完全之定义返回的内容，可使用 {{rid}} 参数
 
 import (

@@ -54,6 +54,9 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 			rr.Header.Set("X-Req-RouteKey", vv[2:])
 			// 不终止请求， 继续后面的业务请求
 		case "@>":
+			if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
+				continue // 路由重定向 不处理 _getbasepath 请求
+			}
 			if strings.HasPrefix(vv, "@>~") {
 				// 路径重定向， 跳转到新的路径, 显式重定向，使用 303 跳转， 注意 301 重定向是永久重定向，不再此范畴内
 				http.Redirect(rw, rr, vv[3:], http.StatusSeeOther)
@@ -67,6 +70,9 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 				// 不终止请求， 继续后面的业务请求
 			}
 		case "@^":
+			if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
+				continue // 请求重定向 不处理 _getbasepath 请求
+			}
 			// 请求重定向， 不建议这样使用，建议使用 router 直接路由。这只是一种特殊的路由方式
 			apath, rpath := aa.GetRootPath(rr)
 			if z.IsDebug() {

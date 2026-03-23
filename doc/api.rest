@@ -158,3 +158,9 @@ Content-Type: application/json
 ### 
 GET {{BASE}}/dddd
 Content-Type: application/json
+
+
+### 
+GET {{BASE}}/aaaa/_getbasepath
+Accept: application/json
+Content-Type: application/json
