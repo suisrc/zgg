@@ -161,7 +161,7 @@ func HasPathPrefix(path string, pre string) bool {
 	} else if alen < elen || path[:elen] != pre {
 		return false // pre 不是 path 前缀，返回 false
 	} else {
-		return alen == elen || path[elen] == '/'
+		return alen == elen || pre[elen-1] == '/' || path[elen] == '/'
 	}
 	// 检索一次完成，之前的方法(如下)需要检索2次字符串(== 和 HasPrefix)
 	// if len(pre) == 0 || path == pre {
