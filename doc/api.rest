@@ -138,12 +138,22 @@ X-Request-Tag: test.dev
 // -----------------------------------------------
 
 ### 
-GET {{BASE}}/xxxx
+GET {{BASE}}/x
 Content-Type: application/json
 Authorization: Token 1234
 
 ### 
-GET {{BASE}}/aaaa
+GET {{BASE}}/x/1
+Content-Type: application/json
+Authorization: Token 1234
+
+### 
+GET {{BASE}}/xz
+Content-Type: application/json
+Authorization: Token 1234
+
+### 
+GET {{BASE}}/aaa
 Content-Type: application/json
 
 ### 
@@ -152,15 +162,29 @@ Content-Type: application/json
 
 
 ### 
-GET {{BASE}}/cccc
+GET {{BASE}}/ccccc
 Content-Type: application/json
 
 ### 
-GET {{BASE}}/dddd
+GET {{BASE}}/dddddd
 Content-Type: application/json
 
+### 
+GET {{BASE}}/dddddd/_getbasepath
+Accept: application/json
+Content-Type: application/json
 
 ### 
-GET {{BASE}}/aaaa/_getbasepath
+GET {{BASE}}/ee
+Accept: application/json
+Content-Type: application/json
+
+### 
+GET {{BASE}}/ff/?tn=68018901_16_pg
+Accept: application/json
+Content-Type: application/json
+
+### 
+GET {{BASE}}/ff/ee/?tn=68018901_16_pg
 Accept: application/json
 Content-Type: application/json

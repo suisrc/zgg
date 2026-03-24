@@ -4,18 +4,19 @@ package front2
 // X-Req-RootPath: 识别/匹配 的根目录信息
 // X-Req-RouteKey: 路由中的非定向指定，而是路由 Key 信息
 // Routers: 路由特殊规则说明， 以 @ 开头会激活路由的处理模式
-//    @= 全匹配模式， 要求 key=URL.Path, 返回值Content-Type: text/plain; charset=utf-8
-//    @: 请求头标记， 会在请求头 X-Req-RouteKey 增加标记， 便于后面路由处理
-//    @> 路由重定向， @>http/@>~ 使用 303 重定向路由地址, 否则修改路由的 URL.Path，为指定的路由
-//    @^ 请求重定向， @^~ 使用 router 模式(支持所有请求)，否认使用 request 模式(只支持GET请求)
-//    @! 忽略标记位， @!, 忽略当前路由匹配，忽略Action操作，用于路由前置处理标记，只做标记，不做匹配
-//    @... 其他，格式为： @xxx[#code(,content-type)] 完全之定义返回的内容，可使用 {{rid}} 参数
+//    @@ 全匹配模式, 要求 key=URL.Path, 返回值Content-Type: text/plain; charset=utf-8
+//    @: 请求头标记, 会在请求头 X-Req-RouteKey 增加标记， 便于后面路由处理
+//    @> 路由重定向, 值使用 ~ 开头, 使用 303 重定向路由地址, 否则修改路由的 URL.Path，为指定的路由
+//    @^ 请求重定向, 值使用 ~ 开头，使用 router 模式(支持所有请求)，否认使用 request 模式(只支持GET请求)
+//    @# 自定义格式, 值格式为 xxx[#code(,content-type)] 完全之定义返回的内容，可使用 {{rid}} 参数
+//    @[?] 其他格式, 忽略，跳过
 
 import (
 	"flag"
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -55,7 +56,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file map")
 	flag.Var(z.NewStrMap(&C.Front2.Routers, z.HM{}), "f2routers", "router path replace")
 	flag.StringVar(&C.Front2.TmplRoot, "f2troot", "/ROOT_PATH", "root path, empty is disabled")
-	flag.Var(z.NewStrArr(&C.Front2.TmplFile, []string{"^app.", "^umi.", "^runtime.", ".html", ".htm", ".css", ".map", ".js"}), "f2tfile", "replace tmpl file")
+	flag.Var(z.NewStrArr(&C.Front2.TmplFile, []string{"^app.", "^umi.", "^runtime.", ".html", ".htm", ".css", ".map", ".js", ".json"}), "f2tfile", "replace tmpl file")
 	flag.BoolVar(&C.Front2.Change, "f2change", false, "change file when file change")
 
 	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
@@ -83,19 +84,11 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	}
 	// 按字符串长度倒序
 	api.RouterKey = []string{}
-	api.ActionKey = []string{}
-	for kk, vv := range api.Config.Routers {
-		if strings.HasPrefix(vv, "@") {
-			api.ActionKey = append(api.ActionKey, kk)
-		} else {
-			api.RouterKey = append(api.RouterKey, kk)
-		}
+	for kk := range api.Config.Routers {
+		api.RouterKey = append(api.RouterKey, kk)
 	}
 	if len(api.RouterKey) > 1 {
-		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
-	}
-	if len(api.ActionKey) > 1 {
-		slices.SortFunc(api.ActionKey, func(l string, r string) int { return -len(l) + len(r) })
+		slices.SortFunc(api.RouterKey, func(l string, r string) int { return len(r) - len(l) })
 	}
 	// 首页索引
 	api.IndexsKey = []string{}
@@ -103,12 +96,11 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 		api.IndexsKey = append(api.IndexsKey, kk)
 	}
 	if len(api.IndexsKey) > 1 {
-		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return -len(l) + len(r) })
+		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return len(r) - len(l) })
 	}
 	// 输出日志
 	if log != "" {
 		z.Println(api.LogKey+": routers", api.RouterKey)
-		z.Println(api.LogKey+": actions", api.ActionKey)
 		z.Println(api.LogKey+": indexes", api.IndexsKey)
 	}
 	return api
@@ -122,8 +114,7 @@ type IndexApi struct {
 	FileFS    map[string]fs.FileInfo
 	RouterMap map[string]http.Handler
 	RouterKey []string
-	ActionKey []string // 路由的特殊标记， X-Req-RouteKey， 必须是以@开头
-	_svc_lock sync.RWMutex
+	_map_lock sync.RWMutex
 	ServeFS   http.Handler // 直接服务, 优先级高，用于自定义配置
 }
 
@@ -131,14 +122,14 @@ func (aa *IndexApi) GetProxy(kk string) http.Handler {
 	if aa.RouterMap == nil {
 		return nil
 	}
-	aa._svc_lock.RLock()
-	defer aa._svc_lock.RUnlock()
+	aa._map_lock.RLock()
+	defer aa._map_lock.RUnlock()
 	return aa.RouterMap[kk]
 }
 
 func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
-	aa._svc_lock.Lock()
-	defer aa._svc_lock.Unlock()
+	aa._map_lock.Lock()
+	defer aa._map_lock.Unlock()
 	if vv == "" {
 		vv = aa.Config.Routers[kk]
 		if vv == "" {
@@ -178,13 +169,51 @@ func (aa *IndexApi) Serve(zrc *z.Ctx) {
 // 路由规则复杂：需要支持动态参数、通配符或前缀匹配。
 // 路由频繁更新：TrieTree 的插入和删除操作效率更高（O(k) vs O(n)）
 func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
-	// 后端路由代理
-	if aa.ServeRouter(rw, rr) {
-		return
+	// 代理路由服务
+	for _, kk := range aa.RouterKey {
+		if len(kk) > 0 && kk[0] == '@' {
+			// action 模式
+			if aa.ServeAction(rw, rr, kk) {
+				return // 终止服务
+			}
+		} else if z.HasPathPrefix(rr.URL.Path, kk) {
+			// router 模式
+			if z.IsDebug() {
+				z.Printf(aa.LogKey+": %s [%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
+			}
+			if proxy := aa.GetProxy(kk); proxy != nil {
+				proxy.ServeHTTP(rw, rr) // 代理访问
+			} else if proxy, err := aa.NewProxy(kk, ""); err != nil {
+				http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
+			} else {
+				proxy.ServeHTTP(rw, rr) // 代理访问
+			}
+			return // 终止服务
+		}
 	}
-	// 特殊操作代理
-	if aa.ServeAction(rw, rr) {
-		return
+	// 一个特殊接口， 解决 cdn 场景下， base url 动态识别问题， 默认返回 /， 优先基于 Referer 识别
+	// 由于该接口执行在 Router 之后，所以可以通过 Router 配置，来屏蔽该接口
+	if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
+		if referer := rr.Referer(); referer == "" {
+			// z.Println(aa.LogKey+": (", rr.URL.Path, ") referer is empty,")
+		} else if refurl, err := url.Parse(referer); err != nil {
+			z.Println(aa.LogKey+": (", rr.URL.Path, ") parse referer error,", err.Error())
+		} else {
+			rr.URL.Path = refurl.Path // 替换请求路径， 使用工具函数处理
+		}
+		basepath := FixReqUrlPath(rr, aa.IndexsKey, "")
+		if basepath == "" {
+			basepath = "/" // 默认根路径
+		}
+		if accept := rr.Header.Get("Accept"); accept != "" && strings.HasPrefix(accept, "application/json") {
+			// HasPrefix or Contains
+			data := `{"success":true,"data":"` + basepath + `"}`
+			z.WriteRespBytes(rw, "application/json; charset=utf-8", http.StatusOK, []byte(data))
+		} else {
+			z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(basepath))
+		}
+		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(basepath)))
+		return // 终止服务
 	}
 	// --------------------------------------------------------------
 	// 前端资源文件识别

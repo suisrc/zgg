@@ -10,11 +10,12 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/app",
             "args": [
                 "-local", 
                 "-debug",
-                "-c", "__zgg.toml"
+                "-c", "doc/__zgg.toml"
             ]
         }
     ]
