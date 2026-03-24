@@ -16,12 +16,13 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, rc str
 		return false // 非特殊标记 | 路径不匹配
 	} else if kk := rc[2:]; !z.HasPathPrefix(rr.URL.Path, kk) {
 		return false // 非特殊标记 | 路径不匹配
+	} else if fn, ok := aa.Actions[rc[:2]]; !ok {
+		return false // 非特殊标记 | 操作不存在
 	} else if vv, _ := aa.Config.Routers[rc]; vv == "" {
 		return false // 非特殊标记 | 路由不存在
-	} else if fn, ok := ActionOpts[vv[:2]]; ok {
+	} else {
 		return fn(aa, rw, rr, kk, vv)
 	}
-	return false
 }
 
 // 操作方法
@@ -36,7 +37,7 @@ var ActionOpts = map[string]ActionFunc{
 	},
 	"@@": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 确定验证文件，要求 路径完成相同, 否则跳过，路径不一致，使用后面的 @ 标记
-		if kk[2:] == rr.URL.Path {
+		if kk == rr.URL.Path {
 			z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(vv))
 		} else {
 			http.Error(rw, "404 Path Not Match,", http.StatusNotFound)
