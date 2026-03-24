@@ -18,7 +18,14 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 	if vv == "" {
 		return false // 非特殊标记 | 路由不存在
 	}
+	// 确定特殊标记
 	switch kk[:2] {
+	case "@/":
+		return false // 非特殊标记 | 跳过
+	case "@:":
+		// 扩展请求头上的信息, 增加路由标记 KEY
+		rr.Header.Set("X-Req-RouteKey", vv)
+		return false // 不终止请求， 继续后面的业务请求
 	case "@@":
 		// 确定验证文件，要求 路径完成相同, 否则跳过，路径不一致，使用后面的 @ 标记
 		if kk[2:] == rr.URL.Path {
@@ -27,10 +34,6 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 			http.Error(rw, "404 Path Not Match,", http.StatusNotFound)
 		}
 		return true // 终止服务
-	case "@:":
-		// 扩展请求头上的信息, 增加路由标记 KEY
-		rr.Header.Set("X-Req-RouteKey", vv)
-		return false // 不终止请求， 继续后面的业务请求
 	case "@>":
 		// 路由重定向
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
