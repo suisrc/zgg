@@ -17,7 +17,7 @@ func (aa *IndexApi) ServeRouter(rw http.ResponseWriter, rr *http.Request) bool {
 			continue
 		}
 		if z.IsDebug() {
-			z.Printf(aa.LogKey+": %s[%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
+			z.Printf(aa.LogKey+": %s [%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			proxy.ServeHTTP(rw, rr) // next
