@@ -34,6 +34,26 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 			http.Error(rw, "404 Path Not Match,", http.StatusNotFound)
 		}
 		return true // 终止服务
+	case "@#":
+		// @# 开头，返回格式 xxx[#(code,)content-type)]
+		var data string
+		var code int = http.StatusOK
+		var ctyp string = "text/plain; charset=utf-8"
+		if data1, code1, ok := strings.Cut(vv, "#"); ok {
+			data = data1
+			if code2, ctyp2, ok := strings.Cut(code1, ","); ok {
+				code1, ctyp = code2, ctyp2
+			}
+			if stt, _ := strconv.Atoi(code1); stt >= 200 && stt < 600 {
+				code = stt
+			}
+		} else {
+			data = vv
+		}
+		data = strings.ReplaceAll(data, "{{rid}}", z.GetTraceID(rr))
+		z.WriteRespBytes(rw, ctyp, code, []byte(data))
+		return true // 终止服务
+		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
 	case "@>":
 		// 路由重定向
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
@@ -91,28 +111,6 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 			}
 		}
 		return true // 终止服务
-	case "@#":
-		// @# 开头，返回格式 xxx[#code(,content-type)]
-		var data string
-		var code int = http.StatusOK
-		var ctyp string = "text/plain; charset=utf-8"
-		if before, after, ok := strings.Cut(vv, "#"); ok {
-			data = before
-			codz := after
-			if before, after, ok := strings.Cut(after, ","); ok {
-				codz = before
-				ctyp = after
-			}
-			if stt, _ := strconv.Atoi(codz); stt >= 200 && stt < 600 {
-				code = stt
-			}
-		} else {
-			data = vv
-		}
-		data = strings.ReplaceAll(data, "{{rid}}", z.GetTraceID(rr))
-		z.WriteRespBytes(rw, ctyp, code, []byte(data))
-		return true // 终止服务
-		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
 	}
 	return false
 }
