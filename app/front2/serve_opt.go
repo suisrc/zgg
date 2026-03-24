@@ -10,23 +10,31 @@ import (
 	"github.com/suisrc/zgg/z"
 )
 
-func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk string) bool {
-	if len(kk) < 2 || !z.HasPathPrefix(rr.URL.Path, kk[2:]) {
+// 特殊标记处理函数
+func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, rc string) bool {
+	if len(rc) < 2 {
 		return false // 非特殊标记 | 路径不匹配
-	}
-	vv, _ := aa.Config.Routers[kk]
-	if vv == "" {
+	} else if kk := rc[2:]; !z.HasPathPrefix(rr.URL.Path, kk) {
+		return false // 非特殊标记 | 路径不匹配
+	} else if vv, _ := aa.Config.Routers[rc]; vv == "" {
 		return false // 非特殊标记 | 路由不存在
+	} else if fn, ok := ActionOpts[vv[:2]]; ok {
+		return fn(aa, rw, rr, kk, vv)
 	}
-	// 确定特殊标记
-	switch kk[:2] {
-	case "@/":
-		return false // 非特殊标记 | 跳过
-	case "@:":
+	return false
+}
+
+// 操作方法
+type ActionFunc func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool
+
+// 操作列表， 可以扩展
+var ActionOpts = map[string]ActionFunc{
+	"@:": func(api *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 扩展请求头上的信息, 增加路由标记 KEY
 		rr.Header.Set("X-Req-RouteKey", vv)
 		return false // 不终止请求， 继续后面的业务请求
-	case "@@":
+	},
+	"@@": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 确定验证文件，要求 路径完成相同, 否则跳过，路径不一致，使用后面的 @ 标记
 		if kk[2:] == rr.URL.Path {
 			z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(vv))
@@ -34,7 +42,8 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 			http.Error(rw, "404 Path Not Match,", http.StatusNotFound)
 		}
 		return true // 终止服务
-	case "@#":
+	},
+	"@#": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// @# 开头，返回格式 xxx[#(code,)content-type)]
 		var data string
 		var code int = http.StatusOK
@@ -54,7 +63,8 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 		z.WriteRespBytes(rw, ctyp, code, []byte(data))
 		return true // 终止服务
 		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
-	case "@>":
+	},
+	"@>": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 路由重定向
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 			return false // 路由重定向 不处理 _getbasepath 请求
@@ -68,7 +78,8 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 			http.Redirect(rw, rr, vv, http.StatusSeeOther)
 			return true // 终止服务
 		}
-	case "@^":
+	},
+	"@^": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 请求重定向
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 			return false // 请求重定向 不处理 _getbasepath 请求
@@ -111,6 +122,5 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, kk str
 			}
 		}
 		return true // 终止服务
-	}
-	return false
+	},
 }

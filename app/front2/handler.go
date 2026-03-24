@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -74,17 +75,30 @@ func Init3(www fs.FS, ifn InitializFunc) {
 }
 
 func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
-	api := &IndexApi{LogKey: log, Config: cfg}
+	return (&IndexApi{LogKey: log, Config: cfg}).InitApi(www)
+}
+
+func (api *IndexApi) InitApi(www fs.FS) *IndexApi {
 	if www != nil {
 		api.FileFS, _ = GetRefFileMap(www)
 		api.HttpFS = http.FS(www)
-		if cfg.IsNative {
+		if api.Config.IsNative {
 			api.ServeFS = http.FileServer(api.HttpFS)
 		}
+	}
+	if api.Actions == nil {
+		api.Actions = map[string]ActionFunc{}
+		maps.Copy(api.Actions, ActionOpts)
 	}
 	// 按字符串长度倒序
 	api.RouterKey = []string{}
 	for kk := range api.Config.Routers {
+		if len(kk) > 2 && kk[0] == '@' {
+			if _, ok := api.Actions[kk[:2]]; !ok {
+				z.Println("[_front2_]: routers action not found (ignore),", kk)
+				continue // 没有对应的操作， 忽略
+			}
+		}
 		api.RouterKey = append(api.RouterKey, kk)
 	}
 	if len(api.RouterKey) > 1 {
@@ -99,7 +113,7 @@ func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return len(r) - len(l) })
 	}
 	// 输出日志
-	if log != "" {
+	if api.LogKey != "" {
 		z.Println(api.LogKey+": routers", api.RouterKey)
 		z.Println(api.LogKey+": indexes", api.IndexsKey)
 	}
@@ -116,6 +130,7 @@ type IndexApi struct {
 	RouterKey []string
 	_map_lock sync.RWMutex
 	ServeFS   http.Handler // 直接服务, 优先级高，用于自定义配置
+	Actions   map[string]ActionFunc
 }
 
 func (aa *IndexApi) GetProxy(kk string) http.Handler {
