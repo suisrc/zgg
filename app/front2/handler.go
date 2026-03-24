@@ -33,15 +33,14 @@ var (
 )
 
 type Config struct {
-	ShowPath   string            `json:"f2show"`  // 显示 www 文件夹资源
-	IsNative   bool              `json:"native"`  // 使用原生文件服务
-	Index      string            `json:"index"`   // 默认首页文件名, index.html
-	Indexs     map[string]string `json:"indexs"`  // index map, 多索引系统，不能已 / 结尾
-	Routers    map[string]string `json:"routers"` // 路由表
-	TmplRoot   string            `json:"tproot"`  // 根目录, /ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
-	TmplSuffix []string          `json:"suffix"`  // 替换文件后缀, .html .htm .css .map .js
-	TmplPrefix []string          `json:"prefix"`  // 替换文件前缀, app. umi. runtime.
-	ChangeFile bool              `json:"change"`  // 支持文件变动
+	ShowPath string            `json:"f2show"`  // 显示 www 文件夹资源
+	IsNative bool              `json:"native"`  // 使用原生文件服务
+	Index    string            `json:"index"`   // 默认首页文件名, index.html
+	Indexs   map[string]string `json:"indexs"`  // index map, 多索引系统，不能已 / 结尾
+	Routers  map[string]string `json:"routers"` // 路由表
+	TmplRoot string            `json:"tproot"`  // 根目录, /ROOT_PATH, 构建时可以在运行时替换，用于静态资源路径替换
+	TmplFile []string          `json:"tpfile"`  // 替换文件, ^app. ^umi. ^runtime. .html .htm .css .map .js // ^ 开头是前缀匹配, 否则是后缀匹配
+	Change   bool              `json:"change"`  // 支持文件变动
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -55,10 +54,9 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	flag.StringVar(&C.Front2.Index, "f2index", "index.html", "index file name")
 	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file map")
 	flag.Var(z.NewStrMap(&C.Front2.Routers, z.HM{}), "f2routers", "router path replace")
-	flag.StringVar(&C.Front2.TmplRoot, "f2trpath", "/ROOT_PATH", "root path, empty is disabled")
-	flag.Var(z.NewStrArr(&C.Front2.TmplSuffix, []string{".html", ".htm", ".css", ".map", ".js"}), "f2suffix", "replace tmpl file suffix")
-	flag.Var(z.NewStrArr(&C.Front2.TmplPrefix, []string{"app.", "umi.", "runtime."}), "f2prefix", "replace tmpl file prefix")
-	flag.BoolVar(&C.Front2.ChangeFile, "f2change", false, "change file when file change")
+	flag.StringVar(&C.Front2.TmplRoot, "f2troot", "/ROOT_PATH", "root path, empty is disabled")
+	flag.Var(z.NewStrArr(&C.Front2.TmplFile, []string{"^app.", "^umi.", "^runtime.", ".html", ".htm", ".css", ".map", ".js"}), "f2tfile", "replace tmpl file")
+	flag.BoolVar(&C.Front2.Change, "f2change", false, "change file when file change")
 
 	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
 		api := NewApi(www, C.Front2, "[_front2_]")
@@ -77,7 +75,7 @@ func Init3(www fs.FS, ifn InitializFunc) {
 func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
 	api := &IndexApi{LogKey: log, Config: cfg}
 	if www != nil {
-		api.FileFS, _ = GetFileMap(www)
+		api.FileFS, _ = GetRefFileMap(www)
 		api.HttpFS = http.FS(www)
 		if cfg.IsNative {
 			api.ServeFS = http.FileServer(api.HttpFS)
@@ -190,7 +188,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 	// --------------------------------------------------------------
 	// 前端资源文件识别
-	rp := FixReqPath(rr, aa.IndexsKey, "")
+	rp := FixReqUrlPath(rr, aa.IndexsKey, "")
 	if z.IsDebug() {
 		z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
@@ -205,7 +203,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		http.Error(rw, "404 Not Found", http.StatusNotFound)
 		return
 	}
-	if aa.Config.ChangeFile {
+	if aa.Config.Change {
 		aa.ChgIndexContent(rw, rr, rp)
 	} else {
 		aa.TryIndexContent(rw, rr, rp)
@@ -215,7 +213,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 // 获取 rootpath 路径
 func (aa *IndexApi) GetRootPath(rr *http.Request) (string, string) {
 	apath := ""
-	rpath := FixReqPath(rr, aa.IndexsKey, "")
+	rpath := FixReqUrlPath(rr, aa.IndexsKey, "")
 	if ext := filepath.Ext(rr.URL.Path); ext != "" {
 		apath = rr.URL.Path // 文件资源
 	} else {

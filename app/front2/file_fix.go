@@ -11,13 +11,13 @@ import (
 
 // 便于替换默认方法
 var (
-	GetFileMap = _GetFileMap // 获取文件列表
-	GetFixFile = _GetFixFile // 获取文件内容
-	IsFixFile  = _IsFixFile  // 判断是否需要修复文件
-	FixReqPath = _FixReqPath // 修正请求路径
+	GetRefFileMap = _GetRefFileMap // 获取文件列表
+	GetFixFileRef = _GetFixFileRef // 获取文件内容
+	CanFixFileRef = _CanFixFileRef // 获取文件内容
+	FixReqUrlPath = _FixReqUrlPath // 修正请求路径
 )
 
-func _GetFileMap(fsys fs.FS) (map[string]fs.FileInfo, error) {
+func _GetRefFileMap(fsys fs.FS) (map[string]fs.FileInfo, error) {
 	fim := make(map[string]fs.FileInfo)
 	err := fs.WalkDir(fsys, ".", func(path string, file fs.DirEntry, err error) error {
 		if err != nil || file.IsDir() {
@@ -33,29 +33,42 @@ func _GetFileMap(fsys fs.FS) (map[string]fs.FileInfo, error) {
 	return fim, err
 }
 
-func _GetFixFile(hf http.File, fp, tp, rp string, fm map[string]fs.FileInfo) ([]byte, error) {
-	tbts, err := io.ReadAll(hf) // 需要转换内容 tp -> rp
+// fname: 原始文件名称
+// tpath: "",   直接跳过, @... 只用基础匹配, "/"  只用基础匹配, /... 直接替换匹配;
+// rpath: 替换的目标内容， 不以 "/" 结尾
+// tenf: true: 如果 tpath 中纯在 xxx:zzz 格式， 使用 zzz 替代 rpath，否则忽略 zzz
+func _GetFixFileRef(hfile http.File, fname, tpath, rpath string, fmap map[string]fs.FileInfo, tenf bool) ([]byte, error) {
+	if idx := strings.IndexByte(tpath, ':'); idx > 0 {
+		if tenf {
+			rpath = tpath[idx+1:]
+		}
+		tpath = tpath[:idx] // 删除 ：后面的内容
+	}
+	if len(rpath) > 0 && rpath[len(rpath)-1] == '/' {
+		rpath = rpath[:len(rpath)-1] // 删除末尾的 /，如果只是  "/" 就变为 ""
+	}
+	if len(tpath) > 0 && tpath[len(tpath)-1] == '/' {
+		tpath = tpath[:len(tpath)-1] // 基础匹配，就是可能是空白符的情况
+	}
+	tbts, err := io.ReadAll(hfile) // 需要转换内容 tp -> rp
 	if err != nil {
 		return nil, err
-	} else if tp == "" {
+	} else if tpath == "" || tpath == rpath {
 		return tbts, nil
-	} else if tp[0] == '@' {
-		tp = tp[1:] // 忽略开头的 @, 跳过， 使用基础处理
-	} else if tp != "/" {
-		return bytes.ReplaceAll(tbts, []byte(tp), []byte(rp)), nil
+	} else if tpath[0] == '@' {
+		tpath = tpath[1:] // 忽略开头的 @, 跳过， 使用基础处理
+	} else if tpath != "/" {
+		return bytes.ReplaceAll(tbts, []byte(tpath), []byte(rpath)), nil
 	}
-	if tp[len(tp)-1] == '/' {
-		tp = tp[:len(tp)-1]
-	}
-	if len(rp) > 0 && rp[len(rp)-1] == '/' {
-		rp = rp[:len(rp)-1]
+	if tpath == rpath {
+		return tbts, nil // 删除 '@' 后， 参数的错误传递，可能会发生一致
 	}
 	// 备用替换方式
-	if fm != nil && (strings.HasSuffix(fp, ".html") || strings.HasSuffix(fp, ".htm")) {
-		for k := range fm {
+	if fmap != nil && (strings.HasSuffix(fname, ".html") || strings.HasSuffix(fname, ".htm")) {
+		for k := range fmap {
 			// 执行内容替换
-			tp_ := []byte("\"" + tp + "/" + k + "\"")
-			rp_ := []byte("\"" + rp + "/" + k + "\"")
+			tp_ := []byte("\"" + tpath + "/" + k + "\"")
+			rp_ := []byte("\"" + rpath + "/" + k + "\"")
 			if bytes.Contains(tbts, tp_) {
 				// 确认文件需要执行替换操作
 				tbts = bytes.ReplaceAll(tbts, tp_, rp_)
@@ -70,29 +83,32 @@ func _GetFixFile(hf http.File, fp, tp, rp string, fm map[string]fs.FileInfo) ([]
 		return tbts, nil
 	}
 	// 其他备用方式
-	tp_ := []byte(".p=\"" + tp + "/\"")
-	rp_ := []byte(".p=\"" + rp + "/\"")
+	tp_ := []byte(".p=\"" + tpath + "/\"")
+	rp_ := []byte(".p=\"" + rpath + "/\"")
 	return bytes.ReplaceAll(tbts, tp_, rp_), nil
 }
 
-func _IsFixFile(name string, conf *Config) bool {
+func _CanFixFileRef(name string, conf *Config) bool {
 	if conf.TmplRoot == "" || conf.TmplRoot == "none" {
 		return false
 	}
-	for _, suf := range conf.TmplSuffix {
-		if strings.HasSuffix(name, suf) {
-			return true
-		}
-	}
-	for _, pre := range conf.TmplPrefix {
-		if strings.HasPrefix(name, pre) {
+	for _, key := range conf.TmplFile {
+		if len(key) == 0 {
+			continue
+		} else if key[0] == '^' {
+			// 前缀匹配
+			if strings.HasPrefix(name, key[1:]) {
+				return true
+			}
+		} else if strings.HasSuffix(name, key) {
+			// 后缀匹配
 			return true
 		}
 	}
 	return false
 }
 
-func _FixReqPath(rr *http.Request, roots []string, dir string) string {
+func _FixReqUrlPath(rr *http.Request, roots []string, dir string) string {
 	rp := ""
 	for _, path := range roots {
 		if path == "" {

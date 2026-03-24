@@ -152,7 +152,7 @@ func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request) bool {
 		} else {
 			rr.URL.Path = refurl.Path // 替换请求路径， 使用工具函数处理
 		}
-		basepath := FixReqPath(rr, aa.IndexsKey, "")
+		basepath := FixReqUrlPath(rr, aa.IndexsKey, "")
 		if basepath == "" {
 			basepath = "/" // 默认根路径
 		}

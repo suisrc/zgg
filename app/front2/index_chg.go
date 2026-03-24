@@ -18,9 +18,9 @@ func (aa *IndexApi) ChgIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 		redirect = true // 重定向到首页
 	} else if stat.IsDir() {
 		redirect = true // 重定向到首页
-	} else if IsFixFile(stat.Name(), &aa.Config) {
+	} else if CanFixFileRef(stat.Name(), &aa.Config) {
 		// 文件的内容需要修复， 一般是依赖文件的引用问题
-		tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
+		tbts, err := GetFixFileRef(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS, true)
 		if err != nil { // 内部异常
 			z.Printf(aa.LogKey+": [%s] %s\n", rr.URL.Path, err.Error())
 			http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
@@ -56,8 +56,8 @@ func (aa *IndexApi) ChgIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 			z.Printf(aa.LogKey+": [%s] %s\n", index, err.Error())
 			http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
 			return
-		} else if IsFixFile(stat.Name(), &aa.Config) {
-			tbts, err := GetFixFile(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS)
+		} else if CanFixFileRef(stat.Name(), &aa.Config) {
+			tbts, err := GetFixFileRef(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS, true)
 			if err != nil {
 				z.Printf(aa.LogKey+": [%s] %s\n", index, err.Error())
 				http.NotFound(rw, rr)
