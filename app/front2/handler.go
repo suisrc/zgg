@@ -6,9 +6,9 @@ package front2
 // Routers: 路由特殊规则说明， 以 @ 开头会激活路由的处理模式
 //    @@ 全匹配模式, 要求 key=URL.Path, 返回值Content-Type: text/plain; charset=utf-8
 //    @: 请求头标记, 会在请求头 X-Req-RouteKey 增加标记， 便于后面路由处理
-//    @> 路由重定向, 值使用 ~ 开头, 使用 303 重定向路由地址, 否则修改路由的 URL.Path，为指定的路由
-//    @^ 请求重定向, 值使用 ~ 开头，使用 router 模式(支持所有请求)，否认使用 request 模式(只支持GET请求)
-//    @# 自定义格式, 值格式为 xxx[#code(,content-type)] 完全之定义返回的内容，可使用 {{rid}} 参数
+//    @> 路由重定向, @>~ 开头, 修改路由的 URL.Path，为指定的路由, 否则使用 303 重定向路由地址
+//    @^ 请求重定向, @^~ 开头，使用 request 模式(只支持GET请求)，否认使用 router 模式(支持所有请求)
+//    @* 自定义格式, 值格式为 xxx[#code(,content-type)] 完全之定义返回的内容，可使用 {{rid}} 参数
 //    @[?] 其他格式, 忽略，跳过
 
 import (

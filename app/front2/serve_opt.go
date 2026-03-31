@@ -14,7 +14,7 @@ import (
 func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, rc string) bool {
 	if len(rc) < 2 {
 		return false // 非特殊标记 | 路径不匹配
-	} else if kk := rc[2:]; !z.HasPathPrefix(rr.URL.Path, kk) {
+	} else if kk := rc[2:]; !z.HasPathPrefix(rr.URL.Path, strings.TrimPrefix(kk, "~")) {
 		return false // 非特殊标记 | 路径不匹配
 	} else if fn, ok := aa.Actions[rc[:2]]; !ok {
 		return false // 非特殊标记 | 操作不存在
@@ -44,7 +44,7 @@ var ActionOpts = map[string]ActionFunc{
 		}
 		return true // 终止服务
 	},
-	"@#": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
+	"@*": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// @# 开头，返回格式 xxx[#(code,)content-type)]
 		var data string
 		var code int = http.StatusOK
@@ -70,9 +70,9 @@ var ActionOpts = map[string]ActionFunc{
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 			return false // 路由重定向 不处理 _getbasepath 请求
 		}
-		if strings.HasPrefix(vv, "~") {
+		if strings.HasPrefix(kk, "~") {
 			// 跳转到新的路径, 隐式重定向，地址不变，服务不变，直接修改 rr.URL.Path， 内部重定向
-			rr.URL.Path, rr.URL.RawPath = vv[1:], ""
+			rr.URL.Path, rr.URL.RawPath = vv, ""
 			return false // 不终止请求， 继续后面的业务请求
 		} else {
 			// 跳转到新的路径, 显式重定向，使用 303 跳转， 注意 301 重定向是永久重定向，不再此范畴内
@@ -90,9 +90,9 @@ var ActionOpts = map[string]ActionFunc{
 		if z.IsDebug() {
 			z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rpath)
 		}
-		if strings.HasPrefix(vv, "~") {
+		if strings.HasPrefix(kk, "~") {
 			// 只支持 GET 请求， 适合 CDN 加载的索引文件
-			target := strings.TrimSuffix(vv[1:], "/")
+			target := strings.TrimSuffix(vv, "/")
 			path := target + apath
 			resp, err := http.Get(path)
 			if err != nil {
