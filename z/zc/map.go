@@ -299,7 +299,7 @@ func ToStrOrArr(val string /*, bjs bool*/) any {
 	// 	}
 	// 	ass := make([]string, len(arr))
 	// 	for vi, vv := range arr {
-	// 		ass[vi] = fmt.Sprintf("%v", vv)
+	// 		ass[vi] = fmt.Sprint(vv)
 	// 	}
 	// 	return ass
 	// }

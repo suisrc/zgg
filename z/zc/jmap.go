@@ -507,7 +507,7 @@ func ToAny[T any](val any, def T) T {
 	}
 	// 使用 fmt 将任意类型转换为 string 类型
 	if vtype.Kind() == reflect.String {
-		return any(fmt.Sprintf("%v", vdata.Interface())).(T)
+		return any(fmt.Sprint(vdata.Interface())).(T)
 	}
 	// 支持字符串类型的数字转换
 	if vdata.Kind() == reflect.String {

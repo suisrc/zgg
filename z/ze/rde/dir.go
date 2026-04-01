@@ -78,7 +78,7 @@ func (aa *DirRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 			rr.URL.Path = action[idx:] // 更新 URL.Path，去掉第一个目录
 			rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, "/"+key)
 			if router, exist := aa.Router[key]; exist {
-				rr.Header.Set("X-Request-Key", action[:idx]) // 设置 X-Request-Key 头部信息
+				rr.Header.Set("X-Router-Key", action[:idx]) // 设置 X-Router-Key 头部信息
 				router.ServeHTTP(rw, rr)
 				return
 			}
@@ -90,4 +90,21 @@ func (aa *DirRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 	// 没有匹配到任何路由，返回 404 Not Found
 	http.NotFound(rw, rr)
+}
+
+// SetRouterKeyByDir 从 URL.Path 中提取第一个目录作为 key，并设置到 X-Router-Key 头部信息中，同时更新 URL.Path 去掉第一个目录
+func SetRouterKeyByDir(rr *http.Request) {
+	if rr == nil {
+		return
+	}
+	action := rr.URL.Path
+	if len(action) > 0 && action[0] == '/' {
+		action = action[1:]
+	}
+	if idx := strings.Index(action, "/"); idx > 0 {
+		rkey := action[:idx]
+		rr.Header.Set("X-Router-Key", rkey) // 设置 X-Router-Key 头部信息
+		rr.URL.Path = action[idx:]          // 更新 URL.Path，去掉第一个目录
+		rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, "/"+rkey)
+	}
 }

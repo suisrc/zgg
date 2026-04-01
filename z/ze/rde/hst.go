@@ -73,7 +73,7 @@ func (aa *HstRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		key, err := aa.Helper.KeyGetter(host[:idx])
 		if err == nil {
 			if router, exist := aa.Router[key]; exist {
-				rr.Header.Set("X-Request-Key", host[:idx]) // 设置 X-Request-Key 头部信息
+				rr.Header.Set("X-Router-Key", host[:idx]) // 设置 X-Router-Key 头部信息
 				router.ServeHTTP(rw, rr)
 				return
 			}
@@ -85,4 +85,16 @@ func (aa *HstRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 	// 没有匹配到任何路由，返回 404 Not Found
 	http.NotFound(rw, rr)
+}
+
+// SetRouterKeyByHst 从 Host 中提取子域名作为 key，并设置到 X-Router-Key 头部信息中，供后续路由识别使用
+func SetRouterKeyByHst(rr *http.Request) {
+	if rr == nil {
+		return
+	}
+	host := rr.Host
+	if idx := strings.Index(host, "."); idx > 0 {
+		rkey := host[:idx]
+		rr.Header.Set("X-Router-Key", rkey) // 设置 X-Router-Key 头部信息
+	}
 }

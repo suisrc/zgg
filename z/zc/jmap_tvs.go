@@ -157,7 +157,7 @@ func mapTraverseMap[K comparable](cur map[K]any, fpv bool, path, ikey string, se
 		}
 		pkey, ok := any(key).(string)
 		if !ok {
-			pkey = fmt.Sprintf("%v", key)
+			pkey = fmt.Sprint(key)
 		}
 		if strings.IndexByte(pkey, '.') >= 0 {
 			pkey = "[" + pkey + "]"

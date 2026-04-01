@@ -193,7 +193,7 @@ func (ns NullJson) String(key string) (string, bool) {
 		case []byte:
 			return string(v), true
 		default:
-			return fmt.Sprintf("%v", str), true
+			return fmt.Sprint(str), true
 		}
 	}
 }

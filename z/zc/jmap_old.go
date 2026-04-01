@@ -191,7 +191,7 @@ func mapIteratorMap[K comparable](cur map[K]any, ikey, path string, pkey []strin
 		if ik, ok := any(mk).(string); ok {
 			ck = ik
 		} else {
-			ck = fmt.Sprintf("%v", mk)
+			ck = fmt.Sprint(mk)
 		}
 	} else if IsMatchFuzzyKey(ikey) {
 		return path, nil, nil // 找不到字段

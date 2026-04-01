@@ -867,7 +867,7 @@ func ReplaceString(str string, inc map[string]any) string {
 	return rePosParam.ReplaceAllStringFunc(str, func(match string) string {
 		key := match[1 : len(match)-1]
 		if val, ok := inc[key]; ok {
-			return fmt.Sprintf("%v", val)
+			return fmt.Sprint(val)
 		}
 		return match
 	})
