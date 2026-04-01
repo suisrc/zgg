@@ -52,6 +52,8 @@ var (
 		"2": EncodeJson2,
 		"3": EncodeHtml3,
 	}
+
+	IngoreErr = errors.New("ignore error")
 )
 
 func PrintVersion() {
@@ -248,6 +250,7 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 		action = action[1:]
 	}
 	if C.Server.ApiPath != "" { // 补充 api path
+		// action = filepath.Join(C.Server.ApiPath, action)
 		action = C.Server.ApiPath + "/" + action
 		if action[0] == '/' {
 			action = action[1:]
