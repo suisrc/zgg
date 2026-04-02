@@ -39,20 +39,20 @@ func (aa *IndexApi) TryIndexContent(rw http.ResponseWriter, rr *http.Request, rp
 	// 处理文件
 	file, err := aa.HttpFS.Open(fpath)
 	if err != nil {
-		z.Printf(aa.LogKey+": [%s] %s\n", fpath, err.Error())
+		z.Logf(aa.LogKey+": [%s] %s\n", fpath, err.Error())
 		http.NotFound(rw, rr)
 		return // 没有重定向的 index.html 文件
 	}
 	defer file.Close()
 	if stat, err := file.Stat(); err != nil {
-		z.Printf(aa.LogKey+": [%s] %s\n", fpath, err.Error())
+		z.Logf(aa.LogKey+": [%s] %s\n", fpath, err.Error())
 		http.Error(rw, "Internal Server Error: "+err.Error(), http.StatusInternalServerError)
 		return // 读取文件信息错误
 	} else if CanFixFileRef(stat.Name(), &aa.Config) {
 		// 判断文件是否需要修复内容， 一般是依赖文件的引用问题
 		tbts, err := GetFixFileRef(file, stat.Name(), aa.Config.TmplRoot, rp, aa.FileFS, true)
 		if err != nil {
-			z.Printf(aa.LogKey+": [%s] %s\n", fpath, err.Error())
+			z.Logf(aa.LogKey+": [%s] %s\n", fpath, err.Error())
 			http.NotFound(rw, rr)
 			return // 处理文件内容错误
 		}

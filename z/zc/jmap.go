@@ -239,7 +239,7 @@ func MapParserPaths(path string) []string {
 		paths = append(paths, a)
 		i = j
 	}
-	// println(ToStr(paths))
+	// LogStdInfo(ToStr(paths))
 	return paths
 }
 

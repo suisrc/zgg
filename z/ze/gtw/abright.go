@@ -207,7 +207,7 @@ func RewriteRequestURL2(req *http.Request, target *url.URL) {
 		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
 	}
 	if z.IsDebug() {
-		z.Println("[rewrite2]: ->", req.URL.String())
+		z.Logn("[rewrite2]: ->", req.URL.String())
 	}
 }
 
@@ -215,7 +215,7 @@ func RewriteRequestURL2(req *http.Request, target *url.URL) {
 // /-/  开头的，使用 a 地址截取 b 地址; /xx/zz/... -> /-/xx = /zz/...，这里是尝试截取，如果不存在，会忽略掉
 // /... 其他的，合并地址; /xx/zz/... -> /vv = /vv/xx/zz/...
 func joinURLPath2(a, b *url.URL) (path, rawpath string) {
-	// z.Println("[_gateway]: ===========", a.Path, a.RawPath)
+	// z.Logn("[_gateway]: ===========", a.Path, a.RawPath)
 	if strings.HasPrefix(a.Path, "/~/") {
 		if a.RawPath == "" {
 			return a.Path[2:], ""

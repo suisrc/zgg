@@ -23,7 +23,7 @@ var (
 func (aa *Kwlog2Api) add(zrc *z.Ctx) {
 	logs := []Record{}
 	if err := json.NewDecoder(zrc.Request.Body).Decode(&logs); err != nil {
-		z.Printf("[logstore]: unmarshal body error, %s", err.Error())
+		z.Logf("[logstore]: unmarshal body error, %s", err.Error())
 		zrc.JSON(ParamBodyErr)
 		return
 	}
@@ -83,7 +83,7 @@ func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 
 func (aa *Kwlog2Api) del_file(lf *LoggerFile) {
 	aa._files.Delete(lf.FileKey)
-	z.Printf("[logstore]: recycle handle -> %s%d.txt", lf.FileKey, lf.Index)
+	z.Logf("[logstore]: recycle handle -> %s%d.txt", lf.FileKey, lf.Index)
 }
 
 type LoggerFile struct {
@@ -134,11 +134,11 @@ func (aa *LoggerFile) Write(bts ...[]byte) {
 			aa.Index++
 			continue
 		} else if err == nil && fstat.IsDir() {
-			z.Printf("[logstore]: check store file error -> %s, %s", fpath, " is dir")
+			z.Logf("[logstore]: check store file error -> %s, %s", fpath, " is dir")
 			aa.DelFunc(aa)
 			return // 跳过，文件名存在同名文件夹
 		} else if err != nil {
-			z.Printf("[logstore]: check store file error -> %s, %s", fpath, err.Error())
+			z.Logf("[logstore]: check store file error -> %s, %s", fpath, err.Error())
 			aa.DelFunc(aa)
 			return // 跳过，无法处理，遇到不可预知错误
 		} else {
@@ -149,7 +149,7 @@ func (aa *LoggerFile) Write(bts ...[]byte) {
 	var err error // 创建 + 追加 + 只写
 	aa.FileHdl, err = os.OpenFile(fpath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		z.Printf("[logstore]: open store file error -> %s, %s", fpath, err.Error())
+		z.Logf("[logstore]: open store file error -> %s, %s", fpath, err.Error())
 		aa.DelFunc(aa)
 		return // 跳过，无法处理， 无法打开或者创建文件夹
 	}

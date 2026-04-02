@@ -14,9 +14,9 @@ import (
 func Test_files(t *testing.T) {
 	fim, _ := front2.GetRefFileMap(os.DirFS("../../www"))
 	for k, v := range fim {
-		z.Printf("%-50s | %-20s | %v", k, v.Name(), v.IsDir())
+		z.Logf("%-50s | %-20s | %v", k, v.Name(), v.IsDir())
 	}
-	z.Println("===============================")
+	z.Logn("===============================")
 }
 
 // go test -v app/front2/file_test.go -run Test_result
@@ -41,5 +41,5 @@ func Test_result(t *testing.T) {
 			}
 		}
 	}
-	z.Println("===============================", result)
+	z.Logn("===============================", result)
 }

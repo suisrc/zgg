@@ -285,7 +285,7 @@ var (
 			if !strings.HasPrefix(key, pre) {
 				return nil
 			}
-			// z.Println("[__debug_]: KsqlEnv, ", key, zc.GetByKey[any](key, nil))
+			// z.Logn("[__debug_]: KsqlEnv, ", key, zc.GetByKey[any](key, nil))
 			return zc.GetByKey[any](key, nil)
 		}
 	}
@@ -346,7 +346,7 @@ func RegKsqlFilter(name string, filter KsqlFilter) {
 
 // GetKsqlValue retrieves a value from the cache or the input map
 func GetKsqlEvalue(key string, inc map[string]any) any {
-	// z.Println("[__debug_]: GetKsqlEvalue, ", key)
+	// z.Logn("[__debug_]: GetKsqlEvalue, ", key)
 	var rst string
 	if idx := strings.LastIndex(key, "?:"); idx > 0 {
 		rst = key[idx+1:]

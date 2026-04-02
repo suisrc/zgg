@@ -45,28 +45,22 @@ func IsDebug() bool {
 }
 
 var (
-	Printf = func(format string, v ...any) {
-		zc.Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
+	// Command Map Registry
+	CMD = map[string]func(){
+		"web":     RunHttpServe,
+		"version": PrintVersion,
 	}
 
-	Println = func(v ...any) {
-		zc.Log.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
-	}
+	// 日志函数， 也可以直接使用 slog 包，这个包含文件和行号的追踪功能
+	Logf = zc.Logf
+	Logn = zc.Logn
+	Logz = zc.Logz
+	Exit = zc.Exit
+	// 兼容旧版本，保持接口不变，实际调用 Logf 和 Logn
+	Println = zc.Logn
+	Printf  = zc.Logf
 
-	Fatalf = func(format string, v ...any) {
-		zc.Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
-		os.Exit(1)
-	}
-
-	Fatalln = func(v ...any) {
-		zc.Log.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
-		os.Exit(1)
-	}
-
-	Printl3 = func(v ...any) {
-		zc.Log.Output(3, func(b []byte) []byte { return fmt.Appendln(b, v...) })
-	}
-
+	// 其他工具函数
 	Config    = zc.Register
 	ToStr     = zc.ToStr
 	ToStr2    = zc.ToStr2
@@ -86,12 +80,6 @@ var (
 	NewStrVal  = zc.NewStrVal
 	NewStrArr  = zc.NewStrArr
 	NewStrMap  = zc.NewStrMap
-
-	// Command Map Registry
-	CMD = map[string]func(){
-		"web":     RunHttpServe,
-		"version": PrintVersion,
-	}
 )
 
 // 注册默认方法

@@ -29,7 +29,7 @@ var (
 	CS = map[string]any{}    // 需要初始化配置
 	FS = map[string]func(){} // 配置初始化函数
 
-	InitConfigFn = func() {}
+	InitFunc = func() {}
 )
 
 // Config 配置参数
@@ -39,7 +39,8 @@ type Config struct {
 	Cache  bool   `json:"cache"`  // 是否启用缓存, 如果启用，可以通过 GetByKey 获取已有的配置
 	Syslog string `json:"syslog"` // udp://klog.default.svc:514, syslog 输出地址
 	LogTty bool   `json:"logtty"` // 启用 syslog 同步打印日志到控制台
-	LogTff bool   `json:"logtcf"` // 追踪打印日志的位置
+	LogTff bool   `json:"logtff"` // 追踪打印日志的位置
+	LogTyp string `json:"logtyp"` // 输出日志格式： line, text, json
 }
 
 var (
@@ -124,7 +125,7 @@ func LoadConfig(cfs string) {
 		for _, conf := range CS {
 			for _, loader := range loaders {
 				if err := loader.Load(conf); err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					ErrTty(err)
 					os.Exit(2)
 				}
 			}
@@ -135,15 +136,15 @@ func LoadConfig(cfs string) {
 	})
 	if C.Print {
 		for name, conf := range CS {
-			println("--------" + name)
-			println(ToStr2(conf))
+			LogTty("--------" + name)
+			LogTty(ToStr2(conf))
 		}
-		println("----------------------------------------------")
+		LogTty("----------------------------------------------")
 	}
 	if !C.Cache {
 		vcache = nil // 禁用缓存， 缓存是在 Env 中完成初始化的
 	}
-	InitConfigFn()
+	InitFunc()
 }
 
 // 获取配置文件中指定的字段值， 可能存在 key 相同的覆盖情况， PS: 由于使用的是 reflect.Value，因此原始值改变时，缓存也会改变

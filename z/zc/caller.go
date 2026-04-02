@@ -87,6 +87,7 @@ func ParseMethodInfo(finfo string) *MethodInfo {
 	return info
 }
 
+// GetFuncInfo 获取函数或方法的简短名称
 func GetFuncInfo(obj any) string {
 	if obj == nil {
 		return "<nil>"
@@ -104,6 +105,7 @@ func GetFuncInfo(obj any) string {
 	return fnName
 }
 
+// GetTraceFile 获取调用者的文件名和行号
 func GetTraceFile(depth int) (string, int) {
 	if depth < 0 {
 		depth = 0

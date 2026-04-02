@@ -6,6 +6,7 @@
 package zc
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -31,7 +32,8 @@ func GetLocAreaIp() string {
 	// 通过 /etc/hosts 获取局域网地址
 	bts, err := os.ReadFile("/etc/hosts")
 	if err != nil {
-		Printf1("unable to read /etc/hosts: %s", err.Error())
+		// 不能使用 slog，因为 slog 可能会调用 GetLocAreaIp 导致死循环
+		LogTty(fmt.Sprintf("unable to read /etc/hosts: %s", err.Error()))
 	} else {
 		for line := range strings.SplitSeq(string(bts), "\n") {
 			if strings.HasPrefix(line, "#") {
@@ -85,7 +87,6 @@ func GetNamespace() string {
 	}
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
-		Printf1("unable to read namespace: %s, return '-'", err.Error())
 		namespace_ = "-"
 	} else {
 		namespace_ = string(ns)

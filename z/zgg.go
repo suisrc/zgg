@@ -57,7 +57,7 @@ var (
 )
 
 func PrintVersion() {
-	println(AppName, Version, AppInfo)
+	Logn(AppName, Version, AppInfo)
 }
 
 // 默认配置， Server配置需要内嵌该结构体
@@ -100,23 +100,23 @@ func (aa *Zgg) ServeInit() bool {
 		aa.SvcKit = NewSvcKit(aa)
 	}
 	if builder, ok := Engines[C.Server.Engine]; !ok {
-		Printf("[_router_]: router not found by [-eng %s]\n", C.Server.Engine)
+		Logf("[_router_]: router not found by [-eng %s]\n", C.Server.Engine)
 		return false
 	} else {
 		aa.Engine = builder(aa.SvcKit)
-		Printf("[_router_]: build %s.router by [-eng %s]\n", aa.Engine.Name(), C.Server.Engine)
+		Logf("[_router_]: build %s.router by [-eng %s]\n", aa.Engine.Name(), C.Server.Engine)
 	}
 	if aa.TplKit == nil {
 		aa.TplKit = NewTplKit(aa)
 		if C.Server.TplPath != "" {
 			err := aa.TplKit.Preload(C.Server.TplPath)
 			if err != nil {
-				Printf("[_tplkit_]: Preload error: %v\n", err)
+				Logf("[_tplkit_]: Preload error: %v\n", err)
 			}
 		}
 	}
 	// -----------------------------------------------
-	Println("[register]: register server options...")
+	Logn("[register]: register server options...")
 	for _, opt := range options {
 		if opt.Val == nil {
 			continue
@@ -126,14 +126,14 @@ func (aa *Zgg) ServeInit() bool {
 			if size := len(ekey); size < 72 {
 				ekey += " " + strings.Repeat("-", 71-size)
 			}
-			Printf("[register]: %s", ekey)
+			Logf("[register]: %s", ekey)
 		}
 		cls := opt.Val(aa)
 		if cls != nil {
 			aa.Closeds = append(aa.Closeds, cls)
 		}
 		if aa._abort {
-			Println("[register]: serve already stop! exit...")
+			Logn("[register]: serve already stop! exit...")
 			return false // 退出
 		}
 	}
@@ -144,7 +144,7 @@ func (aa *Zgg) ServeInit() bool {
 // 服务终止，注意，这里只会终止模版，不会终止服务， 终止服务，需要调用 hsv.Shutdown
 func (aa *Zgg) ServeStop(err ...string) {
 	if len(err) > 0 {
-		Printl3("[_server_]: serve stop,", strings.Join(err, " "))
+		Logz(1, "[_server_]: serve stop,", strings.Join(err, " "))
 	}
 	if aa._abort {
 		return
@@ -155,7 +155,7 @@ func (aa *Zgg) ServeStop(err ...string) {
 			cls() // 模块关闭
 		}
 	}
-	Println("[_server_]: http server shutdown")
+	Logn("[_server_]: http server shutdown")
 }
 
 // 启动 HTTP 服务
@@ -163,17 +163,17 @@ func (aa *Zgg) RunServe() {
 	defer aa.ServeStop() // 停止业务模块， 先停服务，后停模块
 	// ------------------------------------------------------------------------
 	// 方案1, 不推荐
-	// Println("http server Started, Linsten: " + addr)
+	// Logn("http server Started, Linsten: " + addr)
 	// http.ListenAndServe(addr, hdl)
 	// ------------------------------------------------------------------------
 	// 方案2, 不推荐, 多启动
-	// Println("http server Started, Linsten: " + addr)
+	// Logn("http server Started, Linsten: " + addr)
 	// aa.RunningServer(&http.Server{Handler: hdl, Addr: addr})
 	// ------------------------------------------------------------------------
 	// 方案3， 启动HTTP服务， 并可优雅的终止
 	hss := []*http.Server{}
 	for key, hsv := range aa.Servers {
-		Println("[_server_]: http server started, linsten:", key, hsv.Addr)
+		Logn("[_server_]: http server started, linsten:", key, hsv.Addr)
 		go aa.Execute(hsv)
 		hss = append(hss, hsv)
 	}
@@ -185,29 +185,29 @@ func (aa *Zgg) RunServe() {
 func (aa *Zgg) Execute(hsv *http.Server) {
 	if hsv.TLSConfig != nil {
 		if err := hsv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-			Fatalf("[_server_]: server exit error: %s\n", err)
+			Exit(fmt.Sprintf("[_server_]: server exit error: %s\n", err))
 		}
 	} else if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		Fatalf("[_server_]: server exit error: %s\n", err)
+		Exit(fmt.Sprintf("[_server_]: server exit error: %s\n", err))
 	}
 }
 
 func (aa *Zgg) WaitFor(hss ...*http.Server) {
 	if len(hss) == 0 {
-		Println("[_server_]: no server to wait for")
+		Logn("[_server_]: no server to wait for")
 		return
 	}
 	ssc := make(chan os.Signal, 1)
 	signal.Notify(ssc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-ssc
-	Println("[_server_]: http server stoping...")
+	Logn("[_server_]: http server stoping...")
 	// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for _, hsv := range hss {
 		if hsv != nil {
 			if err := hsv.Shutdown(ctx); err != nil {
-				Println("[_server_]: http server shutdown:", err)
+				Logn("[_server_]: http server shutdown:", err)
 			}
 		}
 	}
@@ -218,7 +218,7 @@ func (aa *Zgg) WaitFor(hss ...*http.Server) {
 // 默认相应函数 http.HandlerFunc(zgg.ServeHTTP)
 func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if IsDebug() {
-		Printf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
+		Logf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
 	}
 	if C.Server.Fxser {
 		rw.Header().Set("Xser-Routerz", aa.Engine.Name())
@@ -232,7 +232,7 @@ func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	if key == "" {
 		if IsDebug() {
-			Printf("[_handle_]: %36s    %p\n", "/", handle)
+			Logf("[_handle_]: %36s    %p\n", "/", handle)
 		}
 		aa.Engine.Handle("", "", handle)
 		return
@@ -261,7 +261,7 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	}
 
 	if IsDebug() { // log for debug
-		Printf("[_handle_]: %62s  %p  %s\n", method+" /"+action, handle, GetFuncInfo(handle))
+		Logf("[_handle_]: %62s  %p  %s\n", method+" /"+action, handle, GetFuncInfo(handle))
 	}
 	aa.Engine.Handle(method, action, handle)
 }
@@ -363,7 +363,7 @@ func (aa *Svc) Inj(obj any) SvcKit {
 					tField.Type.Kind() == reflect.Interface && vType.Implements(tField.Type) {
 					tElem.Field(i).Set(reflect.ValueOf(value))
 					if IsDebug() {
-						Printf("[_svckit_]: [inject] %s <- %s\n", aa.toInjName(tType.String(), tField.Name), vType)
+						Logf("[_svckit_]: [inject] %s <- %s\n", aa.toInjName(tType.String(), tField.Name), vType)
 					}
 					found = true
 					break
@@ -373,9 +373,9 @@ func (aa *Svc) Inj(obj any) SvcKit {
 				errstr := fmt.Sprintf("[_svckit_]: [inject] %s <- %s.(type) error, service not found", //
 					aa.toInjName(tType.String(), tField.Name), tField.Type)
 				if IsDebug() {
-					Println(errstr)
+					Logn(errstr)
 				} else {
-					Fatalln(errstr) // 生产环境，注入失败，则 panic
+					Exit(errstr) // 生产环境，注入失败，则 panic
 				}
 			}
 		} else {
@@ -385,15 +385,15 @@ func (aa *Svc) Inj(obj any) SvcKit {
 				errstr := fmt.Sprintf("[_svckit_]: [inject] %s <- %s.(name) error, service not found", //
 					aa.toInjName(tType.String(), tField.Name), tagVal)
 				if IsDebug() {
-					Println(errstr)
+					Logn(errstr)
 				} else {
-					Fatalln(errstr) // 生产环境，注入失败，则 panic
+					Exit(errstr) // 生产环境，注入失败，则 panic
 				}
 				continue
 			}
 			tElem.Field(i).Set(reflect.ValueOf(val))
 			if IsDebug() {
-				Printf("[_svckit_]: [inject] %s <- %s\n", aa.toInjName(tType.String(), tField.Name), reflect.TypeOf(val))
+				Logf("[_svckit_]: [inject] %s <- %s\n", aa.toInjName(tType.String(), tField.Name), reflect.TypeOf(val))
 			}
 		}
 	}
@@ -489,7 +489,7 @@ func (aa *Tvc) Preload(dir string) error {
 		}
 		aa.tpls[tpl.Key] = tpl
 		if IsDebug() {
-			Printf("[_preload]: [tplkit] %s", tpl.Key)
+			Logf("[_preload]: [tplkit] %s", tpl.Key)
 		}
 		return nil
 	})
@@ -832,13 +832,13 @@ func FieldInject(target any, value any, tag string, debug bool) bool {
 			tField.Type.Kind() == reflect.Interface && vType.Implements(tField.Type) {
 			tElem.Field(i).Set(reflect.ValueOf(value))
 			if debug {
-				Printf("[_inject_]: [succ] %s.%s <- %s", tType, tField.Name, vType)
+				Logf("[_inject_]: [succ] %s.%s <- %s", tType, tField.Name, vType)
 			}
 			return true // 注入成功
 		}
 	}
 	if debug {
-		Printf("[_inject_]: [fail] %s not found field.(%s)", tType, vType)
+		Logf("[_inject_]: [fail] %s not found field.(%s)", tType, vType)
 	}
 	return false
 }

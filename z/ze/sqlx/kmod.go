@@ -92,7 +92,7 @@ var (
 			stmt = page.Patch(stmt, driver)
 		}
 		if C.Sqlx.ShowSQL {
-			z.Printf("[_showsql]: %s | %s", stmt, z.ToStr(args))
+			z.Logf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 		}
 		return stmt, nil
 	}
@@ -100,7 +100,7 @@ var (
 	DscWithTx = func(dsc Dsc, opts *sql.TxOptions, txfn func(tx Dsc) error) (err error) {
 		var txx *Tx
 		if ctx := dsc.Ctx(); ctx != nil {
-			// z.Printf("---------------------------- nested transaction with context")
+			// z.Logf("---------------------------- nested transaction with context")
 			if _, ok := dsc.Exc().(*Tx); ok {
 				return txfn(dsc) // 嵌套的事务
 			} else if bfn, ok := dsc.Exc().(interface {
@@ -111,7 +111,7 @@ var (
 				return errors.New("[sqlx]: no BeginTxx function")
 			}
 		} else {
-			// z.Printf("---------------------------- nested transaction")
+			// z.Logf("---------------------------- nested transaction")
 			if _, ok := dsc.Ext().(*Tx); ok {
 				return txfn(dsc) // 嵌套的事务
 			} else if bfn, ok := dsc.Ext().(interface{ Beginx() (*Tx, error) }); ok {

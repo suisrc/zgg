@@ -36,7 +36,7 @@ func init() {
 			ifn(api, zgg) // 初始化方法
 		}
 		return func() {
-			z.Println("api-hello closed")
+			z.Logn("api-hello closed")
 		}
 	})
 	z.Register("zz-world", func(zgg *z.Zgg) z.Closed {

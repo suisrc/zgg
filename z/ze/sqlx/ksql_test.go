@@ -82,7 +82,7 @@ func TestParser2(t *testing.T) {
 func TestParser3(t *testing.T) {
 
 	sqlx.RegKsqlEvalue("kusr", sqlx.KsqlExt(func(key string, obj any) any {
-		z.Println("[__debug_]: KsqlExt, ", key)
+		z.Logn("[__debug_]: KsqlExt, ", key)
 		if key == "tenantCode.substring(0,3)" {
 			return "租户编码"
 		}
@@ -177,8 +177,8 @@ func TestParser5(t *testing.T) {
 	zc.LoadConfig("") // 加载配置，激活环境
 
 	_ = sqlx.NewRepo[AffiliatesMasterRepo](nil) // 注册仓库
-	z.Println(z.ToStr(sqlx.GetKsqlEnts()))
-	// z.Println(z.ToStr(zc.GetByPre("")))
+	z.Logn(z.ToStr(sqlx.GetKsqlEnts()))
+	// z.Logn(z.ToStr(zc.GetByPre("")))
 
 	sql := `SELECT m0.id AS id
 FROM

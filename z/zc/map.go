@@ -258,7 +258,7 @@ func MapToStruct[T any](target T, source map[string]any, tagkey string) (result 
 						vvv := reflect.ValueOf(vc)
 						tag.Value.SetMapIndex(vkk, vvv)
 					}
-					// println("=============", kk, ToStr(vv))
+					// LogStdInfo("=============", kk, ToStr(vv))
 				}
 			}
 		}

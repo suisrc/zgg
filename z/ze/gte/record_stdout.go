@@ -18,7 +18,7 @@ import (
 
 func NewRecordToTTY(body bool, convert gtw.ConvertFunc) gtw.RecordPool {
 	return gtw.NewRecordPool(func(record gtw.IRecord) {
-		z.Println(convert(record).ToFmt())
+		z.Logn(convert(record).ToFmt())
 	}, body)
 }
 

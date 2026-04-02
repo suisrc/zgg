@@ -1,110 +1,236 @@
-// Copyright 2026 suisrc. All rights reserved.
-// Based on the path package, Copyright 2009 The Go Authors.
-// Use of this source code is governed by a BSD-style license that can be found
-// at https://github.com/suisrc/zgg/blob/main/LICENSE.
-
-// 日志处理
-
 package zc
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 var (
-	Std = NewLogger(os.Stdout)
-	Log = Std
+	Logf = func(format string, v ...any) {
+		if C.LogTff {
+			slog.Info(strings.TrimSuffix(fmt.Sprintf(format, v...), "\n"), "file", LogTrace(1, -1))
+		} else {
+			slog.Info(strings.TrimSuffix(fmt.Sprintf(format, v...), "\n"))
+		}
+	}
+
+	Logn = func(v ...any) {
+		if C.LogTff {
+			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
+		} else {
+			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
+		}
+	}
+
+	Logz = func(depth int, v ...any) {
+		if C.LogTff {
+			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(depth+1, -1))
+		} else {
+			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
+		}
+	}
+
+	Exit = func(v ...any) {
+		if C.LogTff {
+			slog.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
+		} else {
+			slog.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
+		}
+		os.Exit(1) // panic(fmt.Sprint(v...))
+	}
+
+	//----------------------------------------------------------------------------------------
+
+	// 控制台日志输出，注意， 在替换时候，需要注意改日志不应该被替换掉
+	stdLogger = slog.New(NewLogStdHandler(os.Stdout, nil))
+	// bufPool 用于 LogLineHandler 的缓冲区池
+	bufPool = sync.Pool{New: func() any { return new([]byte) }}
 )
 
-func Printl0(v ...any) {
-	Std.Output(2, func(b []byte) []byte { return fmt.Appendln(b, v...) })
+// 向默认控制台输出
+func LogTty(v ...any) {
+	if C.LogTff {
+		stdLogger.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
+	} else {
+		stdLogger.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
+	}
 }
 
-func Printf1(format string, v ...any) {
-	Log.Output(2, func(b []byte) []byte { return fmt.Appendf(b, format, v...) })
+// 向默认控制台输出
+func ErrTty(v ...any) {
+	if C.LogTff {
+		stdLogger.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
+	} else {
+		stdLogger.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
+	}
 }
 
-// ----------------------------------------------------------------------------
-
-type Logger interface {
-	Output(depth int, append func([]byte) []byte) error
+func LogSprint(sep string, v ...any) string {
+	buf := strings.Builder{}
+	for i, item := range v {
+		if i > 0 {
+			buf.WriteString(sep)
+		}
+		fmt.Fprint(&buf, item)
+	}
+	slog.Default()
+	return buf.String()
 }
 
-func NewLogger(w io.Writer) Logger {
-	logger := &logger0{}
-	logger._pool.New = func() any { return new([]byte) }
-	logger._klog = w
-	return logger
+//----------------------------------------------------------------------------------------
+
+func NewLogStdHandler(output io.Writer, opts *slog.HandlerOptions) slog.Handler {
+	if opts == nil {
+		opts = &slog.HandlerOptions{}
+	}
+	return &logStdHandler{
+		output: output,
+		option: opts,
+	}
 }
 
-type logger0 struct {
-	_pool sync.Pool
-	_lock sync.Mutex
-	_klog io.Writer // destination for output
+type logStdHandler struct {
+	output io.Writer
+	option *slog.HandlerOptions
+
+	attrs  []slog.Attr
+	groups []string
 }
 
-func (log *logger0) GetBuffer() *[]byte {
-	return log._pool.Get().(*[]byte)
+func (log *logStdHandler) GetBuffer() *[]byte {
+	return bufPool.Get().(*[]byte)
 }
 
-func (log *logger0) PutBuffer(buf *[]byte) {
+func (log *logStdHandler) PutBuffer(buf *[]byte) {
 	// See https://go.dev/issue/23199
 	if cap(*buf) > 64<<10 {
 		*buf = nil
 	}
 	*buf = (*buf)[:0]
-	log._pool.Put(buf)
+	bufPool.Put(buf)
 }
 
-func (log *logger0) Output(depth int, appbuf func([]byte) []byte) error {
-	now := time.Now() // get this early.
-
-	buf := log.GetBuffer()
-	defer log.PutBuffer(buf)
-
-	year, month, day := now.Date()
-	LogItoa(buf, year, 4)
-	*buf = append(*buf, '-')
-	LogItoa(buf, int(month), 2)
-	*buf = append(*buf, '-')
-	LogItoa(buf, day, 2)
-	*buf = append(*buf, ' ')
-	hour, min, sec := now.Clock()
-	LogItoa(buf, hour, 2)
-	*buf = append(*buf, ':')
-	LogItoa(buf, min, 2)
-	*buf = append(*buf, ':')
-	LogItoa(buf, sec, 2)
-	*buf = append(*buf, '.')
-	LogItoa(buf, now.Nanosecond()/1e3, 6)
-
-	if C.LogTff && depth > 0 {
-		*buf = append(*buf, ' ')
-		file, line := GetTraceFile(depth)
-		*buf = append(*buf, file...)
-		*buf = append(*buf, ':')
-		LogItoa(buf, line, -1)
+func (h *logStdHandler) Enabled(_ context.Context, l slog.Level) bool {
+	if h.option == nil || h.option.Level == nil {
+		return l >= slog.LevelInfo
 	}
-	*buf = append(*buf, ']', ' ')
-	*buf = appbuf(*buf)
+	return l >= h.option.Level.Level()
+}
 
-	if len(*buf) == 0 || (*buf)[len(*buf)-1] != '\n' {
+// Collect the level, attributes and message in a string and
+// write it with the default log.Logger.
+// Let the log.Logger handle time and file/line.
+func (h *logStdHandler) Handle(ctx context.Context, r slog.Record) error {
+	buf := h.GetBuffer()
+	defer h.PutBuffer(buf)
+
+	// 时间格式化
+	if r.Time.IsZero() {
+		r.Time = time.Now()
+	}
+	LogTimeWith(buf, r.Time)
+
+	// 扩展字段
+	if r.NumAttrs() > 0 {
+		*buf = append(*buf, ' ')
+		*buf = append(*buf, '[')
+		sep := false
+		for _, attr := range h.attrs {
+			if sep {
+				*buf = append(*buf, ' ')
+			} else {
+				sep = true
+			}
+			*buf = append(*buf, attr.Key...)
+			*buf = append(*buf, '=')
+			*buf = append(*buf, fmt.Sprint(attr.Value)...)
+		}
+		r.Attrs(func(a slog.Attr) bool {
+			if sep {
+				*buf = append(*buf, ' ')
+			} else {
+				sep = true
+			}
+			*buf = append(*buf, a.Key...)
+			*buf = append(*buf, '=')
+			if a.Key == "file" {
+				*buf = append(*buf, '`')
+			}
+			*buf = append(*buf, fmt.Sprint(a.Value)...)
+			return true
+		})
+		*buf = append(*buf, ']')
+	}
+
+	// 消息内容
+	*buf = append(*buf, ' ')
+	*buf = append(*buf, r.Message...)
+
+	if (*buf)[len(*buf)-1] != '\n' {
 		*buf = append(*buf, '\n')
 	}
 
-	log._lock.Lock()
-	defer log._lock.Unlock()
-	_, err := log._klog.Write(*buf)
+	_, err := h.output.Write(*buf)
 	return err
 }
 
-// ----------------------------------------------------------------------------
+func (h *logStdHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	handler := *h
+	handler.attrs = append(handler.attrs, as...)
+	return &handler
+}
 
-func LogItoa(buf *[]byte, i int, wid int) {
+func (h *logStdHandler) WithGroup(name string) slog.Handler {
+	handler := *h
+	handler.groups = append(handler.groups, name)
+	return &handler
+}
+
+//----------------------------------------------------------------------------------------
+
+// LogTrace 获取调用者的文件名和行号字符串
+func LogTrace(depth, width int, sep ...byte) string {
+	file, line := GetTraceFile(depth + 1)
+	if len(sep) == 0 {
+		return file + ":" + LogItoa(line, width)
+	}
+	buf := strings.Builder{}
+	if len(sep) > 0 {
+		buf.WriteByte(sep[0])
+	}
+	buf.WriteString(file)
+	buf.WriteByte(':')
+	buf.WriteString(LogItoa(line, width))
+	if len(sep) > 1 {
+		buf.WriteByte(sep[1])
+	}
+	return buf.String()
+}
+
+// LogItoa 将整数转换为字符串，宽度不足时左侧补零
+func LogItoa(i int, wid int) string {
+	// Assemble decimal in reverse order.
+	var b [20]byte
+	bp := len(b) - 1
+	for i >= 10 || wid > 1 {
+		wid--
+		q := i / 10
+		b[bp] = byte('0' + i - q*10)
+		bp--
+		i = q
+	}
+	// i < 10
+	b[bp] = byte('0' + i)
+	return string(b[bp:])
+}
+
+func LogItoaWith(buf *[]byte, i int, wid int) {
 	// Assemble decimal in reverse order.
 	var b [20]byte
 	bp := len(b) - 1
@@ -118,4 +244,41 @@ func LogItoa(buf *[]byte, i int, wid int) {
 	// i < 10
 	b[bp] = byte('0' + i)
 	*buf = append(*buf, b[bp:]...)
+}
+
+func LogTimeWith(buf *[]byte, t time.Time) {
+	// *buf = append(*buf, t.Format("2006-01-02T15:04:05.000Z07:00")...)
+	// 使用自定义格式化，减少内存分配，提升性能
+	// 年月日
+	year, month, day := t.Date()
+	LogItoaWith(buf, year, 4)
+	*buf = append(*buf, '-')
+	LogItoaWith(buf, int(month), 2)
+	*buf = append(*buf, '-')
+	LogItoaWith(buf, day, 2)
+	*buf = append(*buf, 'T')
+	// 时分秒
+	hour, min, sec := t.Clock()
+	LogItoaWith(buf, hour, 2)
+	*buf = append(*buf, ':')
+	LogItoaWith(buf, min, 2)
+	*buf = append(*buf, ':')
+	LogItoaWith(buf, sec, 2)
+	*buf = append(*buf, '.')
+	LogItoaWith(buf, t.Nanosecond()/1e6, 3)
+	// 时区
+	_, offset := t.Zone()
+	if offset == 0 {
+		*buf = append(*buf, "+00:00"...)
+	} else {
+		if offset < 0 {
+			*buf = append(*buf, '-')
+			offset = -offset
+		} else {
+			*buf = append(*buf, '+')
+		}
+		LogItoaWith(buf, offset/3600, 2)
+		*buf = append(*buf, ':')
+		LogItoaWith(buf, (offset%3600)/60, 2)
+	}
 }

@@ -29,7 +29,7 @@ type Config struct {
 	RoutePath string `json:"route"` // 访问跟路径
 	MaxSize   int64  `json:"max_size"`
 	UseOrigin bool   `json:"use_origin"`
-	LogTime   string `json:"log_time" default:"2006-01-02T15:04:05Z07:00"`
+	LogTime   string `json:"log_time" default:"2006-01-02T15:04:05.000Z07:00"`
 }
 
 // 初始化方法， 处理 api 的而外配置接口
@@ -62,9 +62,9 @@ func Init3(ifn InitializFunc) {
 		api := &Kwlog2Api{Config: C.Kwlog2}
 		api.Config.RoutePath = "/" + rp
 		api.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
-		z.Printf("[logstore]: store-path -> %s", api.Config.StorePath)
+		z.Logf("[logstore]: store-path -> %s", api.Config.StorePath)
 		api.HttpFS = http.FS(os.DirFS(api.Config.StorePath))
-		// z.Println(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
+		// z.Logn(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
 
 		zgg.AddRouter("GET "+rp, api.lst)
 		if api.Config.Token != "" { // 增加访问令牌

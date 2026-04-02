@@ -66,7 +66,7 @@ func genDB() *sqlx.DB {
 		if idx := strings.Index(dsn, "@"); idx > 0 {
 			dsn = dsn[idx+1:]
 		}
-		z.Println("[database]: connect ok,", dsn)
+		z.Logn("[database]: connect ok,", dsn)
 	}
 
 	return dsc
@@ -76,14 +76,14 @@ func genDB() *sqlx.DB {
 func TestSelectAll(t *testing.T) {
 
 	repo := sqlx.NewRepo[AuthzRepo](nil)
-	z.Println(repo.Cols().Select())
+	z.Logn(repo.Cols().Select())
 
 	// dsc := sqlx.NewDsc(genDB())
 	// datas, err := repo.SelectAll(dsc)
 	// if err != nil {
-	// 	z.Println(err.Error())
+	// 	z.Logn(err.Error())
 	// } else {
-	// 	z.Println(z.ToStr2(datas))
+	// 	z.Logn(z.ToStr2(datas))
 	// }
 }
 
@@ -95,9 +95,9 @@ func TestSelectGet(t *testing.T) {
 
 	datas, err := repo.Get(dsc, 2)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -109,9 +109,9 @@ func TestSelectGet2(t *testing.T) {
 
 	datas, err := repo.Get(dsc, 2, "ID", "Name", "AppKey", "secret")
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -123,9 +123,9 @@ func TestSelect0(t *testing.T) {
 
 	datas, err := repo.Select(dsc, "id < ?", 3)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -137,9 +137,9 @@ func TestSelect1(t *testing.T) {
 
 	datas, err := sqlx.SelectBy[AuthzDO](dsc, sqlx.NewAs("_a"), "_a.id < 3")
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -154,9 +154,9 @@ func TestInsert1(t *testing.T) {
 
 	err := repo.Insert(dsc, &data)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(data))
+		z.Logn(z.ToStr2(data))
 	}
 }
 
@@ -172,9 +172,9 @@ func TestUpdate1(t *testing.T) {
 
 	err := repo.Update(dsc, &data)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(data))
+		z.Logn(z.ToStr2(data))
 	}
 }
 
@@ -190,13 +190,13 @@ func TestUpdate2(t *testing.T) {
 
 	err := sqlx.UpdateBy(dsc, data, repo.ColsByExc("disable", "deleted"), "id = ?", 13)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(data))
+		z.Logn(z.ToStr2(data))
 	}
 
 	data, _ = repo.Get(dsc, 13)
-	z.Println(z.ToStr2(data))
+	z.Logn(z.ToStr2(data))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestDelete1
@@ -211,9 +211,9 @@ func TestDelete1(t *testing.T) {
 
 	err := repo.Delete(dsc, &data)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(data))
+		z.Logn(z.ToStr2(data))
 	}
 }
 
@@ -234,12 +234,12 @@ func TestTx1(t *testing.T) {
 		})
 	})
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 		return
 	}
 	data.Name.String = ""
 	repo.Getx(dsc, 13, &data)
-	z.Println(z.ToStr2(data))
+	z.Logn(z.ToStr2(data))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestTx2
@@ -259,12 +259,12 @@ func TestTx2(t *testing.T) {
 		})
 	})
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 		return
 	}
 	data.Name.String = ""
 	repo.Getx(dsc, 13, &data)
-	z.Println(z.ToStr2(data))
+	z.Logn(z.ToStr2(data))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestSelectAll2
@@ -275,9 +275,9 @@ func TestSelectAll2(t *testing.T) {
 	dsc := sqlx.NewDsc(genDB())
 	datas, err := repo.SelectAll(dsc)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -295,9 +295,9 @@ func TestSelect3(t *testing.T) {
 
 	datas, err := repo.Select(dsc, "id = :id", &data, page)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -315,9 +315,9 @@ func TestSelect4(t *testing.T) {
 
 	datas, err := repo.Select(dsc, "id = :id", data, page)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -335,9 +335,9 @@ func TestSelect5(t *testing.T) {
 
 	datas, err := repo.Select(dsc, "id = @id", data, page)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr2(datas))
+		z.Logn(z.ToStr2(datas))
 	}
 }
 
@@ -360,9 +360,9 @@ SELECT /*+ xxx */ * FROM {::entity.AuthzDO} WHERE 1=1
 
 	dst, cnt, err := sqlx.Ksql[AuthzDO](dsc, stmt, argv, page)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println("count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("count:", cnt, ", items:", z.ToStr2(dst))
 	}
 }
 
@@ -389,9 +389,9 @@ SELECT
 
 	dst, cnt, err := sqlx.Ksql[AuthzDO](dsc, stmt, argv, page)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println("count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("count:", cnt, ", items:", z.ToStr2(dst))
 	}
 }
 
@@ -418,9 +418,9 @@ ORDER BY id
 
 	dst, cnt, err := sqlx.Ksql[int](dsc, stmt, argv, page)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println("count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("count:", cnt, ", items:", z.ToStr2(dst))
 	}
 }
 
@@ -434,23 +434,23 @@ func TestSelect9(t *testing.T) {
 	repo := sqlx.NewRepo[AuthzRepo](nil)
 	page := sqlx.NewPage(1, 3)
 	data, _ := repo.Get(dsc, 13)
-	// z.Println("[__test__]:", z.ToStr(data))
+	// z.Logn("[__test__]:", z.ToStr(data))
 
 	data.Name = sqlx.NewString("demo123456")
 	// argv := zc.ToMap(data, "db", false)
 	argv := repo.ToMap(data)
 	// argv := sqlx.ToMapBy(nil, data, true, true)
-	z.Println("[__test__]:", z.ToStr(argv))
+	z.Logn("[__test__]:", z.ToStr(argv))
 
 	stmt := `update {::entity.AuthzDO} set name=:name {:string1 string1=:string1} where id=:id`
 	dst, cnt, err := sqlx.Ksql[int](dsc, stmt, argv, page)
 	if err != nil {
-		z.Println("[__test__]:", err.Error())
+		z.Logn("[__test__]:", err.Error())
 	} else {
-		z.Println("[__test__]:", "count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("[__test__]:", "count:", cnt, ", items:", z.ToStr2(dst))
 	}
 	item, _ := repo.Get(dsc, 13)
-	z.Println("[__test__]:", z.ToStr(item))
+	z.Logn("[__test__]:", z.ToStr(item))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestMod1
@@ -461,7 +461,7 @@ func TestMod1(t *testing.T) {
 	}
 	// argv := zc.ToMap(data, "db", false)
 	argv, err := sqlx.ToMapBy(nil, data, false, true)
-	z.Println("[__test__]:", z.ToStr(argv), err)
+	z.Logn("[__test__]:", z.ToStr(argv), err)
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestMod2
@@ -472,12 +472,12 @@ func TestMod2(t *testing.T) {
 	}
 	// argv := zc.ToMap(data, "db", false)
 	argv, err := sqlx.ToMapBy(nil, data, false, true)
-	z.Println("[__test__]:", z.ToStr(argv), err)
+	z.Logn("[__test__]:", z.ToStr(argv), err)
 }
 
 func (r *AuthzRepo) GetByKsqlDemo(dsc sqlx.Dsc, isAny bool) ([]AuthzDO, int64, error) {
 	kgr := func(key string) (string, error) {
-		z.Println("[_ksqlget]: ========", key)
+		z.Logn("[_ksqlget]: ========", key)
 		return "SELECT /** count(id) */ * FROM {::entity.AuthzDO} WHERE 1=1 {:id AND id=:id}", nil
 	}
 	if isAny {
@@ -498,9 +498,9 @@ func TestKsql1(t *testing.T) {
 	repo := sqlx.NewRepo[AuthzRepo](nil)
 	rst, siz, err := repo.GetByKsqlDemo(dsc, true)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr(rst), "size:", siz)
+		z.Logn(z.ToStr(rst), "size:", siz)
 	}
 }
 
@@ -513,8 +513,8 @@ func TestKsql2(t *testing.T) {
 	repo := sqlx.NewRepo[AuthzRepo](nil)
 	rst, siz, err := repo.GetByKsqlDemo(dsc, false)
 	if err != nil {
-		z.Println(err.Error())
+		z.Logn(err.Error())
 	} else {
-		z.Println(z.ToStr(rst), "size:", siz)
+		z.Logn(z.ToStr(rst), "size:", siz)
 	}
 }

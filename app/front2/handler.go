@@ -95,7 +95,7 @@ func (api *IndexApi) InitApi(www fs.FS) *IndexApi {
 	for kk := range api.Config.Routers {
 		if len(kk) > 2 && kk[0] == '@' {
 			if _, ok := api.Actions[kk[:2]]; !ok {
-				z.Println("[_front2_]: routers action not found (ignore),", kk)
+				z.Logn("[_front2_]: routers action not found (ignore),", kk)
 				continue // 没有对应的操作， 忽略
 			}
 		}
@@ -114,8 +114,8 @@ func (api *IndexApi) InitApi(www fs.FS) *IndexApi {
 	}
 	// 输出日志
 	if api.LogKey != "" {
-		z.Println(api.LogKey+": routers", api.RouterKey)
-		z.Println(api.LogKey+": indexes", api.IndexsKey)
+		z.Logn(api.LogKey+": routers", api.RouterKey)
+		z.Logn(api.LogKey+": indexes", api.IndexsKey)
 	}
 	return api
 }
@@ -194,7 +194,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		} else if z.HasPathPrefix(rr.URL.Path, kk) {
 			// router 模式
 			if z.IsDebug() {
-				z.Printf(aa.LogKey+": %s [%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
+				z.Logf(aa.LogKey+": %s [%s] -> %s\n", kk, rr.URL.Path, aa.Config.Routers[kk])
 			}
 			if proxy := aa.GetProxy(kk); proxy != nil {
 				proxy.ServeHTTP(rw, rr) // 代理访问
@@ -210,9 +210,9 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	// 由于该接口执行在 Router 之后，所以可以通过 Router 配置，来屏蔽该接口
 	if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 		if referer := rr.Referer(); referer == "" {
-			// z.Println(aa.LogKey+": (", rr.URL.Path, ") referer is empty,")
+			// z.Logn(aa.LogKey+": (", rr.URL.Path, ") referer is empty,")
 		} else if refurl, err := url.Parse(referer); err != nil {
-			z.Println(aa.LogKey+": (", rr.URL.Path, ") parse referer error,", err.Error())
+			z.Logn(aa.LogKey+": (", rr.URL.Path, ") parse referer error,", err.Error())
 		} else {
 			rr.URL.Path = refurl.Path // 替换请求路径， 使用工具函数处理
 		}
@@ -234,7 +234,7 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	// 前端资源文件识别
 	rp := FixReqUrlPath(rr, aa.IndexsKey, "")
 	if z.IsDebug() {
-		z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
+		z.Logf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rp)
 	}
 	// 代理文件系统访问
 	if aa.ServeFS != nil {

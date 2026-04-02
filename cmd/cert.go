@@ -94,7 +94,7 @@ func CertCA() {
 	}
 	crt, err := tlsx.CreateCA(nil, cname)
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 
 	// ------------------------------------------------------------------------
@@ -141,16 +141,16 @@ func CertSA() {
 
 	crtCaBts, err := os.ReadFile(filepath.Join(path, cacn+".crt"))
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 	keyCaBts, err := os.ReadFile(filepath.Join(path, cacn+".key"))
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 
 	crt, err := tlsx.CreateSA(nil, cname, crtCaBts, keyCaBts)
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 	// ------------------------------------------------------------------------
 	println("write files: " + filepath.Join(path, cname+".crt | key | b64(crt)"))
@@ -191,16 +191,16 @@ func CertCE() {
 
 	crtSaBts, err := os.ReadFile(filepath.Join(path, sacn+".crt"))
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 	keySaBts, err := os.ReadFile(filepath.Join(path, sacn+".key"))
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 
 	crt, err := tlsx.CreateCE(nil, cname, domains, nil, crtSaBts, keySaBts)
 	if err != nil {
-		println(err.Error())
+		z.Exit(err)
 		return
 	}
 
@@ -228,15 +228,15 @@ func CertEX() {
 	flag.StringVar(&path, "path", "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "crt file path")
 	pemBts, err := os.ReadFile(path)
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 	pemBlk, _ := pem.Decode(pemBts)
 	if pemBlk == nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
 	pemCrt, err := x509.ParseCertificate(pemBlk.Bytes)
 	if err != nil {
-		z.Fatalln(err)
+		z.Exit(err)
 	}
-	z.Println("expired: ", pemCrt.NotAfter.Format(time.RFC3339))
+	z.Logn("expired: ", pemCrt.NotAfter.Format(time.RFC3339))
 }

@@ -54,7 +54,7 @@ func InitProxy(ifn InitializProxyFunc) {
 
 	z.Register("12-proxy2", func(zgg *z.Zgg) z.Closed {
 		if C.Proxy2.Disabled {
-			z.Println("[_proxy2_]: disabled")
+			z.Logn("[_proxy2_]: disabled")
 			return nil
 		}
 
@@ -108,7 +108,7 @@ func (api *Proxy2Api) Init(cfg ProxyConfig) error {
 			return err
 		}
 		// 创建根证书
-		z.Println("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
+		z.Logn("[_proxy2_]", "cacrt not found, build", cfg.CrtCA)
 		config := tlsx.CertConfig{"default": {
 			Expiry: "20y",
 			SubjectName: tlsx.SignSubject{
@@ -162,7 +162,7 @@ func (aa *Proxy2Api) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 
 	if z.IsDebug() {
-		z.Printf("[_proxy2_]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
+		z.Logf("[_proxy2_]: %s -> %s\n", rr.RemoteAddr, rr.URL.String())
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
 }

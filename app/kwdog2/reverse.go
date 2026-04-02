@@ -54,7 +54,7 @@ func InitKwdog(ifn InitializKwdogFunc) {
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
 		if C.Kwdog2.Disabled {
-			z.Println("[_kwdog2_]: disabled")
+			z.Logn("[_kwdog2_]: disabled")
 			return nil
 		}
 
@@ -116,7 +116,7 @@ func InitKwdog(ifn InitializKwdogFunc) {
 		}
 		// api.RoutersKey 按字符串长度倒序
 		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
-		z.Println("[_kwdog2_]: routers", api.RouterKey)
+		z.Logn("[_kwdog2_]: routers", api.RouterKey)
 		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}
 
 		if ifn != nil {
@@ -192,17 +192,17 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		}
 		if proxy := aa.GetProxy(kk); proxy != nil {
 			if z.IsDebug() {
-				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
+				z.Logf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else if proxy, err := aa.NewProxy(kk); err == nil {
 			if z.IsDebug() {
-				z.Printf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
+				z.Logf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
 			}
 			proxy.ServeHTTP(rw, rr) // next
 		} else {
 			if z.IsDebug() {
-				z.Printf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, aa.Config.Routers[kk], err)
+				z.Logf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, aa.Config.Routers[kk], err)
 			}
 			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
 		}
@@ -210,7 +210,7 @@ func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	}
 	// --------------------------------------------------------------
 	if z.IsDebug() {
-		z.Printf("[_kwdog2_]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, rr.URL.Path, aa.Config.NextAddr)
+		z.Logf("[_kwdog2_]: [%s] %s -> %s\n", aa.GtwDefault.ProxyName, rr.URL.Path, aa.Config.NextAddr)
 	}
 	aa.GtwDefault.ServeHTTP(rw, rr)
 }

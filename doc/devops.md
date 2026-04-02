@@ -32,7 +32,7 @@ func init() {
 		api := z.Inject(srv.GetSvcKit(), &HelloApi{})
 		srv.AddRouter("hello", api.hello)
 		return func() {
-			z.Println("api-hello closed")
+			z.Logn("api-hello closed")
 		}
 	})
 	z.Register("zz-world", func(srv z.IServer) z.Closed {

@@ -16,7 +16,7 @@ package sqlx
 /**
 Example:
 // 创建数据库 -------------------------------------------------
-dsc, err := sqlx.ConnectDB(&C.Database, z.Println)
+dsc, err := sqlx.ConnectDB(&C.Database, z.Logn)
 if err != nil {
 	zgg.ServeStop(err.Error())
 	return nil

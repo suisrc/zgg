@@ -7,28 +7,14 @@ package zc_test
 
 import (
 	"fmt"
-	"log"
 	"testing"
 
 	"github.com/suisrc/zgg/z/zc"
 )
 
-// go test -v z/zc/log_test.go -run Test_log0
+// go test -v z/zc/log_test.go -run Test_caller0
 
-func Test_log0(t *testing.T) {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-	t.Log("test")
-}
-
-// go test -v z/zc/log_test.go -run Test_log1
-
-func Test_log1(t *testing.T) {
-	t.Log("test")
-}
-
-// go test -v z/zc/log_test.go -run Test_log2
-
-func Test_log2(t *testing.T) {
+func Test_caller0(t *testing.T) {
 	// 测试普通函数
 	foo()
 

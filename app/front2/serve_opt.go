@@ -88,7 +88,7 @@ var ActionOpts = map[string]ActionFunc{
 		//  不建议这样使用，建议使用 router 直接路由。这只是一种特殊的路由方式方式， 增加 首页判断， 为CDN提供支持
 		apath, rpath := aa.GetRootPath(rr)
 		if z.IsDebug() {
-			z.Printf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rpath)
+			z.Logf(aa.LogKey+": { path: '%s', raw: '%s', root: '%s'}\n", rr.URL.Path, rr.URL.RawPath, rpath)
 		}
 		if strings.HasPrefix(kk, "~") {
 			// 只支持 GET 请求， 适合 CDN 加载的索引文件
@@ -96,7 +96,7 @@ var ActionOpts = map[string]ActionFunc{
 			path := target + apath
 			resp, err := http.Get(path)
 			if err != nil {
-				z.Println(aa.LogKey+": error, redirect to:", path, rr.URL.Path, err.Error())
+				z.Logn(aa.LogKey+": error, redirect to:", path, rr.URL.Path, err.Error())
 				http.Redirect(rw, rr, path, http.StatusMovedPermanently)
 			} else {
 				if ctype := resp.Header.Get("Content-Type"); strings.HasPrefix(ctype, "application/octet-stream") {
