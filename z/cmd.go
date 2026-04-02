@@ -56,9 +56,10 @@ var (
 	Logn = zc.Logn
 	Logz = zc.Logz
 	Exit = zc.Exit
-	// 兼容旧版本，保持接口不变，实际调用 Logf 和 Logn
+	// Deprecated: 已于v0.5.1中废弃 保留只是为了兼容旧版本，实际调用 Logn
 	Println = zc.Logn
-	Printf  = zc.Logf
+	// Deprecated: 已于v0.5.1中废弃 保留只是为了兼容旧版本，实际调用 Logf
+	Printf = zc.Logf
 
 	// 其他工具函数
 	Config    = zc.Register
