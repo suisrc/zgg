@@ -12,6 +12,7 @@ package zc
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"reflect"
 	"strings"
@@ -19,6 +20,7 @@ import (
 )
 
 func init() {
+	slog.SetDefault(Stdout()) // 设置默认日志记录器为控制台输出
 	Register(C)
 }
 

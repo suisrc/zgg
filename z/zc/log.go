@@ -53,6 +53,11 @@ var (
 	bufPool = sync.Pool{New: func() any { return new([]byte) }}
 )
 
+// 控制台日志输出， 标准日志输出请使用 slog 包
+func Stdout() *slog.Logger {
+	return stdLogger
+}
+
 // 向默认控制台输出
 func LogTty(v ...any) {
 	if C.LogTff {
