@@ -2,6 +2,10 @@ name: 'Build Image Logic'
 description: 'Build image steps for jobs'
 
 inputs:
+  github_token:
+    description: 'github registry workflow token'
+    required: true
+    secret: true
   docker_user:
     description: 'docker.io user name'
     required: true

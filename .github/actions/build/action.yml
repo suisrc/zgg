@@ -2,6 +2,10 @@ name: 'Build Image Logic'
 description: 'Build image steps for jobs'
 
 inputs:
+  github_token:
+    description: 'github registry workflow token'
+    required: true
+    secret: true
   docker_user:
     description: 'docker.io user name'
     required: true
@@ -29,7 +33,7 @@ runs:
       shell: bash
       run: |
         REGISTRY_URL=$GITHUB_REGISTRY
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
+        echo "${{ inputs.github_token }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
         IMAGE_ID=$REGISTRY_URL/$GITHUB_REPOSITORY
         echo IMAGE_ID=$IMAGE_ID
         VERSION=$IMAGE_VERSION
