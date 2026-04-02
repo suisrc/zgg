@@ -20,6 +20,7 @@ jobs:
       - name: Use build-auto
         uses: ./.github/actions/build-auto
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_user: ${{ secrets.DOCKER_USER }}
           docker_token: ${{ secrets.DOCKER_TOKEN }}
   kwdog2:
@@ -29,6 +30,7 @@ jobs:
       - name: Use build-auto
         uses: ./.github/actions/build-auto
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_user: ${{ secrets.DOCKER_USER }}
           docker_token: ${{ secrets.DOCKER_TOKEN }}
   kwlog2:
@@ -38,5 +40,6 @@ jobs:
       - name: Use build-auto
         uses: ./.github/actions/build-auto
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_user: ${{ secrets.DOCKER_USER }}
           docker_token: ${{ secrets.DOCKER_TOKEN }}

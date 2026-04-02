@@ -36,7 +36,7 @@ runs:
       shell: bash
       run: |
         REGISTRY_URL=$GITHUB_REGISTRY
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
+        echo "${{ inputs.github_token }}" | docker login $REGISTRY_URL -u ${{ github.actor }} --password-stdin
         IMAGE_ID=$REGISTRY_URL/$GITHUB_REPOSITORY
         echo IMAGE_ID=$IMAGE_ID
         VERSION=$IMAGE_VERSION
