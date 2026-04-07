@@ -154,7 +154,9 @@ func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
 	var proxy http.Handler
 	var err error
 	if strings.HasPrefix(vv, "domain+") {
-		proxy, err = gtw.NewDomainProxy(vv[7:], "") // 创建目标URL
+		proxy, err = gtw.NewCustomProxy(vv[7:], "", nil)
+	} else if strings.HasPrefix(vv, "domain-") {
+		proxy, err = gtw.NewCustomProxy(vv[7:], "", gtw.TransportSkip)
 	} else {
 		proxy, err = gtw.NewTargetProxy(vv) // 创建目标URL
 	}

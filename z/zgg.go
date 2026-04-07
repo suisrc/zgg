@@ -80,7 +80,7 @@ var _ http.Handler = (*Zgg)(nil)
 
 // 默认服务实体
 type Zgg struct {
-	Servers map[string]*http.Server
+	Servers map[string]Server
 	Closeds []Closed    // 模块关闭函数列表
 	TLSConf *tls.Config // Certificates, GetCertificate
 
@@ -94,7 +94,7 @@ type Zgg struct {
 
 // 服务初始化
 func (aa *Zgg) ServeInit() bool {
-	aa.Servers = map[string]*http.Server{}
+	aa.Servers = map[string]Server{}
 	aa.Closeds = []Closed{}
 	if aa.SvcKit == nil {
 		aa.SvcKit = NewSvcKit(aa)
@@ -155,60 +155,75 @@ func (aa *Zgg) ServeStop(err ...string) {
 			cls() // 模块关闭
 		}
 	}
-	Logn("[_server_]: http server shutdown")
+	Logn("[_server_]: services have been terminated")
 }
 
 // 启动 HTTP 服务
 func (aa *Zgg) RunServe() {
-	defer aa.ServeStop() // 停止业务模块， 先停服务，后停模块
-	// ------------------------------------------------------------------------
-	// 方案1, 不推荐
-	// Logn("http server Started, Linsten: " + addr)
-	// http.ListenAndServe(addr, hdl)
-	// ------------------------------------------------------------------------
-	// 方案2, 不推荐, 多启动
-	// Logn("http server Started, Linsten: " + addr)
-	// aa.RunningServer(&http.Server{Handler: hdl, Addr: addr})
-	// ------------------------------------------------------------------------
-	// 方案3， 启动HTTP服务， 并可优雅的终止
-	hss := []*http.Server{}
-	for key, hsv := range aa.Servers {
-		Logn("[_server_]: http server started, linsten:", key, hsv.Addr)
-		go aa.Execute(hsv)
-		hss = append(hss, hsv)
-	}
-	aa.WaitFor(hss...)
-}
-
-// -----------------------------------------------------------------------------------
-
-func (aa *Zgg) Execute(hsv *http.Server) {
-	if hsv.TLSConfig != nil {
-		if err := hsv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-			Exit(fmt.Sprintf("[_server_]: server exit error: %s\n", err))
+	// 停止业务模块， 先停服务，后停模块
+	defer aa.ServeStop()
+	// 启动HTTP服务， 并可优雅的终止
+	for key, srv := range aa.Servers {
+		if srv != nil {
+			go srv.RunServe(key)
 		}
-	} else if err := hsv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		Exit(fmt.Sprintf("[_server_]: server exit error: %s\n", err))
 	}
+	// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
+	aa.WaitFor()
 }
 
-func (aa *Zgg) WaitFor(hss ...*http.Server) {
-	if len(hss) == 0 {
-		Logn("[_server_]: no server to wait for")
+// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
+func (aa *Zgg) WaitFor() {
+	if len(aa.Servers) == 0 {
+		Logn("[_server_]: no server to wait for, exit...")
 		return
 	}
 	ssc := make(chan os.Signal, 1)
 	signal.Notify(ssc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-ssc
-	Logn("[_server_]: http server stoping...")
+	Logn("[_server_]: services is shutting down...")
 	// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, hsv := range hss {
-		if hsv != nil {
-			if err := hsv.Shutdown(ctx); err != nil {
-				Logn("[_server_]: http server shutdown:", err)
+	for key, srv := range aa.Servers {
+		if srv != nil {
+			Logn("[_server_]: http server stoping...", key)
+			if err := srv.Shutdown(ctx); err != nil {
+				Logn("[_server_]: http server shutdown error:", key, err)
 			}
+		}
+	}
+}
+
+type Server interface {
+	RunServe(key string)
+	Shutdown(ctx context.Context) error
+}
+
+func NewServer(handler http.Handler, addr string, conf *tls.Config) Server {
+	return &servez{Server: http.Server{Handler: handler, Addr: addr, TLSConfig: conf}, ErrExit: true}
+}
+
+type servez struct {
+	http.Server
+	ErrExit bool
+}
+
+func (srv *servez) RunServe(key string) {
+	Logn("[_server_]: http server booting... linsten:", key, srv.Server.Addr)
+	if srv.Server.TLSConfig != nil {
+		if err := srv.Server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			if srv.ErrExit {
+				Exit(fmt.Sprintf("[_server_]: server exit error: %s\n", err))
+			} else {
+				Logn(fmt.Sprintf("[_server_]: server error: %s\n", err))
+			}
+		}
+	} else if err := srv.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if srv.ErrExit {
+			Exit(fmt.Sprintf("[_server_]: server exit error: %s\n", err))
+		} else {
+			Logn(fmt.Sprintf("[_server_]: server error: %s\n", err))
 		}
 	}
 }
@@ -618,11 +633,11 @@ func RegisterHttpServe(zgg *Zgg) Closed {
 	}
 	if C.Server.Ptls > 0 && zgg.TLSConf != nil {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
-		zgg.Servers["(HTTPS)"] = &http.Server{Handler: zgg, Addr: addr, TLSConfig: zgg.TLSConf}
+		zgg.Servers["(HTTPS)"] = NewServer(zgg, addr, zgg.TLSConf)
 	}
 	if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
-		zgg.Servers["(HTTP1)"] = &http.Server{Handler: zgg, Addr: addr}
+		zgg.Servers["(HTTP1)"] = NewServer(zgg, addr, nil)
 	}
 	zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
 	return nil
@@ -769,11 +784,11 @@ type BufferPool interface {
 }
 
 // NewBufferPool 初始化缓冲池
-// defCap: 新缓冲区的默认容量（如4KB）
+// defCap: 新缓冲区的默认容量（如32KB）
 // maxCap: 允许归还的最大容量（如1MB）
 func NewBufferPool(defCap, maxCap int) BufferPool {
 	if defCap <= 0 {
-		defCap = 32 * 1024 // 默认64KB
+		defCap = 32 * 1024 // 默认32KB, 现代CPU L1缓存通常为32KB/核
 	}
 	if maxCap <= 0 {
 		maxCap = 1024 * 1024 // 默认1MB

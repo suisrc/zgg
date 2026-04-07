@@ -7,6 +7,7 @@ package gte
 
 import (
 	"log/syslog"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,11 +17,17 @@ import (
 
 // 日志 通过 syslog 发送
 
-func NewRecordSyslog(addr, net string, pir int, tty, body bool, convert gtw.ConvertFunc) gtw.RecordPool {
+func NewRecordSyslog(address string, pty int, tty, body bool, convert gtw.ConvertFunc) gtw.RecordPool {
+	network := ""
+	if strings.HasPrefix(address, "udp://") {
+		network, address = "udp", address[6:]
+	} else if strings.HasPrefix(address, "tcp://") {
+		network, address = "tcp", address[6:]
+	}
 	return gtw.NewRecordPool((&rSyslog{
-		Network:  net,
-		Address:  addr,
-		Priority: pir,
+		Network:  network,
+		Address:  address,
+		Priority: pty,
 		PrintTty: tty,
 		Convert:  convert,
 	}).Init().log, body)
@@ -30,13 +37,13 @@ type rSyslog struct {
 	Network  string // udp/tcp
 	Address  string // 127.0.0.1:5141
 	Priority int    // 128 ?
-	TagInfo  string // app.ns， 应用.空间
+	TagInfo  string // application.namespace， 应用.空间
 	PrintTty bool   // 同步终端输出
 	Convert  gtw.ConvertFunc
 
-	_klog *syslog.Writer
-	_lock sync.Mutex
-	_time int64 // time.Unix, 单位是秒
+	klog *syslog.Writer
+	lock sync.Mutex
+	time int64 // time.Unix, 单位是秒
 }
 
 func (r *rSyslog) Init() *rSyslog {
@@ -61,13 +68,13 @@ func (r *rSyslog) Init() *rSyslog {
 	}
 	if r.Address != "" {
 		var err error
-		r._klog, err = syslog.Dial(r.Network, r.Address, syslog.Priority(r.Priority), r.TagInfo)
+		r.klog, err = syslog.Dial(r.Network, r.Address, syslog.Priority(r.Priority), r.TagInfo)
 		if err != nil {
 			z.Logn("[_rsyslog]:", "unable to connect to syslog: ", err.Error())
 		} else {
 			z.Logn("[_rsyslog]:", "connect to syslog: ", r.Address)
 		}
-		r._time = time.Now().Unix()
+		r.time = time.Now().Unix()
 	}
 	return r
 }
@@ -78,7 +85,7 @@ func (r *rSyslog) log(rt gtw.IRecord) {
 		z.Logn("[_rsyslog]:", "unable to marshal json: ", err.Error())
 		return
 	}
-	if r._klog == nil {
+	if r.klog == nil {
 		z.Logn(string(bts))
 		return // 降级到终端输出
 	}
@@ -86,27 +93,26 @@ func (r *rSyslog) log(rt gtw.IRecord) {
 		z.Logn("[_rsyslog]:", string(bts))
 		// 同步在终端输出
 	}
-
-	r._lock.Lock()
-	defer r._lock.Unlock()
-	if r._time < time.Now().Unix() {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	if r.time < time.Now().Unix() {
 		// 由于 udp 协议有掉线的风险，所以每 5s 重置 syslog.Writer
 		// 其次，Writer 中本身有锁，所以这里即使没有锁也是线程安全的
 		// 为什么不用多实例高并发？1.资源成本控制， 2.防止接受日志服务器崩溃
 		// 会影响业务性能吗？不会，日志处理本身就是在独立的 goroutine 中执行
 		// 日志传送可能存在5s空白期，但是这个极端情况，况且是日志服务器崩溃的情况下，可以忽略
-		r._klog.Close() // 重置 syslog.Writer
-		r._time = time.Now().Unix() + 5
+		r.klog.Close() // 重置 syslog.Writer
+		r.time = time.Now().Unix() + 5
 	}
-	if _, err := r._klog.Write(bts); err != nil {
+	if _, err := r.klog.Write(bts); err != nil {
 		z.Logn("[_rsyslog]:", "unable to write to syslog: ", err.Error())
 	}
 }
 
 // func (r *rSyslog) all(msg string) {
-// 	r.writer.Crit(msg)    // 紧急
-// 	r.writer.Err(msg)     // 错误
-// 	r.writer.Warning(msg) // 警告
-// 	r.writer.Info(msg)    // 信息
-// 	r.writer.Debug(msg)   // 调试
+// 	r.w.Crit(msg)    // 紧急
+// 	r.w.Error(msg)   // 错误
+// 	r.w.Warn(msg)    // 警告
+// 	r.w.Info(msg)    // 信息
+// 	r.w.Debug(msg)   // 调试
 // }

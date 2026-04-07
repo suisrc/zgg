@@ -244,7 +244,7 @@ func (p *ReverseProxy) modifyResponse(rw http.ResponseWriter, res *http.Response
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	transport := p.Transport
 	if transport == nil {
-		transport = http.DefaultTransport
+		transport = TransportDef
 	}
 
 	ctx := req.Context()

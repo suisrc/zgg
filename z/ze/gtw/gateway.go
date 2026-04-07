@@ -50,6 +50,10 @@ func (p *GatewayProxy) NewRecord() IRecord {
 
 func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// g.ReverseProxy.ServeHTTP(rw, req)
+	transport := p.Transport
+	if transport == nil {
+		transport = TransportGtw
+	}
 
 	// ==== recordtrace ====>>>
 	record := p.NewRecord()
@@ -227,10 +231,6 @@ func (p *GatewayProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	// ==== recordtrace ====<<<
 
-	transport := p.Transport
-	if transport == nil {
-		transport = TransportGtw0
-	}
 	res, err := transport.RoundTrip(outreq)
 	roundTripMutex.Lock()
 	roundTripDone = true

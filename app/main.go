@@ -30,8 +30,8 @@ func main() {
 	// z.HttpServeDef = false // 标记是否启动默认 HTTP 服务， z.RegisterDefaultHttpServe
 
 	// front2.Init3(os.DirFS("www"), nil) // 前端应用, 使用系统文件夹中文件
-	// kwlog2.Init3(nil) // 采集器日志, 为 fluentbit agent 提供 HTTP 收集日志功能
-	// kwdog2.Init3(nil, nil) // API(反向/正向)网关， 通过 Sidecar 模式保护内部服务
+	// kwlog2.Init3(nil)      // 采集器日志, 为 fluentbit agent 提供 HTTP 收集日志功能
+	// kwdog2.Init3(nil, nil, nil) // API(反向/正向)网关， 通过 Sidecar 模式保护内部服务
 
 	z.Execute(_app, _ver, "(https://github.com/suisrc/zgg.git)")
 }

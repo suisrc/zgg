@@ -21,9 +21,9 @@ import (
 /*
 
 // 代理规则：
-// /~/  开头的，使用 a 地址完全取代; /xx/zz/... -> /~/vv = /vv/...
-// /-/  开头的，使用 a 地址截取 b 地址; /xx/zz/... -> /-/xx = /zz/...，这里是尝试截取，如果不存在，会忽略掉
-// /... 其他的，合并地址; /xx/zz/... -> /vv = /vv/xx/zz/...
+// /~/  前缀, 使用 a 地址替换 b 地址; /xx/zz/... -> /~/vv => /vv/...
+// /-/  前缀, 使用 a 地址截取 b 地址; /xx/zz/... -> /-/xx => /zz/... 这里是尝试截取，如果不存在，会忽略掉
+// /... 其他, 使用 a 地址合并 b 地址; /xx/zz/... -> /vv => /vv/xx/zz/...
 
 */
 
@@ -36,13 +36,107 @@ var (
 	NewBufferPool = z.NewBufferPool
 	GetAction     = z.GetAction
 
-	// NewTargetProxy0(原版，httputil) or NewTargetProxy2(扩展，支持 /~/ 和 /-/ 格式)
-	NewTargetProxy func(target string) (http.Handler, error) = NewTargetProxy2
-	// NewDomainProxy0(原版，httputil) or NewDomainProxy2(扩展，支持 /~/ 和 /-/ 格式)
-	NewDomainProxy func(target, domain string) (http.Handler, error) = NewDomainProxy2
+	// NewTargetProxyV2(扩展，支持 /~/ 和 /-/ 格式) or NewTargetProxy0(原版，httputil)
+	NewTargetProxy func(target string) (http.Handler, error) = NewTargetProxyV2
+	// NewCustomProxyV2(扩展，支持 /~/ 和 /-/ 格式)
+	NewCustomProxy func(target, domain string, tripper http.RoundTripper) (http.Handler, error) = NewCustomProxyV2
+
+	// NewTargetGatewayV2(扩展，支持 /~/ 和 /-/ 格式)
+	NewTargetGateway func(target string) (*GatewayProxy, error) = NewTargetGatewayV2
+	// NewCustomGatewayV2(扩展，支持 /~/ 和 /-/ 格式)
+	NewCustomGateway func(target, domain string, tripper http.RoundTripper) (*GatewayProxy, error) = NewCustomGatewayV2
+
+	// default's transport for default
+	TransportDef = http.DefaultTransport
+	// default's transport for gateway
+	TransportGtw = http.DefaultTransport
+
+	// skip tls verify's transport
+	TransportSkip http.RoundTripper = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
 )
 
-func NewTargetProxy0(target_ string) (http.Handler, error) {
+// --------------------------------------------------------------------------------------
+
+func NewTargetProxyV2(target_ string) (http.Handler, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	return &ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL2(req, target)
+		},
+		BufferPool: NewBufferPool(0, 0),
+	}, nil
+}
+
+func NewCustomProxyV2(target_, domain string, tripper http.RoundTripper) (http.Handler, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	if domain == "" {
+		domain = target.Host
+	}
+	return &ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL2(req, target)
+			req.Host = domain
+		},
+		BufferPool: NewBufferPool(0, 0),
+		Transport:  tripper,
+	}, nil
+}
+
+func NewTargetGatewayV2(target_ string) (*GatewayProxy, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	return &GatewayProxy{ReverseProxy: ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL2(req, target)
+		},
+		BufferPool: NewBufferPool(0, 0),
+	}}, nil
+}
+
+func NewCustomGatewayV2(target_, domain string, tripper http.RoundTripper) (*GatewayProxy, error) {
+	target, err := url.Parse(target_)
+	if err != nil {
+		return nil, err
+	}
+	if domain == "" {
+		domain = target.Host
+	}
+	return &GatewayProxy{ReverseProxy: ReverseProxy{
+		Director: func(req *http.Request) {
+			RewriteRequestURL2(req, target)
+			req.Host = domain
+		},
+		BufferPool: NewBufferPool(0, 0),
+		Transport:  tripper,
+	}}, nil
+}
+
+//---------------------------------------------------------------------------------------------
+
+// 原版， httputil
+func NewTargetProxyV0(target_ string) (http.Handler, error) {
 	target, err := url.Parse(target_)
 	if err != nil {
 		return nil, err
@@ -60,7 +154,8 @@ func NewTargetProxy0(target_ string) (http.Handler, error) {
 	}, nil
 }
 
-func NewDomainProxy0(target_, domain string) (http.Handler, error) {
+// 原版， httputil
+func NewCustomProxyV0(target_, domain string) (http.Handler, error) {
 	target, err := url.Parse(target_)
 	if err != nil {
 		return nil, err
@@ -80,117 +175,6 @@ func NewDomainProxy0(target_, domain string) (http.Handler, error) {
 		BufferPool: NewBufferPool(0, 0),
 		// Transport: TransportSkip,
 	}, nil
-}
-
-// --------------------------------------------------------------------------------------
-
-var (
-	// default's transport
-	TransportDefault = http.DefaultTransport
-
-	// default's transport for gtw
-	TransportGtw0 = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: false,
-		},
-	}
-
-	// skip tls verify's transport
-	TransportSkip = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-)
-
-// --------------------------------------------------------------------------------------
-
-func NewTargetProxy2(target_ string) (http.Handler, error) {
-	target, err := url.Parse(target_)
-	if err != nil {
-		return nil, err
-	}
-	return &ReverseProxy{
-		Director: func(req *http.Request) {
-			RewriteRequestURL2(req, target)
-		},
-		BufferPool: NewBufferPool(0, 0),
-		// Transport: TransportSkip,
-	}, nil
-}
-
-func NewDomainProxy2(target_, domain string) (http.Handler, error) {
-	target, err := url.Parse(target_)
-	if err != nil {
-		return nil, err
-	}
-	if domain == "" {
-		domain = target.Host
-	}
-	return &ReverseProxy{
-		Director: func(req *http.Request) {
-			RewriteRequestURL2(req, target)
-			req.Host = domain
-		},
-		BufferPool: NewBufferPool(0, 0),
-		// Transport: TransportSkip,
-	}, nil
-}
-
-func NewTargetGateway2(target_ string, pool BufferPool) (*GatewayProxy, error) {
-	target, err := url.Parse(target_)
-	if err != nil {
-		return nil, err
-	}
-	if pool == nil {
-		pool = NewBufferPool(0, 0)
-	}
-	return &GatewayProxy{ReverseProxy: ReverseProxy{
-		Director: func(req *http.Request) {
-			RewriteRequestURL2(req, target)
-		},
-		BufferPool: pool,
-	}}, nil
-}
-
-func NewDomainGateway2(target_, domain string, pool BufferPool) (*GatewayProxy, error) {
-	target, err := url.Parse(target_)
-	if err != nil {
-		return nil, err
-	}
-	if domain == "" {
-		domain = target.Host
-	}
-	if pool == nil {
-		pool = NewBufferPool(0, 0)
-	}
-	return &GatewayProxy{ReverseProxy: ReverseProxy{
-		Director: func(req *http.Request) {
-			RewriteRequestURL2(req, target)
-			req.Host = domain
-		},
-		BufferPool: pool,
-	}}, nil
 }
 
 //---------------------------------------------------------------------------------------------

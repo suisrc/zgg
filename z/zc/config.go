@@ -40,6 +40,7 @@ type Config struct {
 	Cache bool `json:"cache"` // 是否启用缓存, 如果启用，可以通过 GetByKey 获取已有的配置
 
 	Logger struct {
+		Pty    int    `json:"pty"`    // 日志优先级
 		Tty    bool   `json:"tty"`    // 启用日志处理器时，是否同步在终端输出
 		File   bool   `json:"file"`   // 追踪打印日志的位置
 		Type   string `json:"type"`   // 输出日志格式： line, text, json

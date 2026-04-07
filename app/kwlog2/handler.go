@@ -55,26 +55,23 @@ func Init3(ifn InitializFunc) {
 			zgg.ServeStop("logroute path error, is empty")
 			return nil
 		}
-
-		rp := C.Kwlog2.RoutePath
-		if rp[0] == '/' {
-			rp = rp[1:]
+		rpath := C.Kwlog2.RoutePath
+		if rpath[0] == '/' {
+			rpath = rpath[1:]
 		}
 		api := &Kwlog2Api{Config: C.Kwlog2}
-		api.Config.RoutePath = "/" + rp
+		api.Config.RoutePath = "/" + rpath
 		api.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
 		z.Logf("[logstore]: store-path -> %s", api.Config.StorePath)
 		api.HttpFS = http.FS(os.DirFS(api.Config.StorePath))
 		// z.Logn(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
-
 		mime.AddExtensionType(".log", "text/plain")
-		zgg.AddRouter("GET "+rp, api.lst)
+		zgg.AddRouter("GET "+rpath, api.lst)
 		if api.Config.Token != "" { // 增加访问令牌
-			zgg.AddRouter("POST "+rp, z.TokenAuth(&api.Config.Token, api.add))
+			zgg.AddRouter("POST "+rpath, z.TokenAuth(&api.Config.Token, api.add))
 		}
 		// zgg.AddRouter("GET favicon.ico", z.Favicon)
 		api.Writer = &logfile.Writer{AbsPath: api.Config.StorePath, MaxSize: api.Config.MaxSize}
-
 		if ifn != nil {
 			ifn(api, zgg) // 初始化方法
 		}

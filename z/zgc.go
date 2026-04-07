@@ -33,6 +33,9 @@ type HM map[string]string
 // get str
 type GetVal func(key string) string
 
+// Sem 一个信号量
+type Sem struct{}
+
 // 请求上下文内容
 type Ctx struct {
 	Ctx context.Context

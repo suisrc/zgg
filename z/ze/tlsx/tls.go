@@ -8,6 +8,7 @@ package tlsx
 import (
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
 	"sync"
 
@@ -20,8 +21,8 @@ type TLSAutoConfig struct {
 	CertConf CertConfig
 	IsSaCert bool
 
-	_lock sync.Mutex
-	_lmap map[string]*tls.Certificate
+	lock sync.Mutex
+	lmap map[string]*tls.Certificate
 }
 
 func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, error) {
@@ -39,18 +40,18 @@ func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, erro
 			return nil, err
 		}
 	}
-	if aa._lmap != nil {
-		if ct, ok := aa._lmap[key]; ok {
+	if aa.lmap != nil {
+		if ct, ok := aa.lmap[key]; ok {
 			return ct, nil
 		}
 	}
 	// ----------------------------------------------------------------------------
-	aa._lock.Lock()
-	defer aa._lock.Unlock()
-	if aa._lmap == nil {
-		aa._lmap = make(map[string]*tls.Certificate)
+	aa.lock.Lock()
+	defer aa.lock.Unlock()
+	if aa.lmap == nil {
+		aa.lmap = make(map[string]*tls.Certificate)
 	}
-	if ct, ok := aa._lmap[key]; ok {
+	if ct, ok := aa.lmap[key]; ok {
 		return ct, nil
 	}
 	var err error
@@ -81,7 +82,7 @@ func (aa *TLSAutoConfig) GetCert(sni string, ipp string) (*tls.Certificate, erro
 		z.Logn("[_tlsauto]: NewCertificate: ", key, " load error: ", err)
 		return nil, err
 	}
-	aa._lmap[key] = &ct
+	aa.lmap[key] = &ct
 	return &ct, nil
 }
 
@@ -95,4 +96,74 @@ func (aa *TLSAutoConfig) GetConfigForClient(hello *tls.ClientHelloInfo) (*tls.Co
 	} else {
 		return &tls.Config{Certificates: []tls.Certificate{*cert}}, nil
 	}
+}
+
+func PeekSNI(conn net.Conn) (string, []byte, error) {
+	header := make([]byte, 5)
+	if _, err := io.ReadFull(conn, header); err != nil {
+		return "", nil, err
+	}
+	if header[0] != 0x16 { // TLS handshake record
+		return "", nil, errors.New("not tls handshake")
+	}
+	length := int(header[3])<<8 | int(header[4])
+	body := make([]byte, length)
+	if _, err := io.ReadFull(conn, body); err != nil {
+		return "", nil, err
+	}
+	buf := append(header, body...)
+	if len(body) < 42 {
+		return "", buf, errors.New("client hello too short")
+	}
+	idx := 5 + 4 + 2 // record header + handshake header + version
+	idx += 32        // random
+	if idx+1 > len(buf) {
+		return "", buf, errors.New("invalid client hello")
+	}
+	sessionIdLen := int(buf[idx])
+	idx += 1 + sessionIdLen
+	if idx+2 > len(buf) {
+		return "", buf, errors.New("invalid client hello")
+	}
+	cipherSuiteLen := int(buf[idx])<<8 | int(buf[idx+1])
+	idx += 2 + cipherSuiteLen
+	if idx+1 > len(buf) {
+		return "", buf, errors.New("invalid client hello")
+	}
+	compressionLen := int(buf[idx])
+	idx += 1 + compressionLen
+	if idx+2 > len(buf) {
+		return "", buf, errors.New("invalid client hello")
+	}
+	extensionsLen := int(buf[idx])<<8 | int(buf[idx+1])
+	idx += 2
+	endExt := idx + extensionsLen
+	for idx+4 <= endExt && idx+4 <= len(buf) {
+		extType := int(buf[idx])<<8 | int(buf[idx+1])
+		extLen := int(buf[idx+2])<<8 | int(buf[idx+3])
+		idx += 4
+		if extType == 0 { // SNI extension
+			if idx+2 > len(buf) {
+				break
+			}
+			sniListLen := int(buf[idx])<<8 | int(buf[idx+1])
+			idx += 2
+			endSNI := idx + sniListLen
+			for idx+3 <= endSNI {
+				nameType := buf[idx]
+				nameLen := int(buf[idx+1])<<8 | int(buf[idx+2])
+				idx += 3
+				if nameType == 0 {
+					if idx+nameLen > len(buf) {
+						break
+					}
+					return string(buf[idx : idx+nameLen]), buf, nil
+				}
+				idx += nameLen
+			}
+			break
+		}
+		idx += extLen
+	}
+	return "", buf, errors.New("sni not found")
 }

@@ -26,7 +26,7 @@ func NewAuthzF1kin(sites []string, authz string, askip bool) gtw.Authorizer {
 		AllowSkipz: askip,
 		client: &http.Client{
 			Timeout:   5 * time.Second,
-			Transport: gtw.TransportGtw0,
+			Transport: gtw.TransportGtw,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse // 禁止重定向，返回原始响应
 			},

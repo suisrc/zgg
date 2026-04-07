@@ -116,6 +116,14 @@ Authorization: Bearer kst.9B8A147880FE5434E281C58CDF2EC43E00000002WL90PxBIoL0y2i
 // -----------------------------------------------
 // kwlog2
 ### 
+GET {{BASE}}/api/logs
+
+### 
+GET {{BASE}}/api/logs?path=/2026/04/2026-04-07_1.log
+
+// -----------------------------------------------
+// kwlog2
+### 
 POST {{BASE}}/api/logs
 Content-Type: application/json
 Authorization: Token xxx123456789
