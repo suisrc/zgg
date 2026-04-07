@@ -30,19 +30,23 @@ var (
 	// cs 配置对象集合
 	CS = map[string]any{}    // 需要初始化配置
 	FS = map[string]func(){} // 配置初始化函数
-
-	InitFunc = func() {}
+	LS = map[string]func(){} // 日志处理器集合
 )
 
 // Config 配置参数
 type Config struct {
-	Debug  bool   `default:"false" json:"debug"`
-	Print  bool   `json:"print"`  // 用于调试，打印所有的的参数
-	Cache  bool   `json:"cache"`  // 是否启用缓存, 如果启用，可以通过 GetByKey 获取已有的配置
-	Syslog string `json:"syslog"` // udp://klog.default.svc:514, syslog 输出地址
-	LogTty bool   `json:"logtty"` // 启用 syslog 同步打印日志到控制台
-	LogTff bool   `json:"logtff"` // 追踪打印日志的位置
-	LogTyp string `json:"logtyp"` // 输出日志格式： line, text, json
+	Debug bool `default:"false" json:"debug"`
+	Print bool `json:"print"` // 用于调试，打印所有的的参数
+	Cache bool `json:"cache"` // 是否启用缓存, 如果启用，可以通过 GetByKey 获取已有的配置
+
+	Logger struct {
+		Tty    bool   `json:"tty"`    // 启用日志处理器时，是否同步在终端输出
+		File   bool   `json:"file"`   // 追踪打印日志的位置
+		Type   string `json:"type"`   // 输出日志格式： line, text, json
+		Kind   string `json:"kind"`   // 输出日志处理器： syslog, file, stdout(默认)
+		Folder string `json:"folder"` // 输出日志文件路径，默认为 ./logs
+		Syslog string `json:"syslog"` // udp://klog.default.svc:514, syslog 输出地址
+	}
 }
 
 var (
@@ -135,21 +139,27 @@ func LoadConfig(cfs string) {
 		for _, fn := range FS {
 			fn()
 		}
-	})
-	if C.Print {
-		for name, conf := range CS {
-			LogTty("--------" + name)
-			LogTty(ToStr2(conf))
+		if !C.Cache {
+			vcache = nil // 禁用缓存， 缓存是在 Env 中完成初始化的
 		}
-		LogTty("----------------------------------------------")
-	}
-	if !C.Cache {
-		vcache = nil // 禁用缓存， 缓存是在 Env 中完成初始化的
-	}
-	InitFunc()
+		if C.Print {
+			for name, conf := range CS {
+				LogTty("--------" + name)
+				LogTty(ToStr2(conf))
+			}
+			LogTty("----------------------------------------------")
+		}
+		if C.Logger.Folder == "" {
+			C.Logger.Folder = "./logs"
+		}
+		if fn, ok := LS[C.Logger.Kind]; ok {
+			fn() // 初始化日志处理器
+		}
+	})
 }
 
-// 获取配置文件中指定的字段值， 可能存在 key 相同的覆盖情况， PS: 由于使用的是 reflect.Value，因此原始值改变时，缓存也会改变
+// 获取配置文件中指定的字段值， 可能存在 key 相同的覆盖情况
+// PS: 由于使用的是 reflect.Value，因此原始值改变时，缓存也会改变
 func GetByKey[T any](key string, def T) T {
 	if vcache == nil {
 	} else if vc, ok := vcache[key]; !ok {

@@ -2,6 +2,7 @@ package kwdog2
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -12,6 +13,10 @@ import (
 	"github.com/suisrc/zgg/z/ze/gte"
 	"github.com/suisrc/zgg/z/ze/gtw"
 )
+
+// 反向代理服务配置规则
+// value: def+ 前缀表示共享默认网关配置， 其他的表示独立网关配置
+// key: @ 前缀表示多域名路由，格式为 @domain/path
 
 type KwdogConfig struct {
 	Disabled bool              `json:"disabled"`
@@ -56,6 +61,10 @@ func InitKwdog(ifn InitializKwdogFunc) {
 		if C.Kwdog2.Disabled {
 			z.Logn("[_kwdog2_]: disabled")
 			return nil
+		}
+
+		if strings.HasSuffix(C.Kwdog2.AddrPort, ":80") && C.Kwdog2.NextAddr == "http://127.0.0.1:80" {
+			C.Kwdog2.NextAddr = "http://127.0.0.1:81" // 避免循环
 		}
 
 		// ...
@@ -111,12 +120,41 @@ func InitKwdog(ifn InitializKwdogFunc) {
 				)
 			}
 		}
+		// 特殊的多域名路由情况， 以 @ 开头， 格式为 @domain/path, 其中 path 可省略， 默认根路径
+		api.DomainMap = make(map[string][]string)
+		// 解析所有路由
 		for kk := range api.Config.Routers {
+			if len(kk) > 2 && kk[0] == '@' {
+				// 新增多域名路由
+				host, path := kk[1:], ""
+				if idx := strings.Index(host, "/"); idx > 0 {
+					path = host[idx:]
+					host = host[:idx]
+				}
+				// 加入路由队列中
+				routers, exist := api.DomainMap[host]
+				if !exist {
+					routers = []string{}
+				}
+				routers = append(routers, path)
+				api.DomainMap[host] = routers
+				continue
+			}
+			// 默认路由
 			api.RouterKey = append(api.RouterKey, kk)
 		}
 		// api.RoutersKey 按字符串长度倒序
-		slices.SortFunc(api.RouterKey, func(l string, r string) int { return -len(l) + len(r) })
-		z.Logn("[_kwdog2_]: routers", api.RouterKey)
+		if len(api.RouterKey) > 1 {
+			slices.SortFunc(api.RouterKey, func(l string, r string) int { return len(r) - len(l) })
+		}
+		// api.DomainMap 中的路径也按字符串长度倒序
+		for host, paths := range api.DomainMap {
+			if len(paths) > 1 {
+				slices.SortFunc(paths, func(l string, r string) int { return len(r) - len(l) })
+				api.DomainMap[host] = paths
+			}
+		}
+		z.Logn("[_kwdog2_]: routers", api.RouterKey, "domains", api.DomainMap)
 		zgg.Servers["(KWDOG)"] = &http.Server{Addr: api.Config.AddrPort, Handler: api}
 
 		if ifn != nil {
@@ -135,7 +173,8 @@ type KwdogApi struct {
 	GtwDefault *gtw.GatewayProxy       // 默认网关
 	Authorizer gtw.Authorizer          // 默认记录
 	RouterMap  map[string]gtw.IGateway // 路由网关
-	RouterKey  []string
+	RouterKey  []string                // 目录网关
+	DomainMap  map[string][]string     // 域名网关
 	_svc_lock  sync.RWMutex
 }
 
@@ -151,14 +190,23 @@ func (aa *KwdogApi) GetProxy(kk string) gtw.IGateway {
 func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	aa._svc_lock.Lock()
 	defer aa._svc_lock.Unlock()
-	vv := aa.Config.Routers[kk]
+	vv, ok := aa.Config.Routers[kk]
+	if !ok {
+		return nil, fmt.Errorf("router not found: %s", kk)
+	}
 	share := false
 	if strings.HasPrefix(vv, "def+") {
 		// 需要网关处理
 		share = true
 		vv = vv[4:]
 	}
-	gw, err := gtw.NewTargetGateway2(vv, aa.BufferPool) // 创建目标URL
+	var gw *gtw.GatewayProxy
+	var err error
+	if strings.HasPrefix(vv, "domain+") {
+		gw, err = gtw.NewDomainGateway2(vv[7:], "", aa.BufferPool) // 创建目标URL
+	} else {
+		gw, err = gtw.NewTargetGateway2(vv, aa.BufferPool) // 创建目标URL
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -179,33 +227,51 @@ func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	return gw, nil
 }
 
+func (aa *KwdogApi) ProxyHTTP(rw http.ResponseWriter, rr *http.Request, kk string) {
+	if proxy := aa.GetProxy(kk); proxy != nil {
+		// 使用缓存的网关
+		if z.IsDebug() {
+			z.Logf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
+		}
+		proxy.ServeHTTP(rw, rr) // next
+	} else if proxy, err := aa.NewProxy(kk); err == nil {
+		// 创建新的网关
+		if z.IsDebug() {
+			z.Logf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
+		}
+		proxy.ServeHTTP(rw, rr) // next
+	} else {
+		// 没有网关可用， 返回 502 错误
+		if z.IsDebug() {
+			z.Logf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, aa.Config.Routers[kk], err)
+		}
+		http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
+	}
+}
+
 // ServeHTTP
 func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if rr.URL.Path == "/healthz" {
 		z.JSON0(rr, rw, &z.Result{Success: true, Data: time.Now().Format("2006-01-02 15:04:05")})
 		return
 	}
-
+	// 代理路由服务
+	if paths, exist := aa.DomainMap[rr.Host]; exist {
+		for _, path := range paths {
+			if !z.HasPathPrefix(rr.URL.Path, path) {
+				continue // 数量少， 可以这么处理
+			}
+			kk := "@" + rr.Host + path
+			aa.ProxyHTTP(rw, rr, kk)
+			return
+		}
+	}
+	// 代理路由服务
 	for _, kk := range aa.RouterKey {
 		if !z.HasPathPrefix(rr.URL.Path, kk) {
 			continue // 数量少， 可以这么处理
 		}
-		if proxy := aa.GetProxy(kk); proxy != nil {
-			if z.IsDebug() {
-				z.Logf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
-			}
-			proxy.ServeHTTP(rw, rr) // next
-		} else if proxy, err := aa.NewProxy(kk); err == nil {
-			if z.IsDebug() {
-				z.Logf("[_kwdog2_]: [%s] %s -> %s\n", proxy.GetProxyName(), rr.URL.Path, aa.Config.Routers[kk])
-			}
-			proxy.ServeHTTP(rw, rr) // next
-		} else {
-			if z.IsDebug() {
-				z.Logf("[_kwdog2_]: [%s] %s -> %s, %v\n", kk, rr.URL.Path, aa.Config.Routers[kk], err)
-			}
-			http.Error(rw, "502 Bad Gateway: "+err.Error(), http.StatusBadGateway)
-		}
+		aa.ProxyHTTP(rw, rr, kk)
 		return
 	}
 	// --------------------------------------------------------------

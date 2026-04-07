@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/suisrc/zgg/z"
@@ -64,118 +61,9 @@ func (aa *Kwlog2Api) log(rcs []Record, ktag string) {
 		}
 		// /ktag/namespace/appname/%Y/%M/%Y-%M-%D_0.txt
 		fkey := fmt.Sprintf("%s/%s/%s/%02d/%02d/%s_", ktag, rc.Namespace, rc.AppName, //
-			date.Year(), date.Month(), date.Format(time.DateOnly))
-		// file := fpre + "0.txt"
-		file, ok := aa._files.Load(fkey)
-		if !ok {
-			file, _ = aa._files.LoadOrStore(fkey, &LoggerFile{
-				DelFunc: aa.del_file,
-				AbsPath: aa.Config.StorePath,
-				FileKey: fkey,
-				MaxSize: aa.Config.MaxSize,
-			})
-		}
-		// time.RFC3339 ? 缺少微秒， 日志统计到微妙
-		tpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(C.Kwlog2.LogTime), rc.PodName)
-		file.(*LoggerFile).Write([]byte(tpre), []byte(rc.Origin), []byte{'\n'})
+			date.Year(), date.Month(), date.Format(time.DateOnly)) // time.RFC3339 ? 缺少微秒， 日志统计到微妙
+		// 将日志写入Writer中，日志格式为： [时间]-[容器名称]: 日志内容
+		fpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(C.Kwlog2.LogTime), rc.PodName)
+		aa.Writer.Write(fkey, []byte(fpre), rc.Origin, []byte("\n"))
 	}
-}
-
-func (aa *Kwlog2Api) del_file(lf *LoggerFile) {
-	aa._files.Delete(lf.FileKey)
-	z.Logf("[logstore]: recycle handle -> %s%d.txt", lf.FileKey, lf.Index)
-}
-
-type LoggerFile struct {
-	DelFunc func(*LoggerFile)
-
-	MaxSize int64  // 文件大小限制， 默认 10MB
-	AbsPath string // 根路径
-	FileKey string // 文件键
-	FileHdl *os.File
-
-	Index int         // 文件索引
-	mlock sync.Mutex  // 写入锁定
-	timer *time.Timer // 是否存在
-	alive int64       // 存活时间
-}
-
-func (aa *LoggerFile) Write(bts ...[]byte) {
-	aa.mlock.Lock()
-	defer aa.mlock.Unlock()
-	// defer aa.close()
-	if aa.FileHdl != nil {
-		if fstat, _ := aa.FileHdl.Stat(); fstat != nil && fstat.Size() > aa.MaxSize {
-			// 文件大小超过限制， 关闭文件句柄
-			aa.FileHdl.Close()
-			aa.FileHdl = nil
-			aa.Index++
-		} else {
-			// 复用文件句柄，写入文件
-			defer aa.close()
-			for _, bt := range bts {
-				aa.FileHdl.Write(bt)
-			}
-			return
-		}
-	}
-	fpath := ""
-	fpkey := filepath.Join(aa.AbsPath, aa.FileKey)
-	for {
-		fpath = fmt.Sprintf("%s%d.txt", fpkey, aa.Index)
-		if fstat, err := os.Stat(fpath); err != nil && os.IsNotExist(err) {
-			// 文件不存在， 创建文件所在的文件夹
-			parent := filepath.Dir(fpath)
-			if _, err := os.Stat(parent); os.IsNotExist(err) {
-				os.MkdirAll(parent, 0644)
-			}
-			break
-		} else if err == nil && fstat.Size() > aa.MaxSize {
-			aa.Index++
-			continue
-		} else if err == nil && fstat.IsDir() {
-			z.Logf("[logstore]: check store file error -> %s, %s", fpath, " is dir")
-			aa.DelFunc(aa)
-			return // 跳过，文件名存在同名文件夹
-		} else if err != nil {
-			z.Logf("[logstore]: check store file error -> %s, %s", fpath, err.Error())
-			aa.DelFunc(aa)
-			return // 跳过，无法处理，遇到不可预知错误
-		} else {
-			// 文件存在，而且大小合适， 继续写入
-			break
-		}
-	}
-	var err error // 创建 + 追加 + 只写
-	aa.FileHdl, err = os.OpenFile(fpath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		z.Logf("[logstore]: open store file error -> %s, %s", fpath, err.Error())
-		aa.DelFunc(aa)
-		return // 跳过，无法处理， 无法打开或者创建文件夹
-	}
-	defer aa.close()
-	for _, bt := range bts {
-		aa.FileHdl.Write(bt)
-	}
-
-}
-
-func (aa *LoggerFile) close() {
-	aa.alive = time.Now().Unix() + 10
-	if aa.timer != nil {
-		return // 执行器存在， 跳过
-	}
-	// 创建回收器， 延迟关闭
-	aa.timer = time.AfterFunc(time.Second*5, aa._close)
-}
-func (aa *LoggerFile) _close() {
-	if aa.alive > time.Now().Unix() {
-		// 创建回收器，继续迭代检查
-		aa.timer.Reset(time.Second * 5)
-		return
-	}
-	aa.DelFunc(aa)
-	aa.FileHdl.Close()
-	aa.FileHdl = nil
-	aa.timer = nil // 删除执行器
 }

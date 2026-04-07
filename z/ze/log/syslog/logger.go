@@ -28,22 +28,22 @@ var TryInterval = 5
 
 func init() {
 	// 注册初始化Logger方法
-	zc.InitFunc = InitSysLog
+	zc.LS["syslog"] = InitSysLog
 }
 
 func InitSysLog() {
-	if zc.C.Syslog == "" {
+	if zc.C.Logger.Syslog == "" {
 		return // 不进行初始化
 	}
-	addr := zc.C.Syslog
+	addr := zc.C.Logger.Syslog
 	net := "udp"
 	if idx := strings.Index(addr, "://"); idx > 0 {
 		net = addr[:idx]
 		addr = addr[idx+3:]
 	}
 	// 创建 syslog.Writer
-	writer := NewSyslogWriter(addr, net, 0, zc.C.LogTty).Init()
-	switch zc.C.LogTyp {
+	writer := NewWriter(addr, net, 0)
+	switch zc.C.Logger.Type {
 	case "text":
 		logger := slog.New(slog.NewTextHandler(writer, nil))
 		slog.SetDefault(logger) // 替换默认日志记录器
@@ -56,11 +56,10 @@ func InitSysLog() {
 	}
 }
 
-func NewSyslogWriter(addr, net string, fac int, tty bool) *lSyslog {
+func NewWriter(addr, net string, fac int) io.Writer {
 	return (&lSyslog{
 		Network:  net,
 		Address:  addr,
-		SyncTty:  tty,
 		Priority: syslog.Priority(fac),
 	}).Init()
 }
@@ -69,7 +68,6 @@ type lSyslog struct {
 	Network string // udp/tcp
 	Address string // 127.0.0.1:5141
 	TagInfo string // app.ns， 应用.空间
-	SyncTty bool   // 同步终端输出
 
 	Priority syslog.Priority // syslog 优先级，默认 LOG_LOCAL0
 
@@ -82,7 +80,7 @@ type lSyslog struct {
 	unix int64 // time.Unix, 单位是秒
 }
 
-func (r *lSyslog) Init() *lSyslog {
+func (r *lSyslog) Init() io.Writer {
 	if r.Network == "" {
 		r.Network = "udp"
 	} else if r.Network != "udp" && r.Network != "tcp" {
@@ -133,7 +131,7 @@ func (r *lSyslog) Write(buf []byte) (int, error) {
 		}
 		return blen, nil
 	}
-	if r.SyncTty {
+	if zc.C.Logger.Tty {
 		// 同步在终端输出
 		if buf[blen-1] == '\n' {
 			os.Stdout.Write(buf)
@@ -149,7 +147,7 @@ func (r *lSyslog) Write(buf []byte) (int, error) {
 		r.unix = time.Now().Unix() + int64(TryInterval)
 	}
 	if err := r.klog.Info(string(buf)); err != nil {
-		zc.LogTty("[_lsyslog]:", "unable to write to syslog: ", err.Error())
+		zc.LogTty("[_lsyslog]: unable to write to syslog,", err.Error())
 		// 写出发生异常，可能是连接断开了，重置 syslog.Writer
 		r.klog.Close()
 		r.klog = nil // 置空，需要重新检查Address等信息， 等待下次重新 Dial 连接

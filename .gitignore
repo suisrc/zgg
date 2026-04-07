@@ -18,6 +18,7 @@
 
 # Make artifacts
 dist
+logs
 _out
 *.log
 www

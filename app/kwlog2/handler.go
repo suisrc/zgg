@@ -7,14 +7,15 @@ package kwlog2
 
 import (
 	"flag"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/suisrc/zgg/z"
+	logfile "github.com/suisrc/zgg/z/ze/log/file"
 )
 
 var (
@@ -66,11 +67,13 @@ func Init3(ifn InitializFunc) {
 		api.HttpFS = http.FS(os.DirFS(api.Config.StorePath))
 		// z.Logn(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
 
+		mime.AddExtensionType(".log", "text/plain")
 		zgg.AddRouter("GET "+rp, api.lst)
 		if api.Config.Token != "" { // 增加访问令牌
 			zgg.AddRouter("POST "+rp, z.TokenAuth(&api.Config.Token, api.add))
 		}
 		// zgg.AddRouter("GET favicon.ico", z.Favicon)
+		api.Writer = &logfile.Writer{AbsPath: api.Config.StorePath, MaxSize: api.Config.MaxSize}
 
 		if ifn != nil {
 			ifn(api, zgg) // 初始化方法
@@ -82,5 +85,5 @@ func Init3(ifn InitializFunc) {
 type Kwlog2Api struct {
 	Config Config
 	HttpFS http.FileSystem // 文件系统, http.FS(wwwFS)
-	_files sync.Map
+	Writer *logfile.Writer // 日志写入器
 }

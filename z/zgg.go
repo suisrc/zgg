@@ -34,7 +34,7 @@ import (
 var (
 	AppName = "zgg"
 	Version = "v0.0.0"
-	AppInfo = "(https://github.com/suisrc/zgg)"
+	AppInfo = "(https://github.com/suisrc/zgg.git)"
 
 	HttpServeDef = true // 启动默认 http 服务?
 
