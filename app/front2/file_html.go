@@ -11,19 +11,21 @@ import (
 	"github.com/suisrc/zgg/z"
 )
 
-var (
-	html_top = `
+const (
+	// html 模板前缀
+	html_prefix = `
 <html><head><title>SiteFile</title></head>
 <body>
 <h1>Site File List /</h1><hr><pre>
 
 `
-	thml_end = `
+	// html 模板后缀
+	html_suffix = `
 </pre><hr></body></html>`
 )
 
 // 列表文件
-func (aa *IndexApi) ListFile(zrc *z.Ctx) {
+func (aa *FrontHandler) ShowFiles(zrc *z.Ctx) {
 	rw := zrc.Writer
 	rr := zrc.Request
 
@@ -91,6 +93,6 @@ func (aa *IndexApi) ListFile(zrc *z.Ctx) {
 		}
 		// 整合列表到 html 中
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-		rw.Write([]byte(html_top + html_body.String() + thml_end))
+		rw.Write([]byte(html_prefix + html_body.String() + html_suffix))
 	}
 }

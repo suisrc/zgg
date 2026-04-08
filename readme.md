@@ -29,31 +29,31 @@ import (
 
 func init() {
 	z.Register("50-hello", func(zgg *z.Zgg) z.Closed {
-		api := z.Inject(zgg.SvcKit, &HelloApi{})
-		zgg.AddRouter("hello", api.hello)
+		hdl := z.Inject(zgg.SvcKit, &HelloHandler{})
+		zgg.AddRouter("hello", hdl.hello)
 
 		if ifn != nil {
-			ifn(api, zgg) // 初始化方法
+			ifn(hdl, zgg) // 初始化方法
 		}
 		return func() {
-			z.Logn("api-hello closed")
+			z.Logn("hdl-hello closed")
 		}
 	})
 	z.Register("zz-world", func(zgg *z.Zgg) z.Closed {
-		api := zgg.SvcKit.Get("HelloApi").(*HelloApi)
-		z.GET("world", api.world, zgg)
-		z.GET("token", z.TokenAuth(z.Ptr("123"), api.token), zgg)
+		hdl := zgg.SvcKit.Get("HelloHandler").(*HelloHandler)
+		z.GET("world", hdl.world, zgg)
+		z.GET("token", z.TokenAuth(z.Ptr("123"), hdl.token), zgg)
 		return nil
 	})
 }
 
-type HelloApi struct {
+type HelloHandler struct {
 	FA any                           // 标记不注入，默认
 	FB any      `svckit:"-"`         // 标记不注入，默认
 	CM z.Module `svckit:"type"`      // 根据【类型】自动注入
 	SK z.SvcKit `svckit:"type"`      // 根据【类型】自动注入
-	AH any      `svckit:"api-hello"` // 根据【名称】自动注入
-	AW any      `svckit:"api-world"` // 根据【名称】自动注入
+	AH any      `svckit:"hdl-hello"` // 根据【名称】自动注入
+	AW any      `svckit:"hdl-world"` // 根据【名称】自动注入
 	TK z.TplKit `svckit:"auto"`      // 根据【类型】自动注入
 	tt z.TplKit `svckit:"auto"`      // 私有【属性】不能注入
 }

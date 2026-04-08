@@ -25,7 +25,7 @@ func init() {
 
 func InitAppLog() {
 	// 创建 syslog.Writer
-	writer := &lAppLog{}
+	writer := NewWriter(zc.C.Logger.Folder, 0, zc.C.Logger.Tty)
 	switch zc.C.Logger.Type {
 	case "text":
 		logger := slog.New(slog.NewTextHandler(writer, nil))
@@ -39,8 +39,13 @@ func InitAppLog() {
 	}
 }
 
+func NewWriter(absPath string, maxSize int64, ttySync bool) io.Writer {
+	return &lAppLog{Writer: RollingFile{AbsPath: absPath, MaxSize: maxSize}, TtySync: ttySync}
+}
+
 type lAppLog struct {
-	writer RollingFile
+	Writer  RollingFile
+	TtySync bool
 }
 
 func (aa *lAppLog) Write(buf []byte) (int, error) {
@@ -48,7 +53,7 @@ func (aa *lAppLog) Write(buf []byte) (int, error) {
 	if blen == 0 {
 		return 0, nil
 	}
-	if zc.C.Logger.Tty {
+	if aa.TtySync {
 		// 同步在终端输出
 		if buf[blen-1] == '\n' {
 			os.Stdout.Write(buf)
@@ -57,7 +62,7 @@ func (aa *lAppLog) Write(buf []byte) (int, error) {
 			os.Stdout.Write(append(buf, '\n'))
 		}
 	}
-	wlen, err := aa.writer.Write(buf)
+	wlen, err := aa.Writer.Write(buf)
 	if err != nil {
 		zc.LogTty("[_logfile]: unable to write to logfile,", err.Error())
 	}
@@ -65,7 +70,7 @@ func (aa *lAppLog) Write(buf []byte) (int, error) {
 }
 
 func (aa *lAppLog) Close() error {
-	return aa.writer.Close()
+	return aa.Writer.Close()
 }
 
 // ------------------------------------------------------------------------------------

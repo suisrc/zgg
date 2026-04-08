@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/suisrc/zgg/z/zc"
@@ -97,7 +98,7 @@ func Initializ() {
 	flag.IntVar(&(C.Server.Ptls), "ptls", 443, "https server Port")
 	flag.BoolVar(&(C.Server.Dual), "dual", false, "running http and https server")
 	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
-	flag.StringVar(&(C.Server.ApiPath), "api", "", "http server api path")
+	flag.StringVar(&(C.Server.ApiRoot), "api", "", "http server api root")
 	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
 	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
 
@@ -121,6 +122,8 @@ func RunHttpServe() {
 	}
 }
 
+// -----------------------------------------------------------------------------------------------------
+
 // 请求数据
 func ReadForm[T any](rr *http.Request, rb T) (T, error) {
 	return zc.Map2ToStruct(rb, rr.URL.Query(), "form")
@@ -139,6 +142,7 @@ func WriteRespBytes(rw http.ResponseWriter, ctype string, code int, data []byte)
 	rw.Write(data)
 }
 
+// 前缀匹配
 func HasPathPrefix(path string, pre string) bool {
 	if elen := len(pre); elen == 0 {
 		return true // 对比 pre 为空，直接返回 true
@@ -157,4 +161,36 @@ func HasPathPrefix(path string, pre string) bool {
 	// 	return strings.HasPrefix(path, pre)
 	// }
 	// return strings.HasPrefix(path, pre+"/")
+}
+
+type Slice[T any] []T
+
+// 追加一条数据到数据集中
+func (s *Slice[T]) Add(vals ...T) {
+	*s = append(*s, vals...)
+}
+
+// 删除满足条件的第一条数据
+func (s *Slice[T]) Del(fn func(val T) bool) {
+	if idx := slices.IndexFunc(*s, fn); idx >= 0 {
+		*s = slices.Delete(*s, idx, idx+1)
+	}
+}
+
+// 校验数据是否存在，存在替换，不存在追加
+func (s *Slice[T]) Set(fn func(val T) bool, val T) {
+	if idx := slices.IndexFunc(*s, fn); idx >= 0 {
+		(*s)[idx] = val
+	} else {
+		*s = append(*s, val)
+	}
+}
+
+// 获取满足条件的第一条数据
+func (s *Slice[T]) Get(fn func(val T) bool) (val T, ok bool) {
+	if idx := slices.IndexFunc(*s, fn); idx >= 0 {
+		return (*s)[idx], true
+	}
+	var zero T
+	return zero, false
 }

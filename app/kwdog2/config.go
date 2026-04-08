@@ -8,8 +8,8 @@ import (
 var (
 	C = struct {
 		Kwdog2 KwdogConfig
-		Proxy2 ProxyConfig
-		Kwssl2 KwsslConfig
+		Kwrat2 KwratConfig
+		Kwcat2 KwcatConfig
 	}{}
 
 	AuthzDefaultFunc  = gte.NewAuthzF1kin
@@ -17,9 +17,9 @@ var (
 	RecordReverseFunc = gte.ToRecord1
 )
 
-func Init3(ifn1 InitKwdogFunc, ifn2 InitProxyFunc, ifn3 InitKwsslFunc) {
+func Init3(ifn1 InitKwdogFunc, ifn2 InitKwratFunc, ifn3 InitKwcatFunc) {
 	z.Config(&C)
 	InitKwdog(ifn1)
-	InitProxy(ifn2)
-	InitKwssl(ifn3)
+	InitKwrat(ifn2)
+	InitKwcat(ifn3)
 }

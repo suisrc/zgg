@@ -38,8 +38,8 @@ func (aa *HstRouter) Handle(method, action string, handle z.HandleFunc) {
 		// 如果 Helper 为空，直接返回，不注册任何路由
 		return
 	}
-	if z.C.Server.ApiPath != "" {
-		action = strings.TrimPrefix("/"+action, z.C.Server.ApiPath+"/")
+	if z.C.Server.ApiRoot != "" {
+		action = strings.TrimPrefix("/"+action, z.C.Server.ApiRoot+"/")
 	}
 	// 分拆 action 为 key 和 path
 	key, path := "", ""
@@ -63,9 +63,9 @@ func (aa *HstRouter) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		http.NotFound(rw, rr)
 		return
 	}
-	if z.C.Server.ApiPath != "" {
-		rr.URL.Path = strings.TrimPrefix(rr.URL.Path, z.C.Server.ApiPath+"/")
-		rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, z.C.Server.ApiPath+"/")
+	if z.C.Server.ApiRoot != "" {
+		rr.URL.Path = strings.TrimPrefix(rr.URL.Path, z.C.Server.ApiRoot+"/")
+		rr.URL.RawPath = strings.TrimPrefix(rr.URL.RawPath, z.C.Server.ApiRoot+"/")
 	}
 	// 从 Host 中提取子域名作为 key
 	host := rr.Host

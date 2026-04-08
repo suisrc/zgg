@@ -10,32 +10,17 @@ import (
 	"github.com/suisrc/zgg/z"
 )
 
-// 特殊标记处理函数
-func (aa *IndexApi) ServeAction(rw http.ResponseWriter, rr *http.Request, rc string) bool {
-	if len(rc) < 2 {
-		return false // 非特殊标记 | 路径不匹配
-	} else if kk := rc[2:]; !z.HasPathPrefix(rr.URL.Path, strings.TrimPrefix(kk, "~")) {
-		return false // 非特殊标记 | 路径不匹配
-	} else if fn, ok := aa.Actions[rc[:2]]; !ok {
-		return false // 非特殊标记 | 操作不存在
-	} else if vv, _ := aa.Config.Routers[rc]; vv == "" {
-		return false // 非特殊标记 | 路由不存在
-	} else {
-		return fn(aa, rw, rr, kk, vv)
-	}
-}
-
 // 操作方法
-type ActionFunc func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool
+type ActionFunc func(aa *FrontHandler, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool
 
 // 操作列表， 可以扩展
 var ActionOpts = map[string]ActionFunc{
-	"@:": func(api *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
+	"@:": func(_ *FrontHandler, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 扩展请求头上的信息, 增加路由标记 KEY
 		rr.Header.Set("X-Req-RouteKey", vv)
 		return false // 不终止请求， 继续后面的业务请求
 	},
-	"@@": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
+	"@@": func(_ *FrontHandler, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 确定验证文件，要求 路径完成相同, 否则跳过，路径不一致，使用后面的 @ 标记
 		if kk == rr.URL.Path {
 			z.WriteRespBytes(rw, "text/plain; charset=utf-8", http.StatusOK, []byte(vv))
@@ -44,7 +29,7 @@ var ActionOpts = map[string]ActionFunc{
 		}
 		return true // 终止服务
 	},
-	"@*": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
+	"@*": func(_ *FrontHandler, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// @# 开头，返回格式 xxx[#(code,)content-type)]
 		var data string
 		var code int = http.StatusOK
@@ -65,7 +50,7 @@ var ActionOpts = map[string]ActionFunc{
 		return true // 终止服务
 		// http.ServeContent(rw, rr, "", time.Now(), bytes.NewReader([]byte(vv)[1:]))
 	},
-	"@>": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
+	"@>": func(_ *FrontHandler, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 路由重定向
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 			return false // 路由重定向 不处理 _getbasepath 请求
@@ -80,7 +65,7 @@ var ActionOpts = map[string]ActionFunc{
 			return true // 终止服务
 		}
 	},
-	"@^": func(aa *IndexApi, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
+	"@^": func(aa *FrontHandler, rw http.ResponseWriter, rr *http.Request, kk, vv string) bool {
 		// 请求重定向
 		if strings.HasSuffix(rr.URL.Path, "/_getbasepath") {
 			return false // 请求重定向 不处理 _getbasepath 请求
@@ -124,4 +109,19 @@ var ActionOpts = map[string]ActionFunc{
 		}
 		return true // 终止服务
 	},
+}
+
+// 特殊标记处理函数
+func (aa *FrontHandler) ServeAction(rw http.ResponseWriter, rr *http.Request, rc string) bool {
+	if len(rc) < 2 {
+		return false // 非特殊标记 | 路径不匹配
+	} else if kk := rc[2:]; !z.HasPathPrefix(rr.URL.Path, strings.TrimPrefix(kk, "~")) {
+		return false // 非特殊标记 | 路径不匹配
+	} else if fn, ok := aa.Actions[rc[:2]]; !ok {
+		return false // 非特殊标记 | 操作不存在
+	} else if vv, _ := aa.Config.Routers[rc]; vv == "" {
+		return false // 非特殊标记 | 路由不存在
+	} else {
+		return fn(aa, rw, rr, kk, vv)
+	}
 }

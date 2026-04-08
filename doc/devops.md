@@ -29,27 +29,27 @@ import (
 
 func init() {
 	z.Register("01-hello", func(srv z.IServer) z.Closed {
-		api := z.Inject(srv.GetSvcKit(), &HelloApi{})
-		srv.AddRouter("hello", api.hello)
+		hdl := z.Inject(srv.GetSvcKit(), &HelloHandler{})
+		srv.AddRouter("hello", hdl.hello)
 		return func() {
-			z.Logn("api-hello closed")
+			z.Logn("hdl-hello closed")
 		}
 	})
 	z.Register("zz-world", func(srv z.IServer) z.Closed {
-		api := srv.GetSvcKit().Get("HelloApi").(*HelloApi)
-		z.GET("world", api.world, srv)
-		z.GET("token", z.TokenAuth(z.Ptr(""), api.token), srv)
+		hdl := srv.GetSvcKit().Get("HelloHandler").(*HelloHandler)
+		z.GET("world", hdl.world, srv)
+		z.GET("token", z.TokenAuth(z.Ptr(""), hdl.token), srv)
 		return nil
 	})
 }
 
-type HelloApi struct {
+type HelloHandler struct {
 	FA any                           // 标记不注入，默认
 	FB any      `svckit:"-"`         // 标记不注入，默认
 	CM z.Module `svckit:"type"`      // 根据【类型】自动注入
 	SK z.SvcKit `svckit:"type"`      // 根据【类型】自动注入
-	AH any      `svckit:"api-hello"` // 根据【名称】自动注入
-	AW any      `svckit:"api-world"` // 根据【名称】自动注入
+	AH any      `svckit:"hdl-hello"` // 根据【名称】自动注入
+	AW any      `svckit:"hdl-world"` // 根据【名称】自动注入
 	TK z.TplKit `svckit:"auto"`      // 根据【类型】自动注入
 	tt z.TplKit `svckit:"auto"`      // 私有【属性】不能注入
 }
@@ -66,7 +66,7 @@ kdemo
   -addr string
         http server addr (default "0.0.0.0")
   -api string
-        http server api path
+        http server api root
   -c string
         config file path
   -crt string

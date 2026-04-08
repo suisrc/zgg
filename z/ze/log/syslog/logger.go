@@ -42,7 +42,7 @@ func InitSysLog() {
 		network, address = "tcp", address[6:]
 	}
 	// 创建 syslog.Writer
-	writer := NewWriter(address, network, 0)
+	writer := NewWriter(address, network, 0, zc.C.Logger.Tty)
 	switch zc.C.Logger.Type {
 	case "text":
 		logger := slog.New(slog.NewTextHandler(writer, nil))
@@ -56,7 +56,7 @@ func InitSysLog() {
 	}
 }
 
-func NewWriter(addr, net string, fac int) io.Writer {
+func NewWriter(addr, net string, fac int, tty bool) io.Writer {
 	return (&lSyslog{
 		Network:  net,
 		Address:  addr,
@@ -68,6 +68,7 @@ type lSyslog struct {
 	Network string // udp/tcp
 	Address string // 127.0.0.1:5141
 	TagInfo string // app.ns， 应用.空间
+	TtySync bool
 
 	Priority syslog.Priority // syslog 优先级，默认 LOG_LOCAL0
 
@@ -131,7 +132,7 @@ func (r *lSyslog) Write(buf []byte) (int, error) {
 		}
 		return blen, nil
 	}
-	if zc.C.Logger.Tty {
+	if r.TtySync {
 		// 同步在终端输出
 		if buf[blen-1] == '\n' {
 			os.Stdout.Write(buf)

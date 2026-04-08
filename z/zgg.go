@@ -69,7 +69,7 @@ type ServerConfig struct {
 	Ptls    int    `json:"ptls" default:"443"`
 	Dual    bool   `json:"dual"`   // http and https
 	Engine  string `json:"engine"` // router engine
-	ApiPath string `json:"api"`    // root api path
+	ApiRoot string `json:"root"`   // root api root
 	TplPath string `json:"tpl"`    // templates folder path
 	ReqXrtd string `json:"xrt"`    // X-Request-Rt default value, 1: zgg, 2: ali, 3: html
 }
@@ -80,9 +80,9 @@ var _ http.Handler = (*Zgg)(nil)
 
 // 默认服务实体
 type Zgg struct {
-	Servers map[string]Server
-	Closeds []Closed    // 模块关闭函数列表
-	TLSConf *tls.Config // Certificates, GetCertificate
+	Servers Slice[Server] // 接口服务模块列表
+	Closeds Slice[Closed] // 模块关闭函数列表
+	TLSConf *tls.Config   // Certificates, GetCertificate
 
 	Engine Engine // 路由引擎
 	SvcKit SvcKit // 服务工具
@@ -94,8 +94,8 @@ type Zgg struct {
 
 // 服务初始化
 func (aa *Zgg) ServeInit() bool {
-	aa.Servers = map[string]Server{}
-	aa.Closeds = []Closed{}
+	aa.Servers = Slice[Server]{}
+	aa.Closeds = Slice[Closed]{}
 	if aa.SvcKit == nil {
 		aa.SvcKit = NewSvcKit(aa)
 	}
@@ -130,7 +130,7 @@ func (aa *Zgg) ServeInit() bool {
 		}
 		cls := opt.Val(aa)
 		if cls != nil {
-			aa.Closeds = append(aa.Closeds, cls)
+			aa.Closeds.Add(cls)
 		}
 		if aa._abort {
 			Logn("[register]: serve already stop! exit...")
@@ -163,9 +163,10 @@ func (aa *Zgg) RunServe() {
 	// 停止业务模块， 先停服务，后停模块
 	defer aa.ServeStop()
 	// 启动HTTP服务， 并可优雅的终止
-	for key, srv := range aa.Servers {
+	for _, srv := range aa.Servers {
 		if srv != nil {
-			go srv.RunServe(key)
+			Logn("[_server_]: http server booting... linsten:", srv.Name(), srv.Addr())
+			go srv.RunServe()
 		}
 	}
 	// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
@@ -185,32 +186,42 @@ func (aa *Zgg) WaitFor() {
 	// 等待中断信号以优雅地关闭服务器（设置 5 秒的超时时间）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for key, srv := range aa.Servers {
+	for _, srv := range aa.Servers {
 		if srv != nil {
-			Logn("[_server_]: http server stoping...", key)
+			Logn("[_server_]: http server stoping...", srv.Name())
 			if err := srv.Shutdown(ctx); err != nil {
-				Logn("[_server_]: http server shutdown error:", key, err)
+				Logn("[_server_]: http server shutdown error:", srv.Name(), err)
 			}
 		}
 	}
 }
 
 type Server interface {
-	RunServe(key string)
+	Name() string
+	Addr() string
+	RunServe()
 	Shutdown(ctx context.Context) error
 }
 
-func NewServer(handler http.Handler, addr string, conf *tls.Config) Server {
-	return &servez{Server: http.Server{Handler: handler, Addr: addr, TLSConfig: conf}, ErrExit: true}
+func NewServer(name string, handler http.Handler, addr string, conf *tls.Config) Server {
+	return &servez{Server: http.Server{Handler: handler, Addr: addr, TLSConfig: conf}, ErrExit: true, SrvName: name}
 }
 
 type servez struct {
 	http.Server
 	ErrExit bool
+	SrvName string
 }
 
-func (srv *servez) RunServe(key string) {
-	Logn("[_server_]: http server booting... linsten:", key, srv.Server.Addr)
+func (srv *servez) Name() string {
+	return srv.SrvName
+}
+
+func (srv *servez) Addr() string {
+	return srv.Server.Addr
+}
+
+func (srv *servez) RunServe() {
 	if srv.Server.TLSConfig != nil {
 		if err := srv.Server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 			if srv.ErrExit {
@@ -264,9 +275,9 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	if len(action) > 0 && action[0] == '/' { // 去除 action 前 /
 		action = action[1:]
 	}
-	if C.Server.ApiPath != "" { // 补充 api path
-		// action = filepath.Join(C.Server.ApiPath, action)
-		action = C.Server.ApiPath + "/" + action
+	if C.Server.ApiRoot != "" { // 补充 api root
+		// action = filepath.Join(C.Server.ApiRoot, action)
+		action = C.Server.ApiRoot + "/" + action
 		if action[0] == '/' {
 			action = action[1:]
 		}
@@ -633,11 +644,11 @@ func RegisterHttpServe(zgg *Zgg) Closed {
 	}
 	if C.Server.Ptls > 0 && zgg.TLSConf != nil {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
-		zgg.Servers["(HTTPS)"] = NewServer(zgg, addr, zgg.TLSConf)
+		zgg.Servers.Add(NewServer("(HTTPS)", zgg, addr, zgg.TLSConf))
 	}
 	if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
 		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
-		zgg.Servers["(HTTP1)"] = NewServer(zgg, addr, nil)
+		zgg.Servers.Add(NewServer("(HTTP1)", zgg, addr, nil))
 	}
 	zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
 	return nil

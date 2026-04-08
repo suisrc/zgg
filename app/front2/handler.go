@@ -45,10 +45,10 @@ type Config struct {
 	Change   bool              `json:"change"`  // 支持文件变动
 }
 
-// 初始化方法， 处理 api 的而外配置接口
-type InitializFunc func(api *IndexApi, zgg *z.Zgg)
+// 初始化方法， 处理 hdl 的而外配置接口
+type InitFunc func(hdl *FrontHandler, zgg *z.Zgg)
 
-func Init3(www fs.FS, ifn InitializFunc) {
+func Init3(www fs.FS, ifn InitFunc) {
 	z.Config(&C)
 
 	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
@@ -61,66 +61,66 @@ func Init3(www fs.FS, ifn InitializFunc) {
 	flag.BoolVar(&C.Front2.Change, "f2change", false, "change file when file change")
 
 	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
-		api := NewApi(www, C.Front2, "[_front2_]")
+		hdl := NewHandler(www, C.Front2, "[_front2_]")
 		// 增加路由
-		zgg.AddRouter("", api.Serve)
+		zgg.AddRouter("", hdl.Serve)
 		if C.Front2.ShowPath != "" {
-			zgg.AddRouter("GET "+C.Front2.ShowPath, api.ListFile)
+			zgg.AddRouter("GET "+C.Front2.ShowPath, hdl.ShowFiles)
 		}
 		if ifn != nil {
-			ifn(api, zgg) // 初始化方法
+			ifn(hdl, zgg) // 初始化方法
 		}
 		return nil
 	})
 }
 
-func NewApi(www fs.FS, cfg Config, log string) *IndexApi {
-	return (&IndexApi{LogKey: log, Config: cfg}).InitApi(www)
+func NewHandler(www fs.FS, cfg Config, log string) *FrontHandler {
+	return (&FrontHandler{LogKey: log, Config: cfg}).Init(www)
 }
 
-func (api *IndexApi) InitApi(www fs.FS) *IndexApi {
+func (hdl *FrontHandler) Init(www fs.FS) *FrontHandler {
 	if www != nil {
-		api.FileFS, _ = GetRefFileMap(www)
-		api.HttpFS = http.FS(www)
-		if api.Config.IsNative {
-			api.ServeFS = http.FileServer(api.HttpFS)
+		hdl.FileFS, _ = GetRefFileMap(www)
+		hdl.HttpFS = http.FS(www)
+		if hdl.Config.IsNative {
+			hdl.ServeFS = http.FileServer(hdl.HttpFS)
 		}
 	}
-	if api.Actions == nil {
-		api.Actions = map[string]ActionFunc{}
-		maps.Copy(api.Actions, ActionOpts)
+	if hdl.Actions == nil {
+		hdl.Actions = map[string]ActionFunc{}
+		maps.Copy(hdl.Actions, ActionOpts)
 	}
 	// 按字符串长度倒序
-	api.RouterKey = []string{}
-	for kk := range api.Config.Routers {
+	hdl.RouterKey = []string{}
+	for kk := range hdl.Config.Routers {
 		if len(kk) > 2 && kk[0] == '@' {
-			if _, ok := api.Actions[kk[:2]]; !ok {
+			if _, ok := hdl.Actions[kk[:2]]; !ok {
 				z.Logn("[_front2_]: routers action not found (ignore),", kk)
 				continue // 没有对应的操作， 忽略
 			}
 		}
-		api.RouterKey = append(api.RouterKey, kk)
+		hdl.RouterKey = append(hdl.RouterKey, kk)
 	}
-	if len(api.RouterKey) > 1 {
-		slices.SortFunc(api.RouterKey, func(l string, r string) int { return len(r) - len(l) })
+	if len(hdl.RouterKey) > 1 {
+		slices.SortFunc(hdl.RouterKey, func(l string, r string) int { return len(r) - len(l) })
 	}
 	// 首页索引
-	api.IndexsKey = []string{}
-	for kk := range api.Config.Indexs {
-		api.IndexsKey = append(api.IndexsKey, kk)
+	hdl.IndexsKey = []string{}
+	for kk := range hdl.Config.Indexs {
+		hdl.IndexsKey = append(hdl.IndexsKey, kk)
 	}
-	if len(api.IndexsKey) > 1 {
-		slices.SortFunc(api.IndexsKey, func(l string, r string) int { return len(r) - len(l) })
+	if len(hdl.IndexsKey) > 1 {
+		slices.SortFunc(hdl.IndexsKey, func(l string, r string) int { return len(r) - len(l) })
 	}
 	// 输出日志
-	if api.LogKey != "" {
-		z.Logn(api.LogKey+": routers", api.RouterKey)
-		z.Logn(api.LogKey+": indexes", api.IndexsKey)
+	if hdl.LogKey != "" {
+		z.Logn(hdl.LogKey+": routers", hdl.RouterKey)
+		z.Logn(hdl.LogKey+": indexes", hdl.IndexsKey)
 	}
-	return api
+	return hdl
 }
 
-type IndexApi struct {
+type FrontHandler struct {
 	LogKey    string
 	Config    Config
 	IndexsKey []string
@@ -133,7 +133,7 @@ type IndexApi struct {
 	Actions   map[string]ActionFunc
 }
 
-func (aa *IndexApi) GetProxy(kk string) http.Handler {
+func (aa *FrontHandler) GetProxy(kk string) http.Handler {
 	if aa.RouterMap == nil {
 		return nil
 	}
@@ -142,7 +142,7 @@ func (aa *IndexApi) GetProxy(kk string) http.Handler {
 	return aa.RouterMap[kk]
 }
 
-func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
+func (aa *FrontHandler) NewProxy(kk, vv string) (http.Handler, error) {
 	aa._map_lock.Lock()
 	defer aa._map_lock.Unlock()
 	if vv == "" {
@@ -171,7 +171,7 @@ func (aa *IndexApi) NewProxy(kk, vv string) (http.Handler, error) {
 }
 
 // Serve
-func (aa *IndexApi) Serve(zrc *z.Ctx) {
+func (aa *FrontHandler) Serve(zrc *z.Ctx) {
 	aa.ServeHTTP(zrc.Writer, zrc.Request)
 }
 
@@ -185,7 +185,7 @@ func (aa *IndexApi) Serve(zrc *z.Ctx) {
 // 路由数量多（如 ≥50 个）：TrieTree 的时间复杂度为 O(k)，性能优势明显。
 // 路由规则复杂：需要支持动态参数、通配符或前缀匹配。
 // 路由频繁更新：TrieTree 的插入和删除操作效率更高（O(k) vs O(n)）
-func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
+func (aa *FrontHandler) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	// 代理路由服务
 	for _, kk := range aa.RouterKey {
 		if len(kk) > 0 && kk[0] == '@' {
@@ -250,14 +250,14 @@ func (aa *IndexApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 		return
 	}
 	if aa.Config.Change {
-		aa.ChgIndexContent(rw, rr, rp)
+		aa.IndexWithCHG(rw, rr, rp)
 	} else {
-		aa.TryIndexContent(rw, rr, rp)
+		aa.IndexWithTRY(rw, rr, rp)
 	}
 }
 
 // 获取 rootpath 路径
-func (aa *IndexApi) GetRootPath(rr *http.Request) (string, string) {
+func (aa *FrontHandler) GetRootPath(rr *http.Request) (string, string) {
 	apath := ""
 	rpath := FixReqUrlPath(rr, aa.IndexsKey, "")
 	if ext := filepath.Ext(rr.URL.Path); ext != "" {

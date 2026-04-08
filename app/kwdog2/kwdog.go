@@ -1,5 +1,8 @@
 package kwdog2
 
+// dog: 通常指家狗、野狗，也可作为动词表示"看守、监视", 它的存在就是管理 http 流量内容
+// reverse, 反向代理服务， 主要用于请求网关， 也可以用于其他的反向代理场景
+// curl -x 127.0.0.1:12006 ip.info
 import (
 	"flag"
 	"fmt"
@@ -29,13 +32,14 @@ type KwdogConfig struct {
 	Rtrack   bool              `json:"rtrack"`  // 追踪路由
 	Rauthz   string            `json:"rauthz"`  // 鉴权路由
 	Sites    []string          `json:"sites"`   // 站点列表， 用于标记 _xc
-	Syslog   string            `json:"syslog"`  // 日志发送地址
+	Logger   string            `json:"logger"`  // 日志发送地址
 	LogBody  bool              `json:"logBody"` // 记录日志中的Body
+	LogTty   bool              `json:"logTty"`  // 日志是否输出到终端
 	Record   int               `json:"record"`
 }
 
-// 初始化方法， 处理 api 的而外配置接口
-type InitKwdogFunc func(api *KwdogApi, zgg *z.Zgg)
+// 初始化方法， 处理 hdl 的而外配置接口
+type InitKwdogFunc func(hdl *KwdogHandler, zgg *z.Zgg)
 
 func InitKwdog(ifn InitKwdogFunc) {
 
@@ -48,7 +52,7 @@ func InitKwdog(ifn InitKwdogFunc) {
 	flag.BoolVar(&C.Kwdog2.Rtrack, "k2track", false, "是否记录其他路由的日志")
 	flag.StringVar(&C.Kwdog2.Rauthz, "k2rauth", "", "其他路由是否进行鉴权")
 	flag.Var(z.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
-	flag.StringVar(&C.Kwdog2.Syslog, "k2syslog", "", "日志发送地址， none: 表示不记录日志")
+	flag.StringVar(&C.Kwdog2.Logger, "k2logger", "", "日志发送地址， none: 表示不记录日志")
 	flag.BoolVar(&C.Kwdog2.LogBody, "k2logbody", false, "记录日志中的Body")
 	flag.IntVar(&C.Kwdog2.Record, "k2record", -1, "记录级别")
 
@@ -59,6 +63,7 @@ func InitKwdog(ifn InitKwdogFunc) {
 		}
 		if strings.HasSuffix(C.Kwdog2.AddrPort, ":80") && C.Kwdog2.NextAddr == "http://127.0.0.1:80" {
 			C.Kwdog2.NextAddr = "http://127.0.0.1:81" // 避免循环
+			z.Logn("[_kwdog2_]: default next address changed to", C.Kwdog2.NextAddr)
 		}
 
 		// ...
@@ -69,59 +74,59 @@ func InitKwdog(ifn InitKwdogFunc) {
 			RecordReverseFunc = gte.ToRecord1
 		}
 
-		api := new(KwdogApi)
-		if err := api.Init(C.Kwdog2); err != nil {
+		hdl := new(KwdogHandler)
+		if err := hdl.Init(C.Kwdog2); err != nil {
 			zgg.ServeStop("register kwdog2 error,", err.Error())
 			return nil
 		}
-		z.Logn("[_kwdog2_]: routers", api.RouterKey, "domains", api.DomainMap)
-		zgg.Servers["(KWDOG)"] = z.NewServer(api, C.Kwdog2.AddrPort, nil)
+		z.Logn("[_kwdog2_]: routers", hdl.RouterKey, "domains", hdl.DomainMap)
+		zgg.Servers.Add(z.NewServer("(KWDOG)", hdl, C.Kwdog2.AddrPort, nil))
 
 		if ifn != nil {
-			ifn(api, zgg) // 初始化方法
+			ifn(hdl, zgg) // 初始化方法
 		}
 		return nil
 	})
 
 }
 
-func (api *KwdogApi) Init(cfg KwdogConfig) error {
+func (hdl *KwdogHandler) Init(cfg KwdogConfig) error {
 	var err error = nil
 	var rsp gtw.RecordPool = nil
-	if cfg.Syslog != "none" {
-		rsp = gte.NewRecordSyslog(
-			cfg.Syslog,
+	if cfg.Logger != "none" {
+		rsp = gte.NewRecorder(
+			cfg.Logger,
 			zc.C.Logger.Pty,
-			zc.C.Logger.Tty,
+			cfg.LogTty,
 			cfg.LogBody,
 			RecordReverseFunc,
 		)
 	}
-	api.GtwDefault, err = gtw.NewTargetGatewayV2(cfg.NextAddr)
+	hdl.GtwDefault, err = gtw.NewTargetGatewayV2(cfg.NextAddr)
 	if err != nil {
 		return err
 	}
-	api.GtwDefault.ProxyName = "kwdog2-gateway"
-	api.GtwDefault.RecordPool = rsp
-	api.GtwDefault.Authorizer = AuthzDefaultFunc(
+	hdl.GtwDefault.ProxyName = "kwdog2-gateway"
+	hdl.GtwDefault.RecordPool = rsp
+	hdl.GtwDefault.Authorizer = AuthzDefaultFunc(
 		cfg.Sites,
 		cfg.AuthAddr,
 		cfg.AuthSkip,
 	)
 	if cfg.Rtrack {
-		api.RecordPool = rsp
+		hdl.RecordPool = rsp
 	}
 	switch cfg.Rauthz {
 	case "", "none", "no", "disable":
 		// ignore
 	case "default":
-		api.Authorizer = api.GtwDefault.Authorizer
+		hdl.Authorizer = hdl.GtwDefault.Authorizer
 	case "logger":
-		api.Authorizer = gte.NewAuthLogger(cfg.Sites)
+		hdl.Authorizer = gte.NewAuthLogger(cfg.Sites)
 	default:
 		if strings.HasPrefix(cfg.Rauthz, "https://") ||
 			strings.HasPrefix(cfg.Rauthz, "http://") {
-			api.Authorizer = AuthzDefaultFunc(
+			hdl.Authorizer = AuthzDefaultFunc(
 				cfg.Sites,
 				cfg.Rauthz,
 				cfg.AuthSkip,
@@ -129,11 +134,11 @@ func (api *KwdogApi) Init(cfg KwdogConfig) error {
 		}
 	}
 	// 特殊的多域名路由情况， 以 @ 开头， 格式为 @domain/path, 其中 path 可省略， 默认根路径
-	api.Routers = make(map[string]string)
-	api.DomainMap = make(map[string][]string)
+	hdl.Routers = make(map[string]string)
+	hdl.DomainMap = make(map[string][]string)
 	// 解析所有路由
 	for kk, vv := range cfg.Routers {
-		api.Routers[kk] = vv
+		hdl.Routers[kk] = vv
 		if len(kk) > 2 && kk[0] == '@' {
 			// 新增多域名路由
 			host, path := kk[1:], ""
@@ -142,32 +147,32 @@ func (api *KwdogApi) Init(cfg KwdogConfig) error {
 				host = host[:idx]
 			}
 			// 加入路由队列中
-			routers, exist := api.DomainMap[host]
+			routers, exist := hdl.DomainMap[host]
 			if !exist {
 				routers = []string{}
 			}
 			routers = append(routers, path)
-			api.DomainMap[host] = routers
+			hdl.DomainMap[host] = routers
 			continue
 		}
 		// 默认路由
-		api.RouterKey = append(api.RouterKey, kk)
+		hdl.RouterKey = append(hdl.RouterKey, kk)
 	}
-	// api.RoutersKey 按字符串长度倒序
-	if len(api.RouterKey) > 1 {
-		slices.SortFunc(api.RouterKey, func(l string, r string) int { return len(r) - len(l) })
+	// hdl.RoutersKey 按字符串长度倒序
+	if len(hdl.RouterKey) > 1 {
+		slices.SortFunc(hdl.RouterKey, func(l string, r string) int { return len(r) - len(l) })
 	}
-	// api.DomainMap 中的路径也按字符串长度倒序
-	for host, paths := range api.DomainMap {
+	// hdl.DomainMap 中的路径也按字符串长度倒序
+	for host, paths := range hdl.DomainMap {
 		if len(paths) > 1 {
 			slices.SortFunc(paths, func(l string, r string) int { return len(r) - len(l) })
-			api.DomainMap[host] = paths
+			hdl.DomainMap[host] = paths
 		}
 	}
 	return nil
 }
 
-type KwdogApi struct {
+type KwdogHandler struct {
 	Routers  map[string]string // 路由配置
 	NextAddr string            // 后端服务地址
 	// ----------------------------------------
@@ -180,7 +185,7 @@ type KwdogApi struct {
 	_svc_lock  sync.RWMutex
 }
 
-func (aa *KwdogApi) GetProxy(kk string) gtw.IGateway {
+func (aa *KwdogHandler) GetProxy(kk string) gtw.IGateway {
 	if aa.RouterMap == nil {
 		return nil
 	}
@@ -189,7 +194,7 @@ func (aa *KwdogApi) GetProxy(kk string) gtw.IGateway {
 	return aa.RouterMap[kk]
 }
 
-func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
+func (aa *KwdogHandler) NewProxy(kk string) (gtw.IGateway, error) {
 	aa._svc_lock.Lock()
 	defer aa._svc_lock.Unlock()
 	vv, ok := aa.Routers[kk]
@@ -231,7 +236,7 @@ func (aa *KwdogApi) NewProxy(kk string) (gtw.IGateway, error) {
 	return gw, nil
 }
 
-func (aa *KwdogApi) ProxyHTTP(rw http.ResponseWriter, rr *http.Request, kk string) {
+func (aa *KwdogHandler) ProxyHTTP(rw http.ResponseWriter, rr *http.Request, kk string) {
 	if proxy := aa.GetProxy(kk); proxy != nil {
 		// 使用缓存的网关
 		if z.IsDebug() {
@@ -254,7 +259,7 @@ func (aa *KwdogApi) ProxyHTTP(rw http.ResponseWriter, rr *http.Request, kk strin
 }
 
 // ServeHTTP
-func (aa *KwdogApi) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
+func (aa *KwdogHandler) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if rr.URL.Path == "/healthz" {
 		z.JSON0(rr, rw, &z.Result{Success: true, Data: time.Now().Format("2006-01-02 15:04:05")})
 		return

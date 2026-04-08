@@ -191,7 +191,7 @@ func RewriteRequestURL2(req *http.Request, target *url.URL) {
 		req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
 	}
 	if z.IsDebug() {
-		z.Logn("[rewrite2]: ->", req.URL.String())
+		z.Logn("[rewrite2]:", req.Host, "->", req.URL.String())
 	}
 }
 

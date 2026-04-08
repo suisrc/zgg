@@ -1,6 +1,11 @@
 package log
 
 import (
-	_ "github.com/suisrc/zgg/z/ze/log/file"
-	_ "github.com/suisrc/zgg/z/ze/log/syslog"
+	logfile "github.com/suisrc/zgg/z/ze/log/file"
+	logsyslog "github.com/suisrc/zgg/z/ze/log/syslog"
+)
+
+var (
+	NewFileWriter   = logfile.NewWriter
+	NewSyslogWriter = logsyslog.NewWriter
 )

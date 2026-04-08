@@ -33,10 +33,10 @@ type Config struct {
 	LogTime   string `json:"log_time" default:"2006-01-02T15:04:05.000Z07:00"`
 }
 
-// 初始化方法， 处理 api 的而外配置接口
-type InitializFunc func(api *Kwlog2Api, zgg *z.Zgg)
+// 初始化方法， 处理 hdl 的而外配置接口
+type InitFunc func(hdl *KwlogHandler, zgg *z.Zgg)
 
-func Init3(ifn InitializFunc) {
+func Init3(ifn InitFunc) {
 	z.Config(&C)
 
 	flag.StringVar(&C.Kwlog2.StorePath, "logstore", "logs", "日志存储路径")
@@ -59,27 +59,27 @@ func Init3(ifn InitializFunc) {
 		if rpath[0] == '/' {
 			rpath = rpath[1:]
 		}
-		api := &Kwlog2Api{Config: C.Kwlog2}
-		api.Config.RoutePath = "/" + rpath
-		api.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
-		z.Logf("[logstore]: store-path -> %s", api.Config.StorePath)
-		api.HttpFS = http.FS(os.DirFS(api.Config.StorePath))
-		// z.Logn(zc.ToStr2(C.Kwlog2), zc.ToStr2(api.Config))
+		hdl := &KwlogHandler{Config: C.Kwlog2}
+		hdl.Config.RoutePath = "/" + rpath
+		hdl.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
+		z.Logf("[logstore]: store-path -> %s", hdl.Config.StorePath)
+		hdl.HttpFS = http.FS(os.DirFS(hdl.Config.StorePath))
+		// z.Logn(zc.ToStr2(C.Kwlog2), zc.ToStr2(hdl.Config))
 		mime.AddExtensionType(".log", "text/plain")
-		zgg.AddRouter("GET "+rpath, api.lst)
-		if api.Config.Token != "" { // 增加访问令牌
-			zgg.AddRouter("POST "+rpath, z.TokenAuth(&api.Config.Token, api.add))
+		zgg.AddRouter("GET "+rpath, hdl.ShowFiles) // 显示列表日志
+		if hdl.Config.Token != "" {                // 增加访问令牌
+			zgg.AddRouter("POST "+rpath, z.TokenAuth(&hdl.Config.Token, hdl.AddRecord))
 		}
 		// zgg.AddRouter("GET favicon.ico", z.Favicon)
-		api.Writer = &logfile.Writer{AbsPath: api.Config.StorePath, MaxSize: api.Config.MaxSize}
+		hdl.Writer = &logfile.Writer{AbsPath: hdl.Config.StorePath, MaxSize: hdl.Config.MaxSize}
 		if ifn != nil {
-			ifn(api, zgg) // 初始化方法
+			ifn(hdl, zgg) // 初始化方法
 		}
 		return nil
 	})
 }
 
-type Kwlog2Api struct {
+type KwlogHandler struct {
 	Config Config
 	HttpFS http.FileSystem // 文件系统, http.FS(wwwFS)
 	Writer *logfile.Writer // 日志写入器

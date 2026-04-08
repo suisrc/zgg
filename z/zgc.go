@@ -33,7 +33,7 @@ type HM map[string]string
 // get str
 type GetVal func(key string) string
 
-// Sem 一个信号量
+// Sem 一个信号量, Semaphore
 type Sem struct{}
 
 // 请求上下文内容

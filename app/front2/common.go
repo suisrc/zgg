@@ -13,10 +13,11 @@ import (
 var (
 	GetRefFileMap = _GetRefFileMap // 获取文件列表
 	GetFixFileRef = _GetFixFileRef // 获取文件内容
-	CanFixFileRef = _CanFixFileRef // 获取文件内容
+	CanFixFileRef = _CanFixFileRef // 校验文件内容
 	FixReqUrlPath = _FixReqUrlPath // 修正请求路径
 )
 
+// 获取文件列表
 func _GetRefFileMap(fsys fs.FS) (map[string]fs.FileInfo, error) {
 	fim := make(map[string]fs.FileInfo)
 	err := fs.WalkDir(fsys, ".", func(path string, file fs.DirEntry, err error) error {
@@ -88,6 +89,7 @@ func _GetFixFileRef(hfile http.File, fname, tpath, rpath string, fmap map[string
 	return bytes.ReplaceAll(tbts, tp_, rp_), nil
 }
 
+// 判断是否需要修正文件内容
 func _CanFixFileRef(name string, conf *Config) bool {
 	if conf.TmplRoot == "" || conf.TmplRoot == "none" {
 		return false
@@ -108,6 +110,7 @@ func _CanFixFileRef(name string, conf *Config) bool {
 	return false
 }
 
+// 修正请求路径， 支持多级路径的修正， 适合 CDN 加载的索引文件
 func _FixReqUrlPath(rr *http.Request, roots []string, dir string) string {
 	rp := ""
 	for _, path := range roots {
