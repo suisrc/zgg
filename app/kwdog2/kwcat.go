@@ -155,9 +155,11 @@ func (hdl *KwcatHandler) handle(src net.Conn) {
 
 	done := make(chan z.Sem)
 	go func() {
+		// src -> dst
 		defer close(done)
 		io.Copy(dst, src)
 	}()
+	// dst -> src
 	io.Copy(src, dst)
 	<-done
 }
