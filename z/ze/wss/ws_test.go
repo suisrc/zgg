@@ -13,16 +13,16 @@ import (
 type MyHook struct {
 }
 
-func (h *MyHook) Receive(data []byte) ([]byte, error) {
+func (h *MyHook) Receive(code byte, data []byte) (byte, []byte, error) {
 	wss.LogInfo("Received:", string(data))
-	return nil, nil
+	return wss.OpText, []byte("world"), nil
 }
 
 func (h *MyHook) Close() error {
 	return nil
 }
 
-func NewMyHook(key string, req *http.Request, sender func([]byte) error, cancel func()) (string, wss.Hook, error) {
+func NewMyHook(key string, req *http.Request, sender wss.SendFunc, cancel func()) (string, wss.Hook, error) {
 	return key, &MyHook{}, nil
 }
 
@@ -73,21 +73,18 @@ func TestWsHandler1(t *testing.T) {
 	// 4. 发送WebSocket文本帧 "hello"
 	// WebSocket帧格式: FIN=1, opcode=1, mask=1, payload="hello"
 	payload := []byte("hello")
-	frame := []byte{
-		0x81,                   // FIN=1, opcode=1
-		0x85,                   // mask=1, payload len=5
-		0x37, 0xfa, 0x21, 0x3d, // masking key (random)
-	}
-	maskKey := frame[2:6]
-	for i := 0; i < len(payload); i++ {
-		payload[i] ^= maskKey[i%4]
-	}
-	frame = append(frame, payload...)
-	_, err = conn.Write(frame)
+	err = wss.WriteClientData(conn, wss.OpText, payload)
 	if err != nil {
 		t.Fatalf("write ws frame error: %v", err)
 	}
+	opcode, payload, err := wss.ReadClientData(conn)
+	if err != nil {
+		t.Fatalf("read ws frame error: %v", err)
+	}
+	if opcode != wss.OpText || string(payload) != "world" {
+		t.Fatalf("unexpected ws response: opcode=%d, payload=%s", opcode, payload)
+	}
 
-	t.Log("ws client sent: hello")
+	t.Log("ws client received:", string(payload))
 
 }

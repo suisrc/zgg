@@ -10,6 +10,7 @@ var (
 		Kwdog2 KwdogConfig
 		Kwrat2 KwratConfig
 		Kwcat2 KwcatConfig
+		Kwbee2 KwbeeConfig
 	}{}
 
 	AuthzDefaultFunc  = gte.NewAuthzF1kin

@@ -16,12 +16,13 @@ var (
 )
 
 type Process interface {
+	Pid() int
 	Start() error
+	Serve() error
 	Stop(time.Duration) error
 	Wait(time.Duration) error
-	Restart(time.Duration) error
 	State() string
-	Pid() int
+	Restart(time.Duration) error
 }
 
 const (
@@ -30,7 +31,7 @@ const (
 	stateStopping = "stopping"
 )
 
-type Process0 struct {
+type process0 struct {
 	logger  io.Writer
 	command string
 	args    []string
@@ -46,7 +47,7 @@ func NewProcess(logger io.Writer, command string, args ...string) Process {
 	if logger == nil {
 		logger = os.Stdout
 	}
-	return &Process0{
+	return &process0{
 		logger:  logger,
 		command: command,
 		args:    args,
@@ -54,12 +55,42 @@ func NewProcess(logger io.Writer, command string, args ...string) Process {
 	}
 }
 
-// Start 启动进程，更新状态为 running，并在进程结束后更新状态为 stopped
-func (p *Process0) Start() error {
+// Pid 返回当前进程的 PID，如果没有在运行，返回 0
+func (p *process0) Pid() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cmd != nil && p.state != stateStopped {
+		return p.cmd.Process.Pid
+	}
+	return 0
+}
+
+// Start 启动进程，更新状态为 running
+func (p *process0) Start() error {
+	wait, err := p.enforce()
+	if err != nil {
+		return err
+	}
+	go wait()
+	return nil
+}
+
+// Serve 启动进程， 并等待进程结束
+func (p *process0) Serve() error {
+	wait, err := p.enforce()
+	if err != nil {
+		return err
+	}
+	wait()
+	return nil
+}
+
+// enforce 启动进程，返回一个函数用于等待进程结束
+func (p *process0) enforce() (func(), error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.state != stateStopped {
-		return errors.New("process already running") // 已经在运行
+		return nil, errors.New("process already running") // 已经在运行
 	}
 	// 创建启动命令
 	cmd := exec.Command(p.command, p.args...)
@@ -71,7 +102,7 @@ func (p *Process0) Start() error {
 	}
 	// 启动进程
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
 	// 更新状态
 	p.cmd = cmd
@@ -79,15 +110,14 @@ func (p *Process0) Start() error {
 	p.state = stateRunning
 	done := p.done
 	// 等待进程结束, 并在结束后更新状态
-	go func() {
+	return func() {
 		_ = cmd.Wait()
 		p.markStopped(cmd, done)
-	}()
-	return nil
+	}, nil
 }
 
 // Stop 停止进程，发送 SIGTERM 信号，等待进程结束，如果超过 5 秒还没有结束，强制杀死进程
-func (p *Process0) Stop(timeout time.Duration) error {
+func (p *process0) Stop(timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
@@ -138,7 +168,7 @@ func (p *Process0) Stop(timeout time.Duration) error {
 }
 
 // Wait 等待进程停止，超时返回错误
-func (p *Process0) Wait(timeout time.Duration) error {
+func (p *process0) Wait(timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
@@ -162,8 +192,15 @@ func (p *Process0) Wait(timeout time.Duration) error {
 	}
 }
 
+// State 返回当前进程状态，可能的值为 "stopped", "running", "stopping"
+func (p *process0) State() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.state
+}
+
 // Restart 先停止进程，再启动新进程，更新状态为 running
-func (p *Process0) Restart(timeout time.Duration) error {
+func (p *process0) Restart(timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
@@ -176,24 +213,7 @@ func (p *Process0) Restart(timeout time.Duration) error {
 	return p.Start()
 }
 
-// State 返回当前进程状态，可能的值为 "stopped", "running", "stopping"
-func (p *Process0) State() string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.state
-}
-
-// Pid 返回当前进程的 PID，如果没有在运行，返回 0
-func (p *Process0) Pid() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.cmd != nil && p.state != stateStopped {
-		return p.cmd.Process.Pid
-	}
-	return 0
-}
-
-func (p *Process0) markStopped(cmd *exec.Cmd, done chan struct{}) {
+func (p *process0) markStopped(cmd *exec.Cmd, done chan struct{}) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.cmd == cmd {
@@ -204,7 +224,7 @@ func (p *Process0) markStopped(cmd *exec.Cmd, done chan struct{}) {
 	close(done)
 }
 
-func (p *Process0) restoreRunning(cmd *exec.Cmd) {
+func (p *process0) restoreRunning(cmd *exec.Cmd) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.cmd == cmd && p.state == stateStopping {
