@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/suisrc/zgg/z/ze/wsg"
 	"github.com/suisrc/zgg/z/ze/wsz"
 )
 
@@ -139,13 +139,13 @@ func TestWsHandler2(t *testing.T) {
 
 func TestWsHandler3(t *testing.T) {
 	wsURL := "ws://127.0.0.1:28255/ws"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := wsg.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("dial error: %v", err)
 	}
 	defer conn.Close()
 
-	if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+	if err := conn.WriteMessage(wsg.PingMessage, []byte("ping")); err != nil {
 		t.Fatalf("write error: %v", err)
 	}
 

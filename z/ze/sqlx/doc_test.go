@@ -1,6 +1,6 @@
 package sqlx_test
 
-// https://raw.githubusercontent.com/jmoiron/sqlx
+// https://github.com/jmoiron/sqlx
 
 import (
 	"bytes"

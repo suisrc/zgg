@@ -1,4 +1,4 @@
-package websocket
+package wsg_test
 
 // https://github.com/gorilla/websocket
 
@@ -10,10 +10,10 @@ import (
 	"testing"
 )
 
-// go test -v z/ze/websocket/doc_test.go -run TestSync
+// go test -v z/ze/wsg/doc_test.go -run TestSync
 func TestSync(t *testing.T) {
 	//
-	base_url := "https://github.com/gorilla/websocket/tree/main/"
+	base_url := "https://raw.githubusercontent.com/gorilla/websocket/refs/heads/main/"
 	sync_map := map[string]string{
 		"client.go":      "",
 		"compression.go": "",
@@ -22,12 +22,15 @@ func TestSync(t *testing.T) {
 		"json.go":        "",
 		"mask.go":        "",
 		"prepared.go":    "",
-		"proxy.go":       "",
 		"server.go":      "",
 		"util.go":        "",
+		// "proxy.go":    "", // 为了拖累三方依赖， 这里的 外部 proxy 被删除
 	}
 
 	for target, source := range sync_map {
+		if source == "" {
+			source = target
+		}
 		println("[__sync__]:", target, "---->", source, "[sync...]")
 		resp, err := http.Get(base_url + source)
 		if err != nil {
@@ -38,6 +41,7 @@ func TestSync(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		src = bytes.ReplaceAll(src, []byte(`package websocket`), []byte(`package wsg`))
 		src = bytes.ReplaceAll(src, []byte(`interface{}`), []byte(`any`))
 		src = bytes.ReplaceAll(src, []byte(`	"io/ioutil"`), []byte(`	"io"`))
 		src = bytes.ReplaceAll(src, []byte(`ioutil.`), []byte(`io.`))
