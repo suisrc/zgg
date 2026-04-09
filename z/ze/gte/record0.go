@@ -76,7 +76,7 @@ func (rc *Record0) ToStr() string {
 }
 
 func (rc *Record0) ToFmt() string {
-	return zc.ToStr2(&rc)
+	return zc.ToStrJSON(&rc)
 }
 
 // ==========================================================

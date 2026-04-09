@@ -64,7 +64,7 @@ func Init3(ifn InitFunc) {
 		hdl.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
 		z.Logf("[logstore]: store-path -> %s", hdl.Config.StorePath)
 		hdl.HttpFS = http.FS(os.DirFS(hdl.Config.StorePath))
-		// z.Logn(zc.ToStr2(C.Kwlog2), zc.ToStr2(hdl.Config))
+		// z.Logn(zc.ToStrJSON(C.Kwlog2), zc.ToStrJSON(hdl.Config))
 		mime.AddExtensionType(".log", "text/plain")
 		zgg.AddRouter("GET "+rpath, hdl.ShowFiles) // 显示列表日志
 		if hdl.Config.Token != "" {                // 增加访问令牌

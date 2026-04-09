@@ -88,8 +88,8 @@ func ToStr(aa any) string {
 	}
 }
 
-// ToStr2 ...
-func ToStr2(aa any) string {
+// ToStrJSON ...
+func ToStrJSON(aa any) string {
 	if bts, err := json.MarshalIndent(aa, "", "  "); err != nil {
 		return "<json marshal error>: " + err.Error()
 	} else {
@@ -97,8 +97,8 @@ func ToStr2(aa any) string {
 	}
 }
 
-// ToStr3 ...
-func ToStr3(aa map[string]any, ks ...string) string {
+// ToStrText ...
+func ToStrText(aa map[string]any, ks ...string) string {
 	if aa == nil {
 		return "<nil>"
 	}

@@ -37,7 +37,7 @@ func TestParser1(t *testing.T) {
 		fmt.Println("Error:", err)
 	} else {
 		fmt.Println("Result:", stm)
-		fmt.Println("Params:", zc.ToStr2(out))
+		fmt.Println("Params:", zc.ToStrJSON(out))
 	}
 }
 
@@ -74,7 +74,7 @@ func TestParser2(t *testing.T) {
 		fmt.Println("Error:", err)
 	} else {
 		fmt.Println("Result:", stm)
-		fmt.Println("Params:", zc.ToStr2(out))
+		fmt.Println("Params:", zc.ToStrJSON(out))
 	}
 }
 
@@ -112,7 +112,7 @@ WHERE 1=1
 		fmt.Println("Error:", err)
 	} else {
 		fmt.Println("Result:", stm)
-		fmt.Println("Params:", zc.ToStr2(out))
+		fmt.Println("Params:", zc.ToStrJSON(out))
 	}
 }
 
@@ -144,7 +144,7 @@ WHERE m0.ten_code = :tenCode AND t1.code = :code
 		fmt.Println("Error:", err)
 	} else {
 		fmt.Println("Result:", stm)
-		fmt.Println("Params:", zc.ToStr2(out))
+		fmt.Println("Params:", zc.ToStrJSON(out))
 	}
 }
 
@@ -204,6 +204,6 @@ WHERE m0.ten_code = :tenCode AND t1.code = :code
 		fmt.Println("Error:", err)
 	} else {
 		fmt.Println("Result:", stm)
-		fmt.Println("Params:", zc.ToStr2(out))
+		fmt.Println("Params:", zc.ToStrJSON(out))
 	}
 }

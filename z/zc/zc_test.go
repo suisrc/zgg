@@ -65,7 +65,7 @@ type Data struct {
 func Test_toml1(t *testing.T) {
 	text, _ := os.ReadFile("zc_test.toml")
 	data := zc.NewTOML(text).Map()
-	log.Println(zc.ToStr2(data))
+	log.Println(zc.ToStrJSON(data))
 }
 
 // go test -v z/zc/zc_test.go -run Test_toml2
@@ -74,10 +74,10 @@ func Test_toml2(t *testing.T) {
 	data := &Data{}
 	text, _ := os.ReadFile("zc_test.toml")
 	zc.NewTOML(text).Decode(data, "json")
-	log.Println(zc.ToStr2(data))
+	log.Println(zc.ToStrJSON(data))
 	// log.Println("===========================")
 	// smap := zc.ToMap(data, "json", true)
-	// log.Println(zc.ToStr2(smap))
+	// log.Println(zc.ToStrJSON(smap))
 }
 
 // go test -v z/zc/zc_test.go -run Test_tags
@@ -89,11 +89,11 @@ func Test_tags(t *testing.T) {
 	// tags, _, _ := zc.ToTagMap(data, "json", true, nil)
 	tags := zc.ToTagVal(data, "json")
 	log.Println("===========================")
-	log.Println(zc.ToStr2(tags))
+	log.Println(zc.ToStrJSON(tags))
 	log.Println("===========================")
 	tags[len(tags)-1].Value.Set(reflect.ValueOf(12))
 	tags[0].Value.Set(reflect.ValueOf(true))
-	log.Println(zc.ToStr2(data))
+	log.Println(zc.ToStrJSON(data))
 }
 
 // go test -v z/zc/zc_test.go -run Test_StrToArr
@@ -224,5 +224,5 @@ func Test_ToJson(t *testing.T) {
 			AgeKey:  13,
 		},
 	}
-	log.Println(zc.ToStr2(record))
+	log.Println(zc.ToStrJSON(record))
 }

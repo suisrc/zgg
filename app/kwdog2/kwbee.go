@@ -57,8 +57,8 @@ func InitKwbee(ifn InitKwbeeFunc) {
 	flag.BoolVar(&C.Kwbee2.Disabled, "b2disabled", true, "是否禁用kwbee2")
 	flag.StringVar(&C.Kwbee2.AddrPort, "b2addr", "127.0.0.1:28255", "代理服务器地址和端口")
 	flag.StringVar(&C.Kwbee2.Command, "b2command", "ecapture", "ecapture命令")
-	flag.Var(z.NewStrArr(&C.Kwbee2.CmdArgs, []string{"tls", "--pid", "<pid>", "--eventaddr", "<ws-addr>", PCAP}), "b2cmdargs", "ecapture参数")
-	flag.StringVar(&C.Kwbee2.TtyLog, "b2ttylog", "", "ecapture: 适配并截取日志, stdout: 直接输出到控制台")
+	flag.Var(z.NewStrArr(&C.Kwbee2.CmdArgs, []string{"tls", "--pid", "<pid>", "--logaddr", "<ws-addr>", PCAP}), "b2cmdargs", "ecapture参数")
+	flag.StringVar(&C.Kwbee2.TtyLog, "b2ttylog", "", "ecapture: 适配并截取日志, stdout: 直接输出到控制台, 空字符串: 不输出(可以通过 logaddr 输出日志)")
 	flag.IntVar(&C.Kwbee2.Webdocket, "b2webdocket", 1, "启用 websocket 方式")
 
 	z.Register("14-kwbee2", func(zgg *z.Zgg) z.Closed {
@@ -68,15 +68,12 @@ func InitKwbee(ifn InitKwbeeFunc) {
 		}
 		var plog io.Writer
 		switch C.Kwbee2.TtyLog {
-		case "discard":
-			plog = io.Discard
 		case "stdout":
 			plog = os.Stdout
 		case "ecapture":
-			plog = EcaptureLogger{}
+			plog = ecaptureLogger{}
 		default:
 			plog = io.Discard
-			C.Kwbee2.CmdArgs = append(C.Kwbee2.CmdArgs, "--logaddr", "ws://"+C.Kwbee2.AddrPort+"/logging")
 		}
 		if C.Kwbee2.Webdocket > 1 {
 			C.Kwbee2.Webdocket = 1
@@ -157,15 +154,17 @@ func (hdl *KwbeeHandler) Receive(code byte, data []byte) (byte, []byte, error) {
 	}
 	delete(rmap, "level")
 	delete(rmap, "time")
-	z.Logn("[ecapture]:", zc.ToStr3(rmap, "Description", "message"))
+	z.Logn("[ecapture]:", zc.ToStrText(rmap, "Description", "message"))
 	return 0, nil, nil
 }
 
 // ----------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
 
-type EcaptureLogger struct{}
+type ecaptureLogger struct{}
 
-func (EcaptureLogger) Write(p []byte) (int, error) {
+func (ecaptureLogger) Write(p []byte) (int, error) {
 	// [90m2026-04-09T08:49:20+08:00[0m [32mINF[0m PID:0,
 	buf := bytes.NewBuffer(nil)
 	// key := []byte(" [32mINF[0m ") // [34:48]

@@ -50,7 +50,7 @@ func (rc *Record1) ToStr() string {
 }
 
 func (rc *Record1) ToFmt() string {
-	return zc.ToStr2(&rc)
+	return zc.ToStrJSON(&rc)
 }
 
 // ==========================================================

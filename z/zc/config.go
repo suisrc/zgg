@@ -146,7 +146,7 @@ func LoadConfig(cfs string) {
 		if C.Print {
 			for name, conf := range CS {
 				LogTty("--------" + name)
-				LogTty(ToStr2(conf))
+				LogTty(ToStrJSON(conf))
 			}
 			LogTty("----------------------------------------------")
 		}

@@ -308,7 +308,7 @@ func Test_map5(t *testing.T) {
 
 	t.Log("=================== ", zc.MapSet(dmap, "a.b.-0", map[string]any{}))
 	t.Log("=================== ", zc.MapSet(dmap, "a.b.0.m", 123))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 }
 
 // go test -v z/zc/json_test.go -run Test_map6
@@ -329,19 +329,19 @@ func Test_map6(t *testing.T) {
 	t.Log("=================== ", zc.MapSet1(dmap, map[string]any{}, "a.b.-0"))
 	t.Log("=================== ", zc.MapSet1(dmap, 123456, "a.b.0.q.j"))
 	t.Log("=================== ", zc.MapSet1(dmap, 123456, "a.b.0.q.s"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapSets(dmap, 456789, "a.b.0.q.*"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapSets(dmap, 345678, "a.b.0.q.?"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapSets(dmap, 456789, "a.b.0.q.v.s.v"))
 	t.Log("=================== ", zc.MapSets(dmap, 456789, "a.b.0.v.-0.s"))
 	t.Log("=================== ", zc.MapSets(dmap, 123456, "a.b.0.v.-0.s"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapSets(dmap, 123456, "a.b.0.w.-0.s"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapSets(dmap, 123456, "a.b.0.w.-0.s"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 }
 
 // go test -v z/zc/json_test.go -run Test_map7
@@ -365,9 +365,9 @@ func Test_map7(t *testing.T) {
 	t.Log("=================== ", zc.MapGets(dmap, "a.b.?"))
 	t.Log("=================== ", zc.MapGets(dmap, "a.b.1"))
 	t.Log("=================== ", zc.MapSet1(dmap, 123567, "a.b.*"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapSets(dmap, 123, "a.b.*"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 }
 
 // go test -v z/zc/json_test.go -run Test_map8
@@ -385,9 +385,9 @@ func Test_map8(t *testing.T) {
 		},
 	}
 	t.Log("=================== ", zc.MapSets(dmap, nil, "a.b.0.w.-0.s"))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 	t.Log("=================== ", zc.MapNew(dmap, "a.b.0.w.-0.s", nil))
-	t.Log(zc.ToStr2(dmap))
+	t.Log(zc.ToStrJSON(dmap))
 }
 
 // go test -v z/zc/json_test.go -run Test_map9
