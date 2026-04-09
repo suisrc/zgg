@@ -7,6 +7,8 @@ package kwdog2
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -17,6 +19,7 @@ import (
 	_ "unsafe"
 
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/z/ze/proc"
 	"github.com/suisrc/zgg/z/ze/wsz"
 )
@@ -35,11 +38,12 @@ var FixCmdArgs = func(args []string) []string {
 }
 
 type KwbeeConfig struct {
-	Disabled bool     `json:"disabled"`
-	AddrPort string   `json:"addr"`
-	Command  string   `json:"command"`
-	CmdArgs  []string `json:"cmdargs"`
-	TtyLog   string   `json:"ttylog"`
+	Disabled  bool     `json:"disabled"`
+	AddrPort  string   `json:"addr"`
+	Command   string   `json:"command"`
+	CmdArgs   []string `json:"cmdargs"`
+	TtyLog    string   `json:"ttylog"`
+	Webdocket int      `json:"webdocket"`
 }
 
 // 初始化方法， 处理 hdl 的而外配置接口 443
@@ -55,6 +59,7 @@ func InitKwbee(ifn InitKwbeeFunc) {
 	flag.StringVar(&C.Kwbee2.Command, "b2command", "ecapture", "ecapture命令")
 	flag.Var(z.NewStrArr(&C.Kwbee2.CmdArgs, []string{"tls", "--pid", "<pid>", "--eventaddr", "<ws-addr>", PCAP}), "b2cmdargs", "ecapture参数")
 	flag.StringVar(&C.Kwbee2.TtyLog, "b2ttylog", "", "ecapture: 适配并截取日志, stdout: 直接输出到控制台")
+	flag.IntVar(&C.Kwbee2.Webdocket, "b2webdocket", 1, "启用 websocket 方式")
 
 	z.Register("14-kwbee2", func(zgg *z.Zgg) z.Closed {
 		if C.Kwbee2.Disabled {
@@ -73,12 +78,14 @@ func InitKwbee(ifn InitKwbeeFunc) {
 			plog = io.Discard
 			C.Kwbee2.CmdArgs = append(C.Kwbee2.CmdArgs, "--logaddr", "ws://"+C.Kwbee2.AddrPort+"/logging")
 		}
+		if C.Kwbee2.Webdocket > 1 {
+			C.Kwbee2.Webdocket = 1
+		}
 		hdl := &KwbeeHandler{
 			addr:    C.Kwbee2.AddrPort,
 			process: proc.NewProcess(plog, C.Kwbee2.Command, FixCmdArgs(C.Kwbee2.CmdArgs)...),
-			handler: wsz.NewHandler(nil),
 		}
-		hdl.handler.NewHook = hdl.NewHook
+		hdl.handler = wsz.NewHandler(hdl.NewHook, C.Kwbee2.Webdocket)
 		zgg.Servers.Add(hdl)
 
 		if ifn != nil {
@@ -93,7 +100,7 @@ var _ z.Server = (*KwbeeHandler)(nil)
 type KwbeeHandler struct {
 	addr    string
 	process proc.Process
-	handler *wsz.Handler
+	handler http.Handler
 	server  *http.Server
 }
 
@@ -140,7 +147,17 @@ func (hdl *KwbeeHandler) Close() error {
 }
 
 func (hdl *KwbeeHandler) Receive(code byte, data []byte) (byte, []byte, error) {
-	z.Logn("[_kwbee2_]: received data, code:", code, "data:", string(data))
+	if bts, err := base64.StdEncoding.DecodeString(string(data)); err == nil {
+		data = bts // 解码成功，使用解码后的数据
+	}
+	rmap := map[string]any{}
+	if err := json.Unmarshal(data, &rmap); err != nil {
+		z.Logn("[ecapture]: [not json]", string(data))
+		return 0, nil, nil
+	}
+	delete(rmap, "level")
+	delete(rmap, "time")
+	z.Logn("[ecapture]:", zc.ToStr3(rmap, "Description", "message"))
 	return 0, nil, nil
 }
 

@@ -24,7 +24,7 @@ func TestSync(t *testing.T) {
 		"prepared.go":    "",
 		"server.go":      "",
 		"util.go":        "",
-		// "proxy.go":    "", // 为了拖累三方依赖， 这里的 外部 proxy 被删除
+		"proxy.go":       "", // 为了拖累三方依赖， 这里的 外部 proxy 被删除
 	}
 
 	for target, source := range sync_map {

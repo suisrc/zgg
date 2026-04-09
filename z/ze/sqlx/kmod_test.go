@@ -9,6 +9,7 @@ import (
 
 	// _ "github.com/go-sql-driver/mysql"
 	"github.com/suisrc/zgg/z"
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/z/ze/sqlx"
 )
 
@@ -83,7 +84,7 @@ func TestSelectAll(t *testing.T) {
 	// if err != nil {
 	// 	z.Logn(err.Error())
 	// } else {
-	// 	z.Logn(z.ToStr2(datas))
+	// 	z.Logn(zc.ToStr2(datas))
 	// }
 }
 
@@ -97,7 +98,7 @@ func TestSelectGet(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -111,7 +112,7 @@ func TestSelectGet2(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -125,7 +126,7 @@ func TestSelect0(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -139,7 +140,7 @@ func TestSelect1(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -156,7 +157,7 @@ func TestInsert1(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(data))
+		z.Logn(zc.ToStr2(data))
 	}
 }
 
@@ -174,7 +175,7 @@ func TestUpdate1(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(data))
+		z.Logn(zc.ToStr2(data))
 	}
 }
 
@@ -192,11 +193,11 @@ func TestUpdate2(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(data))
+		z.Logn(zc.ToStr2(data))
 	}
 
 	data, _ = repo.Get(dsc, 13)
-	z.Logn(z.ToStr2(data))
+	z.Logn(zc.ToStr2(data))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestDelete1
@@ -213,7 +214,7 @@ func TestDelete1(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(data))
+		z.Logn(zc.ToStr2(data))
 	}
 }
 
@@ -239,7 +240,7 @@ func TestTx1(t *testing.T) {
 	}
 	data.Name.String = ""
 	repo.Getx(dsc, 13, &data)
-	z.Logn(z.ToStr2(data))
+	z.Logn(zc.ToStr2(data))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestTx2
@@ -264,7 +265,7 @@ func TestTx2(t *testing.T) {
 	}
 	data.Name.String = ""
 	repo.Getx(dsc, 13, &data)
-	z.Logn(z.ToStr2(data))
+	z.Logn(zc.ToStr2(data))
 }
 
 // go test -v z/ze/sqlx/kmod_test.go -run TestSelectAll2
@@ -277,7 +278,7 @@ func TestSelectAll2(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -297,7 +298,7 @@ func TestSelect3(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -317,7 +318,7 @@ func TestSelect4(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -337,7 +338,7 @@ func TestSelect5(t *testing.T) {
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn(z.ToStr2(datas))
+		z.Logn(zc.ToStr2(datas))
 	}
 }
 
@@ -362,7 +363,7 @@ SELECT /*+ xxx */ * FROM {::entity.AuthzDO} WHERE 1=1
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn("count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("count:", cnt, ", items:", zc.ToStr2(dst))
 	}
 }
 
@@ -391,7 +392,7 @@ SELECT
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn("count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("count:", cnt, ", items:", zc.ToStr2(dst))
 	}
 }
 
@@ -420,7 +421,7 @@ ORDER BY id
 	if err != nil {
 		z.Logn(err.Error())
 	} else {
-		z.Logn("count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("count:", cnt, ", items:", zc.ToStr2(dst))
 	}
 }
 
@@ -447,7 +448,7 @@ func TestSelect9(t *testing.T) {
 	if err != nil {
 		z.Logn("[__test__]:", err.Error())
 	} else {
-		z.Logn("[__test__]:", "count:", cnt, ", items:", z.ToStr2(dst))
+		z.Logn("[__test__]:", "count:", cnt, ", items:", zc.ToStr2(dst))
 	}
 	item, _ := repo.Get(dsc, 13)
 	z.Logn("[__test__]:", z.ToStr(item))

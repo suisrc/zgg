@@ -65,7 +65,6 @@ var (
 	// 其他工具函数
 	Config    = zc.Register
 	ToStr     = zc.ToStr
-	ToStr2    = zc.ToStr2
 	HexStr    = hex.EncodeToString
 	GenStr    = zc.GenStr
 	GenUUIDv4 = zc.GenUUIDv4

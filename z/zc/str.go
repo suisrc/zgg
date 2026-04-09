@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	mrand "math/rand"
+	"slices"
 	"unicode"
 )
 
@@ -94,6 +95,42 @@ func ToStr2(aa any) string {
 	} else {
 		return string(bts)
 	}
+}
+
+// ToStr3 ...
+func ToStr3(aa map[string]any, ks ...string) string {
+	if aa == nil {
+		return "<nil>"
+	}
+	if len(ks) == 0 {
+		ks = []string{"msg", "message"}
+	}
+	buf := bytes.NewBuffer([]byte{'['})
+	var msg any
+	for kk, vv := range aa {
+		if msg == nil && slices.Contains(ks, kk) {
+			msg = vv
+			continue
+		}
+		buf.WriteString(kk)
+		buf.WriteString("=")
+		fmt.Fprint(buf, vv)
+		buf.WriteByte(' ')
+	}
+	if buf.Len() == 1 {
+		if msg == nil {
+			return ""
+		}
+		return fmt.Sprint(msg)
+	}
+	// 替换最后一个空格为中括号
+	buf.Truncate(buf.Len() - 1)
+	buf.WriteByte(']')
+	if msg != nil {
+		buf.WriteByte(' ')
+		fmt.Fprint(buf, msg)
+	}
+	return buf.String()
 }
 
 // 随机生成字符串， 0~f, 首字母不是 bb

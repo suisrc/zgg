@@ -27,10 +27,10 @@ func NewMyHook(key string, req *http.Request, sender wsz.SendFunc, cancel func()
 	return key, &MyHook{}, nil
 }
 
-// go test -v z/ze/wss/ws_test.go -run TestWsHandler1
+// go test -v z/ze/wsz/ws_test.go -run TestWsHandler0
 
-func TestWsHandler1(t *testing.T) {
-	server := wsz.NewHandler(NewMyHook)
+func TestWsHandler0(t *testing.T) {
+	server := wsz.NewHandler(NewMyHook, 0)
 	http.HandleFunc("/ws", server.ServeHTTP)
 	t.Log("listen on :8888")
 	go http.ListenAndServe("127.0.0.1:8888", nil)
@@ -72,70 +72,54 @@ func TestWsHandler1(t *testing.T) {
 	}
 
 	// 4. 发送WebSocket文本帧 "hello"
-	// WebSocket帧格式: FIN=1, opcode=1, mask=1, payload="hello"
-	payload := []byte("hello")
-	err = wsz.WriteClientData(conn, wsz.OpText, payload)
+	err = wsz.WriteClientData(conn, wsz.OpText, []byte("hello"))
 	if err != nil {
 		t.Fatalf("write ws frame error: %v", err)
 	}
-	opcode, payload, err := wsz.ReadClientData(conn)
+	opc, msg, err := wsz.ReadClientData(conn)
 	if err != nil {
 		t.Fatalf("read ws frame error: %v", err)
 	}
-	if opcode != wsz.OpText || string(payload) != "world" {
-		t.Fatalf("unexpected ws response: opcode=%d, payload=%s", opcode, payload)
+	if opc != wsz.OpText || string(msg) != "world" {
+		t.Fatalf("unexpected ws response: opc=%d, msg=%s", opc, msg)
 	}
 
-	t.Log("ws client received:", string(payload))
+	t.Log("ws client received:", string(msg))
 
 }
 
-// go test -v z/ze/wss/ws_test.go -run TestWsHandler2
+// go test -v z/ze/wsz/ws_test.go -run TestWsHandler1
 
-func TestWsHandler2(t *testing.T) {
+func TestWsHandler1(t *testing.T) {
+	server := wsz.NewHandler(NewMyHook, 1)
+	http.HandleFunc("/ws", server.ServeHTTP)
+	t.Log("listen on :8888")
+	go http.ListenAndServe("127.0.0.1:8888", nil)
 
-	// 1. 建立TCP连接
-	conn, err := net.Dial("tcp", "127.0.0.1:28255")
+	time.Sleep(1 * time.Second)
+
+	wsURL := "ws://127.0.0.1:8888/ws"
+	conn, _, err := wsg.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("dial error: %v", err)
 	}
 	defer conn.Close()
 
-	// 2. 发送WebSocket握手请求
-	req := "GET /ws HTTP/1.1\r\n" +
-		"Host: 127.0.0.1:28255\r\n" +
-		"Upgrade: websocket\r\n" +
-		"Connection: Upgrade\r\n" +
-		"Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n" +
-		"Sec-WebSocket-Version: 13\r\n\r\n"
-	_, err = conn.Write([]byte(req))
-	if err != nil {
-		t.Fatalf("handshake write error: %v", err)
+	if err := conn.WriteMessage(wsz.OpText, []byte("hello")); err != nil {
+		t.Fatalf("write error: %v", err)
 	}
 
-	// 3. 读取握手响应
-	resp := make([]byte, 1024)
-	n, err := conn.Read(resp)
-	if err != nil {
-		t.Fatalf("handshake read error: %v", err)
-	}
-	if !bytes.Contains(resp[:n], []byte("101 Switching Protocols")) {
-		t.Fatalf("handshake failed: %s", resp[:n])
+	opc, msg, err := conn.ReadMessage()
+	if opc != wsz.OpText || string(msg) != "world" {
+		t.Fatalf("unexpected ws response: opc=%d, msg=%s", opc, msg)
 	}
 
-	// 4. 发送WebSocket文本帧 "hello"
-	// WebSocket帧格式: FIN=1, opcode=1, mask=1, payload="hello"
-	payload := []byte("hello")
-	err = wsz.WriteClientData(conn, wsz.OpText, payload)
-	if err != nil {
-		t.Fatalf("write ws frame error: %v", err)
+	if string(msg) != "ping" {
+		t.Fatalf("unexpected msg: %s", msg)
 	}
-
-	t.Log("ws client received:", string(payload))
-
 }
 
-// go test -v z/ze/wss/ws_test.go -run TestWsHandler3
+// go test -v z/ze/wsz/ws_test.go -run TestWsHandler3
 
 func TestWsHandler3(t *testing.T) {
 	wsURL := "ws://127.0.0.1:28255/ws"
