@@ -28,12 +28,13 @@ helm:
 # -eng rdx/mux/map
 main:
 	go run app/main.go -eng map -local -dual -c doc/__zgg.toml
+
 # -tpl ./tmpl
 tenv:
 	ZGG_FRONT2_INDEXS_0="/api/v1/=http://127.0.0.1" ZGG_FRONT2_TPROOT="none"  go run app/main.go -local -debug -print -port 81
 
-test:
-	_out/$(APP) -local -debug -port 81
+tbin:
+	_out/$(APP) -local -port 81 -c doc/__zgg.toml
 
 hello:
 	go run app/main.go hello

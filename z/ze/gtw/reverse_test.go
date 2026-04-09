@@ -12,7 +12,7 @@ import (
 	"github.com/suisrc/zgg/z/ze/gtw"
 )
 
-// go test -v ze/pxy/reverse_test.go -run Test_proxy
+// go test -v z/ze/gtw/reverse_test.go -run Test_proxy
 
 func Test_proxy(t *testing.T) {
 	target, _ := url.Parse("http://127.0.0.1:8080")
@@ -20,11 +20,11 @@ func Test_proxy(t *testing.T) {
 	proxy.ServeHTTP(nil, nil) // next
 }
 
-// go test -v ze/pxy/reverse_test.go -run Test_lower
+// go test -v z/ze/gtw/reverse_test.go -run Test_lower
 
 func Test_lower(t *testing.T) {
 	str := "123ABCabcDEF"
-	buf := bytes.NewBuffer([]byte{})
+	buf := bytes.NewBuffer(nil)
 	for _, r := range str {
 		buf.WriteByte(gtw.ToLowerB(byte(r)))
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -23,6 +24,7 @@ type Process interface {
 	Wait(time.Duration) error
 	State() string
 	Restart(time.Duration) error
+	String() string
 }
 
 const (
@@ -55,6 +57,10 @@ func NewProcess(logger io.Writer, command string, args ...string) Process {
 	}
 }
 
+func (p *process0) String() string {
+	return p.command + " " + strings.Join(p.args, " ")
+}
+
 // Pid 返回当前进程的 PID，如果没有在运行，返回 0
 func (p *process0) Pid() int {
 	p.mu.Lock()
@@ -65,7 +71,7 @@ func (p *process0) Pid() int {
 	return 0
 }
 
-// Start 启动进程，更新状态为 running
+// Start 启动进程，异步启动，不等待
 func (p *process0) Start() error {
 	wait, err := p.enforce()
 	if err != nil {

@@ -1,5 +1,7 @@
 package sqlx_test
 
+// https://raw.githubusercontent.com/jmoiron/sqlx
+
 import (
 	"bytes"
 	"io"
@@ -8,8 +10,8 @@ import (
 	"testing"
 )
 
-// go test -v z/ze/sqlx/doc_test.go -run TestSyncSqlx
-func TestSyncSqlx(t *testing.T) {
+// go test -v z/ze/sqlx/doc_test.go -run TestSync
+func TestSync(t *testing.T) {
 	base_url := "https://raw.githubusercontent.com/jmoiron/sqlx/refs/heads/master/"
 	sync_map := map[string]string{
 		"types.go":          "types/types.go",

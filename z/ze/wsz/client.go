@@ -1,4 +1,4 @@
-package wss
+package wsz
 
 import (
 	"bufio"

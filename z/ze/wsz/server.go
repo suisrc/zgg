@@ -1,4 +1,4 @@
-package wss
+package wsz
 
 // 一个简单的 WebSocket 服务器示例，接受 WebSocket 连接，并回显客户端发送的文本消息
 
@@ -25,6 +25,8 @@ const (
 	OpClose        = 0x8
 	OpPing         = 0x9
 	OpPong         = 0xA
+
+	KeyGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 )
 
 var (
@@ -52,22 +54,21 @@ type SendFunc func(byte, []byte) error
 type NewHookFunc func(key string, req *http.Request, sender SendFunc, cancel func()) (string, Hook, error)
 
 // NewHandler 创建一个新的 Handler 实例
-func NewHandler(wsToken string, newHook NewHookFunc) *Handler {
+func NewHandler(newHook NewHookFunc) *Handler {
 	return &Handler{
-		WsToken: wsToken,
 		NewHook: newHook,
 	}
 }
 
 // Handler WebSocket 服务，支持自定义的 NewHook 回调函数来处理连接和消息
 type Handler struct {
-	WsToken string
 	NewHook NewHookFunc
 	Clients sync.Map
 }
 
 // ServeHTTP 处理 HTTP 请求，如果是 WebSocket 升级请求，完成握手并处理 WebSocket 连接
 func (ss *Handler) ServeHTTP(wr http.ResponseWriter, rr *http.Request) {
+	// z.Logn("[wsserver]: new connection from", rr.RemoteAddr)
 	if !IsWebSocket(rr) {
 		http.Error(wr, "upgrade required", http.StatusBadRequest)
 		return
@@ -93,10 +94,7 @@ func (ss *Handler) ServeHTTP(wr http.ResponseWriter, rr *http.Request) {
 	ctx, cancel := context.WithCancel(rr.Context())
 	defer cancel()
 	// 计算 Sec-WebSocket-Accept 响应头的值
-	if ss.WsToken == "" {
-		ss.WsToken, _ = GenUUID() // 随机生成一个 token
-	}
-	accept := ComputeAccept(key, ss.WsToken)
+	accept := ComputeAccept(key)
 	response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
 		"Sec-WebSocket-Accept: " + accept + "\r\n\r\n"
 	// 如果定义了 NewHook 回调函数，调用它创建一个新的 hook
@@ -137,13 +135,16 @@ func (ss *Handler) ServeHTTP(wr http.ResponseWriter, rr *http.Request) {
 func ServeConn(ctx context.Context, ckey any, writer io.Writer, reader io.Reader, getter func(any) (any, bool)) {
 	// 启动一个 goroutine 不断读取客户端发送的消息，并将它们发送到 reader 通道
 	msgc := make(chan *ReceivedFrame)
-	defer close(msgc)
 	go func() {
+		defer close(msgc)
 		var msgr *ReceivedFrame = nil // 用于处理分片消息的状态
 		for {
 			frame, err := ReadServerFrame(reader)
 			if err != nil {
-				LogInfo("[wsserver] read error: [", ckey, "] ", err)
+				if err != io.EOF {
+					LogInfo("[wsserver] read error: [", ckey, "] ", err)
+				}
+				// 判断 msgc 是否关闭
 				msgc <- nil // 发送 nil 消息表示连接关闭
 				return      // 读取错误，关闭连接
 			}
@@ -234,9 +235,9 @@ func IsWebSocket(r *http.Request) bool {
 }
 
 // ComputeAccept 计算 Sec-WebSocket-Accept 响应头的值
-func ComputeAccept(key, token string) string {
+func ComputeAccept(key string) string {
 	h := sha1.New()
-	h.Write([]byte(key + token))
+	h.Write([]byte(key + KeyGUID))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
@@ -258,6 +259,9 @@ func ReadServerFrame(r io.Reader) (*ReceivedFrame, error) {
 	// 1. 读取第一个字节（FIN + RSV + Opcode）
 	firstByte, err := reader.ReadByte()
 	if err != nil {
+		if err == io.EOF {
+			return nil, err // 连接关闭，返回 EOF 错误
+		}
 		return nil, fmt.Errorf("read first byte failed: %w", err)
 	}
 	frame.IsFinal = (firstByte & 0x80) != 0

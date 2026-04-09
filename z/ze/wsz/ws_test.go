@@ -1,0 +1,160 @@
+package wsz_test
+
+import (
+	"bytes"
+	"net"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/suisrc/zgg/z/ze/wsz"
+)
+
+type MyHook struct {
+}
+
+func (h *MyHook) Receive(code byte, data []byte) (byte, []byte, error) {
+	wsz.LogInfo("Received:", string(data))
+	return wsz.OpText, []byte("world"), nil
+}
+
+func (h *MyHook) Close() error {
+	return nil
+}
+
+func NewMyHook(key string, req *http.Request, sender wsz.SendFunc, cancel func()) (string, wsz.Hook, error) {
+	return key, &MyHook{}, nil
+}
+
+// go test -v z/ze/wss/ws_test.go -run TestWsHandler1
+
+func TestWsHandler1(t *testing.T) {
+	server := wsz.NewHandler(NewMyHook)
+	http.HandleFunc("/ws", server.ServeHTTP)
+	t.Log("listen on :8888")
+	go http.ListenAndServe("127.0.0.1:8888", nil)
+
+	time.Sleep(1 * time.Second)
+
+	// 使用ws 协议链接 ws://127.0.0.1:8888/ws, 并发送 hello 消息，观察服务器日志输出
+	// 使用原生golang实现WebSocket客户端
+	// 由于标准库没有直接支持WebSocket，需要手动实现握手和数据帧
+	// 这里只做简单的握手和发送hello文本帧
+
+	// 1. 建立TCP连接
+	conn, err := net.Dial("tcp", "127.0.0.1:8888")
+	if err != nil {
+		t.Fatalf("dial error: %v", err)
+	}
+	defer conn.Close()
+
+	// 2. 发送WebSocket握手请求
+	req := "GET /ws HTTP/1.1\r\n" +
+		"Host: 127.0.0.1:8888\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n" +
+		"Sec-WebSocket-Version: 13\r\n\r\n"
+	_, err = conn.Write([]byte(req))
+	if err != nil {
+		t.Fatalf("handshake write error: %v", err)
+	}
+
+	// 3. 读取握手响应
+	resp := make([]byte, 1024)
+	n, err := conn.Read(resp)
+	if err != nil {
+		t.Fatalf("handshake read error: %v", err)
+	}
+	if !bytes.Contains(resp[:n], []byte("101 Switching Protocols")) {
+		t.Fatalf("handshake failed: %s", resp[:n])
+	}
+
+	// 4. 发送WebSocket文本帧 "hello"
+	// WebSocket帧格式: FIN=1, opcode=1, mask=1, payload="hello"
+	payload := []byte("hello")
+	err = wsz.WriteClientData(conn, wsz.OpText, payload)
+	if err != nil {
+		t.Fatalf("write ws frame error: %v", err)
+	}
+	opcode, payload, err := wsz.ReadClientData(conn)
+	if err != nil {
+		t.Fatalf("read ws frame error: %v", err)
+	}
+	if opcode != wsz.OpText || string(payload) != "world" {
+		t.Fatalf("unexpected ws response: opcode=%d, payload=%s", opcode, payload)
+	}
+
+	t.Log("ws client received:", string(payload))
+
+}
+
+// go test -v z/ze/wss/ws_test.go -run TestWsHandler2
+
+func TestWsHandler2(t *testing.T) {
+
+	// 1. 建立TCP连接
+	conn, err := net.Dial("tcp", "127.0.0.1:28255")
+	if err != nil {
+		t.Fatalf("dial error: %v", err)
+	}
+	defer conn.Close()
+
+	// 2. 发送WebSocket握手请求
+	req := "GET /ws HTTP/1.1\r\n" +
+		"Host: 127.0.0.1:28255\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n" +
+		"Sec-WebSocket-Version: 13\r\n\r\n"
+	_, err = conn.Write([]byte(req))
+	if err != nil {
+		t.Fatalf("handshake write error: %v", err)
+	}
+
+	// 3. 读取握手响应
+	resp := make([]byte, 1024)
+	n, err := conn.Read(resp)
+	if err != nil {
+		t.Fatalf("handshake read error: %v", err)
+	}
+	if !bytes.Contains(resp[:n], []byte("101 Switching Protocols")) {
+		t.Fatalf("handshake failed: %s", resp[:n])
+	}
+
+	// 4. 发送WebSocket文本帧 "hello"
+	// WebSocket帧格式: FIN=1, opcode=1, mask=1, payload="hello"
+	payload := []byte("hello")
+	err = wsz.WriteClientData(conn, wsz.OpText, payload)
+	if err != nil {
+		t.Fatalf("write ws frame error: %v", err)
+	}
+
+	t.Log("ws client received:", string(payload))
+
+}
+
+// go test -v z/ze/wss/ws_test.go -run TestWsHandler3
+
+func TestWsHandler3(t *testing.T) {
+	wsURL := "ws://127.0.0.1:28255/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial error: %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+
+	if string(msg) != "ping" {
+		t.Fatalf("unexpected msg: %s", msg)
+	}
+}

@@ -53,6 +53,19 @@ var (
 	bufPool = sync.Pool{New: func() any { return new([]byte) }}
 )
 
+// 基础颜色函数
+func LogRed(s string) string    { return "\033[31m" + s + "\033[0m" }
+func LogGreen(s string) string  { return "\033[32m" + s + "\033[0m" }
+func LogYellow(s string) string { return "\033[33m" + s + "\033[0m" }
+func LogBlue(s string) string   { return "\033[34m" + s + "\033[0m" }
+func LogPurple(s string) string { return "\033[35m" + s + "\033[0m" }
+func LogCyan(s string) string   { return "\033[36m" + s + "\033[0m" }
+func LogGray(s string) string   { return "\033[90m" + s + "\033[0m" }
+
+// 带样式的颜色函数
+func LogBold(s string) string  { return "\033[1m" + s + "\033[0m" }
+func LogUnder(s string) string { return "\033[4m" + s + "\033[0m" }
+
 // 控制台日志输出， 标准日志输出请使用 slog 包
 func Stdout() *slog.Logger {
 	return stdLogger

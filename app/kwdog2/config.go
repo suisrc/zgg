@@ -18,9 +18,10 @@ var (
 	RecordReverseFunc = gte.ToRecord1
 )
 
-func Init3(ifn1 InitKwdogFunc, ifn2 InitKwratFunc, ifn3 InitKwcatFunc) {
+func Init3(ifn1 InitKwdogFunc) {
 	z.Config(&C)
 	InitKwdog(ifn1)
-	InitKwrat(ifn2)
-	InitKwcat(ifn3)
+	InitKwrat(nil)
+	InitKwcat(nil)
+	InitKwbee(nil)
 }

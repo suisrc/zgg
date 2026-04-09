@@ -62,7 +62,7 @@ func Camel2Case(s string) string {
 	if s == "" {
 		return s
 	}
-	buf := bytes.NewBuffer([]byte{})
+	buf := bytes.NewBuffer(nil)
 	for i, r := range s {
 		if i == 0 {
 			buf.WriteRune(unicode.ToLower(r))
