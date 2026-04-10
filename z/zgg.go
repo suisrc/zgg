@@ -57,7 +57,7 @@ var (
 )
 
 func PrintVersion() {
-	Logn(AppName, Version, AppInfo)
+	Logn(AppName, Version, AppInfo, "PID:", os.Getpid())
 }
 
 // 默认配置， Server配置需要内嵌该结构体

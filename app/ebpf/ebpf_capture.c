@@ -42,30 +42,32 @@
 struct ns_common {
     // namespace 公共头部，里面的 inum 是 namespace 的 inode 号。
     __u32 inum;
-};
+} __attribute__((preserve_access_index));
 
 struct pid_namespace {
     // PID namespace 对象，里面嵌着 ns_common。
     struct ns_common ns;
-};
+} __attribute__((preserve_access_index));
 
 struct upid {
     // upid 表示“某个 PID 在某一层 namespace 里的编号”。
     int nr;
     struct pid_namespace *ns;
-};
+} __attribute__((preserve_access_index));
 
 struct pid {
     // level 表示当前进程在 PID namespace 栈里的层级。
     // numbers[0] 是最外层，numbers[level] 是当前 task 所处 namespace 里的 pid。
     int level;
     struct upid numbers[1];
-};
+} __attribute__((preserve_access_index));
 
 struct task_struct {
+    // group_leader 指向线程组 leader；对多线程程序，它对应“进程视角”的那条 task。
+    struct task_struct *group_leader;
     // thread_pid 指向当前线程对应的 pid 结构体。
     struct pid *thread_pid;
-};
+} __attribute__((preserve_access_index));
 
 struct flow_owner_key {
     __u8 family;
@@ -275,6 +277,7 @@ static __always_inline int record_socket_owner(void *sk, __u8 l4_proto)
     struct flow_owner_value flow_value = {};
     const struct sock *sock = sk;
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    struct task_struct *leader = NULL;
     struct pid *pid = NULL;
     unsigned short family = 0;
     __u16 local_port = 0;
@@ -292,8 +295,14 @@ static __always_inline int record_socket_owner(void *sk, __u8 l4_proto)
     flow_value.cr_pid = 0;
     flow_value.cr_id = 0;
 
-    // 读取当前进程 task_struct 的 thread_pid 字段，指向进程的 PID 结构体。
-    pid = BPF_CORE_READ(task, thread_pid);
+    // 这里故意不取“当前线程”的 thread_pid，而是优先取线程组 leader 的 thread_pid。
+    // 对 Go 这类多线程运行时，goroutine 可能落在不同内核线程上执行；
+    // 如果直接读当前线程 pid，就会把同一进程打散成多个 cr_pid。
+    leader = BPF_CORE_READ(task, group_leader);
+    if (!leader) leader = task;
+
+    // 读取线程组 leader 对应的 pid 结构体，得到稳定的“进程级” namespace pid。
+    pid = BPF_CORE_READ(leader, thread_pid);
     if (pid) {
         // 读取 PID 结构体里的 level 字段：表示 PID namespace 的嵌套层级。
         // level=0 表示宿主机根 namespace；level>0 表示处在更深层的 namespace 中。
