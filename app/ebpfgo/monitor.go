@@ -967,13 +967,6 @@ func normalizeConfig(cfg Config) (runtimeConfig, error) {
 	return rc, nil
 }
 
-func defaultName(name string) string {
-	if name != "" {
-		return name
-	}
-	return "(EBPFGO)"
-}
-
 func compilePcapRules(rules string) ([]pcapRuleInsn, error) {
 	rules = strings.TrimSpace(rules)
 	if rules == "" {
