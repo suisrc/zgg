@@ -303,13 +303,10 @@ func (s *Server) cleanup() {
 		_ = syscall.Close(s.rawSock)
 		s.rawSock = -1
 	}
-	links := s.links
+	links, objs := s.links, s.objs
 	s.links = nil
-	objs := s.objs
 	s.mu.Unlock()
-	for _, l := range links {
-		_ = l.Close()
-	}
+	closeLinks(links)
 	_ = objs.Close()
 }
 
@@ -336,42 +333,11 @@ func (s *Server) loadBPF() error {
 		_ = objs.Close()
 		return fmt.Errorf("attach socket filter: %w", err)
 	}
-	links := []link.Link{}
-	attach := func(l link.Link, err error) error {
-		if err != nil {
-			return err
-		}
-		links = append(links, l)
-		return nil
-	}
-	if err := attach(link.Kprobe("tcp_connect", objs.TrackTCPConnect, nil)); err != nil {
+	links, err := attachProbeLinks(&objs)
+	if err != nil {
 		_ = syscall.Close(packetSock)
 		_ = objs.Close()
-		return fmt.Errorf("attach tcp_connect: %w", err)
-	}
-	if err := attach(link.Kretprobe("inet_csk_accept", objs.TrackTCPAccept, nil)); err != nil {
-		for _, l := range links {
-			_ = l.Close()
-		}
-		_ = syscall.Close(packetSock)
-		_ = objs.Close()
-		return fmt.Errorf("attach inet_csk_accept: %w", err)
-	}
-	if err := attach(link.Kprobe("tcp_sendmsg", objs.TrackTCPSendmsg, nil)); err != nil {
-		for _, l := range links {
-			_ = l.Close()
-		}
-		_ = syscall.Close(packetSock)
-		_ = objs.Close()
-		return fmt.Errorf("attach tcp_sendmsg: %w", err)
-	}
-	if err := attach(link.Kprobe("udp_sendmsg", objs.TrackUDPSendmsg, nil)); err != nil {
-		for _, l := range links {
-			_ = l.Close()
-		}
-		_ = syscall.Close(packetSock)
-		_ = objs.Close()
-		return fmt.Errorf("attach udp_sendmsg: %w", err)
+		return err
 	}
 	s.mu.Lock()
 	s.objs = objs
@@ -380,6 +346,29 @@ func (s *Server) loadBPF() error {
 	s.state.flowOwnerMap = objs.FlowOwnerMap
 	s.mu.Unlock()
 	return nil
+}
+
+func attachProbeLinks(objs *bpfObjects) ([]link.Link, error) {
+	bindings := []struct {
+		name    string
+		attach  func() (link.Link, error)
+		message string
+	}{
+		{name: "tcp_connect", attach: func() (link.Link, error) { return link.Kprobe("tcp_connect", objs.TrackTCPConnect, nil) }, message: "attach tcp_connect"},
+		{name: "inet_csk_accept", attach: func() (link.Link, error) { return link.Kretprobe("inet_csk_accept", objs.TrackTCPAccept, nil) }, message: "attach inet_csk_accept"},
+		{name: "tcp_sendmsg", attach: func() (link.Link, error) { return link.Kprobe("tcp_sendmsg", objs.TrackTCPSendmsg, nil) }, message: "attach tcp_sendmsg"},
+		{name: "udp_sendmsg", attach: func() (link.Link, error) { return link.Kprobe("udp_sendmsg", objs.TrackUDPSendmsg, nil) }, message: "attach udp_sendmsg"},
+	}
+	links := make([]link.Link, 0, len(bindings))
+	for _, binding := range bindings {
+		l, err := binding.attach()
+		if err != nil {
+			closeLinks(links)
+			return nil, fmt.Errorf("%s: %w", binding.message, err)
+		}
+		links = append(links, l)
+	}
+	return links, nil
 }
 
 func (s *Server) configureCaptureProgram(objs *bpfObjects) error {
@@ -463,10 +452,8 @@ func (s *Server) resolvePacketMeta(e *PacketEvent, now time.Time) (SocketMeta, b
 	if meta, ok := s.flowOwnerMapLookup(e); ok {
 		return meta, true
 	}
-	if e.L4Proto == ipProtoTCP {
-		if meta, ok := s.socketCacheLookupListener(e); ok && meta.PID > 0 {
-			return meta, true
-		}
+	if meta, ok := s.socketCacheLookupListener(e); ok && meta.PID > 0 {
+		return meta, true
 	}
 	if meta, ok := s.socketCacheLookupDirectional(e); ok {
 		return meta, true
@@ -478,10 +465,8 @@ func (s *Server) resolvePacketMeta(e *PacketEvent, now time.Time) (SocketMeta, b
 			}
 		}
 	}
-	if e.L4Proto == ipProtoTCP {
-		if meta, ok := s.socketCacheLookupListener(e); ok {
-			return meta, true
-		}
+	if meta, ok := s.socketCacheLookupListener(e); ok {
+		return meta, true
 	}
 	return SocketMeta{}, false
 }
@@ -490,64 +475,23 @@ func (s *Server) flowOwnerMapLookup(e *PacketEvent) (SocketMeta, bool) {
 	if s.state.flowOwnerMap == nil {
 		return SocketMeta{}, false
 	}
-	key := flowOwnerKey{}
-	addrLen := 4
-	if e.Family == afINET6 {
-		addrLen = 16
-	}
-	key.Family = e.Family
-	key.L4Proto = e.L4Proto
-	if e.Direction == 1 {
-		copy(key.Saddr[:addrLen], e.Saddr[:addrLen])
-		copy(key.Daddr[:addrLen], e.Daddr[:addrLen])
-		key.Sport = e.Sport
-		key.Dport = e.Dport
-	} else {
-		copy(key.Saddr[:addrLen], e.Daddr[:addrLen])
-		copy(key.Daddr[:addrLen], e.Saddr[:addrLen])
-		key.Sport = e.Dport
-		key.Dport = e.Sport
-	}
+	key := flowOwnerLookupKey(e)
 	val := flowOwnerValue{}
 	if err := s.state.flowOwnerMap.Lookup(key, &val); err != nil {
 		return SocketMeta{}, false
 	}
-	meta := SocketMeta{
-		Family: int(e.Family),
-		Proto:  int(e.L4Proto),
-		Sport:  e.Sport,
-		Dport:  e.Dport,
-		PID:    int(val.PIDTGID >> 32),
-		UID:    val.UID,
-		CRID:   val.CRID,
-		CRPID:  val.CRPID,
-		Comm:   string(bytes.TrimRight(val.Comm[:], "\x00")),
-	}
-	return meta, true
+	return socketMetaFromOwnerValue(e, val), true
 }
 
 func (s *Server) socketCacheLookupDirectional(e *PacketEvent) (SocketMeta, bool) {
-	key := socketKey{Family: int(e.Family), Proto: int(e.L4Proto)}
-	addrLen := 4
-	if e.Family == afINET6 {
-		addrLen = 16
-	}
-	if e.Direction == 1 {
-		copy(key.Saddr[:addrLen], e.Saddr[:addrLen])
-		copy(key.Daddr[:addrLen], e.Daddr[:addrLen])
-		key.Sport = e.Sport
-		key.Dport = e.Dport
-	} else {
-		copy(key.Saddr[:addrLen], e.Daddr[:addrLen])
-		copy(key.Daddr[:addrLen], e.Saddr[:addrLen])
-		key.Sport = e.Dport
-		key.Dport = e.Sport
-	}
-	meta, ok := s.state.sockets.items[key]
+	meta, ok := s.state.sockets.items[directionalSocketKey(e)]
 	return meta, ok
 }
 
 func (s *Server) socketCacheLookupListener(e *PacketEvent) (SocketMeta, bool) {
+	if e.L4Proto != ipProtoTCP {
+		return SocketMeta{}, false
+	}
 	listenPort := e.Dport
 	if e.Direction == 1 {
 		listenPort = e.Sport
@@ -563,6 +507,60 @@ func (s *Server) socketCacheLookupListener(e *PacketEvent) (SocketMeta, bool) {
 		return meta, true
 	}
 	return SocketMeta{}, false
+}
+
+func directionalSocketKey(e *PacketEvent) socketKey {
+	key := socketKey{Family: int(e.Family), Proto: int(e.L4Proto)}
+	copyDirectionalAddrs(e, key.Saddr[:], key.Daddr[:])
+	if e.Direction == 1 {
+		key.Sport = e.Sport
+		key.Dport = e.Dport
+	} else {
+		key.Sport = e.Dport
+		key.Dport = e.Sport
+	}
+	return key
+}
+
+func flowOwnerLookupKey(e *PacketEvent) flowOwnerKey {
+	key := flowOwnerKey{Family: e.Family, L4Proto: e.L4Proto}
+	copyDirectionalAddrs(e, key.Saddr[:], key.Daddr[:])
+	if e.Direction == 1 {
+		key.Sport = e.Sport
+		key.Dport = e.Dport
+	} else {
+		key.Sport = e.Dport
+		key.Dport = e.Sport
+	}
+	return key
+}
+
+func copyDirectionalAddrs(e *PacketEvent, saddr, daddr []byte) {
+	addrLen := 4
+	if e.Family == afINET6 {
+		addrLen = 16
+	}
+	if e.Direction == 1 {
+		copy(saddr[:addrLen], e.Saddr[:addrLen])
+		copy(daddr[:addrLen], e.Daddr[:addrLen])
+		return
+	}
+	copy(saddr[:addrLen], e.Daddr[:addrLen])
+	copy(daddr[:addrLen], e.Saddr[:addrLen])
+}
+
+func socketMetaFromOwnerValue(e *PacketEvent, val flowOwnerValue) SocketMeta {
+	return SocketMeta{
+		Family: int(e.Family),
+		Proto:  int(e.L4Proto),
+		Sport:  e.Sport,
+		Dport:  e.Dport,
+		PID:    int(val.PIDTGID >> 32),
+		UID:    val.UID,
+		CRID:   val.CRID,
+		CRPID:  val.CRPID,
+		Comm:   string(bytes.TrimRight(val.Comm[:], "\x00")),
+	}
 }
 
 func (s *Server) rebuildSocketCache() error {

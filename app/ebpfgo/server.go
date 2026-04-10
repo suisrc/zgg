@@ -55,6 +55,9 @@ func Init3(ifn InitFunc) {
 			zgg.ServeStop("register ebpfgo error by config,", err.Error())
 			return nil
 		}
+		// 特别重要的地方， 增加钩子
+		// 特别重要的地方， 增加钩子
+		// 特别重要的地方， 增加钩子
 		srv, err := NewServer(cfg, nil)
 		if err != nil {
 			zgg.ServeStop("register ebpfgo error by server,", err.Error())
@@ -98,7 +101,6 @@ type Server struct {
 	mu      sync.Mutex
 	started bool
 	closed  bool
-	errExit bool
 
 	rawSock int
 	objs    bpfObjects
@@ -109,7 +111,7 @@ type Server struct {
 func NewServer(cfg Config, hook Hook) (z.Server, error) {
 	rc, err := normalizeConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("invalid config: %v\n", err)
+		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
@@ -122,7 +124,6 @@ func NewServer(cfg Config, hook Hook) (z.Server, error) {
 			flows:   make(map[flowKey]*flowState),
 			sockets: socketCache{items: make(map[socketKey]SocketMeta)},
 		},
-		errExit: true,
 	}, nil
 }
 
@@ -163,14 +164,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		_ = syscall.Close(s.rawSock)
 		s.rawSock = -1
 	}
-	links := s.links
+	links, objs := s.links, s.objs
 	s.links = nil
-	objs := s.objs
 	s.mu.Unlock()
-
-	for _, l := range links {
-		_ = l.Close()
-	}
+	closeLinks(links)
 	_ = objs.Close()
 
 	select {
@@ -178,5 +175,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return ctx.Err()
 	default:
 		return nil
+	}
+}
+
+func closeLinks(links []link.Link) {
+	for _, l := range links {
+		_ = l.Close()
 	}
 }

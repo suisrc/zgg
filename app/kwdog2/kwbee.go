@@ -93,6 +93,9 @@ func (hdl *KwbeeHandler) Shutdown(ctx context.Context) error {
 }
 
 func (hdl *KwbeeHandler) Write(p []byte) (n int, err error) {
+	// 特别重要的地方， 增加钩子
+	// 特别重要的地方， 增加钩子
+	// 特别重要的地方， 增加钩子
 	z.Logn("[_kwbee2_]:", string(p))
 	return len(p), nil
 }
