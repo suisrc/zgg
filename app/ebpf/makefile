@@ -14,8 +14,12 @@ ebpf_capture.o: ebpf_capture.c
 ebpf_capture_blob.o: ebpf_capture.o
 	$(LD) -r -z noexecstack -b binary ebpf_capture.o -o ebpf_capture_blob.o
 
+# monitor 默认不启用 -static：
+# 1. 当前系统的 libpcap.a 会继续依赖 dbus 静态符号，直接静态链接会出现 undefined reference；
+# 2. glibc 名字解析路径在静态链接下还会额外带来运行时兼容警告。
+# 如果后续必须做全静态，需要单独准备裁剪过的静态 libpcap 及完整静态依赖链。
 monitor: monitor.c ebpf_capture_blob.o
-	$(CLANG) -O2 -o monitor monitor.c ebpf_capture_blob.o -lbpf -lpcap -lelf -lz
+	$(CLANG) -O2 -o monitor monitor.c ebpf_capture_blob.o -lbpf -lelf -lz
 
 clean:
 	rm -f ebpf_capture.o ebpf_capture_blob.o monitor

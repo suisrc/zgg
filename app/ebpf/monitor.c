@@ -263,6 +263,7 @@ static uint64_t now_ms(void)
 
 static uint64_t epoch_ms(void)
 {
+    // 对外输出时间戳使用真实时钟；内部超时和 GC 则使用 monotonic 的 now_ms。
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
@@ -478,6 +479,7 @@ static size_t socket_cache_hash_key(int family, int proto,
                                     const unsigned char *daddr,
                                     uint16_t sport, uint16_t dport)
 {
+    // socket cache 的哈希只关注五元组和协议，目标是把回退查找成本压到近似 O(1)。
     size_t addr_len = family == AF_INET ? 4 : 16;
     uint64_t hash = 14695981039346656037ULL;
     hash = fnv1a64_update(hash, &family, sizeof(family));
@@ -491,6 +493,7 @@ static size_t socket_cache_hash_key(int family, int proto,
 
 static void socket_cache_reset(struct socket_cache *cache)
 {
+    // reset 不只是 free 内存，还要清空桶头，避免后续 rebuild 时把旧链表串进来。
     free(cache->items);
     free(cache->next_idx);
     cache->items = NULL;
@@ -1228,6 +1231,7 @@ static const struct socket_meta *resolve_packet_meta(const struct monitor_state 
 
 static void flow_reverse_key(const struct event_t *e, struct flow_key *key)
 {
+    // 反向 key 用于在请求/响应两个方向之间共享 owner 和 domain 等上下文。
     memset(key, 0, sizeof(*key));
     key->family = e->family;
     key->l4_proto = e->l4_proto;
@@ -1355,6 +1359,7 @@ static bool parse_chunked_body(const unsigned char *data, size_t len, long long 
                                size_t *consumed_out)
 {
     // chunked body 解析器：按块读取、按需保留、遇到不完整数据就返回 false。
+    // 注意 consumed 表示“这条 HTTP 在流缓冲里应该前进多少字节”，不是仅仅表示 body 长度。
     *body_copy_out = NULL;
     *body_len_out = 0;
     *consumed_out = 0;
@@ -1467,6 +1472,7 @@ static bool parse_tls_clienthello(const unsigned char *data, uint32_t len,
                                   uint16_t *tls_version_out)
 {
     // 解析 TLS ClientHello：提取 SNI、ALPN 和协商版本。
+    // 这里只读明文握手层，所以即便 HTTPS 正文不可见，仍然可以恢复域名和 ALPN。
     sni[0] = '\0';
     alpn[0] = '\0';
 
@@ -1571,6 +1577,7 @@ static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
                                   uint16_t *tls_version_out)
 {
     // 解析 TLS ServerHello：提取 ALPN 和协商版本。
+    // response 侧没有 SNI，因此最终输出域名通常要靠 request 方向缓存下来的 domain 兜底。
     alpn[0] = '\0';
     if (len < 5 || data[0] != 0x16) return false;
 
@@ -2090,6 +2097,7 @@ static bool looks_like_tls_record(const unsigned char *data, size_t len)
 {
     // 通过 record layer 的 type/version 做轻量 TLS 识别。
     // 这里允许 handshake/ccs/alert/appdata 四类记录头，便于继续向后扫描真实握手消息。
+    // 这里故意不做更严格的完整性判定，以便兼容从连接中途开始抓包的场景。
     if (len < 5 || data[1] != 0x03 || data[2] > 0x04) return false;
     return data[0] == 0x14 || data[0] == 0x15 || data[0] == 0x16 || data[0] == 0x17;
 }
@@ -2128,6 +2136,7 @@ static bool parse_packet(const unsigned char *packet, size_t len, uint8_t direct
                          struct event_t *e)
 {
     // 原始二层包解析入口：逐层剥离以太网、VLAN、IP、TCP/UDP 头，只保留 payload。
+    // userspace 这里不再做“是否目标协议”的粗筛；这部分已经提前在 capture_prog 里完成。
     memset(e, 0, sizeof(*e));
     e->direction = direction;
 
@@ -2244,6 +2253,7 @@ static bool parse_port(const char *s, uint16_t *out);
 static void handle_packet(struct callback_ctx *cb, const unsigned char *packet, size_t len, uint8_t direction)
 {
     // 单包处理入口：解析 packet -> 回填元数据 -> 过滤 -> 分发到 TCP/UDP 处理器。
+    // 它本身更像一个调度函数，把解析、回填、过滤和输出串在一起，而不是单独完成某一个协议逻辑。
     struct event_t e;
     if (!parse_packet(packet, len, direction, &e)) return;
 
@@ -2253,11 +2263,13 @@ static void handle_packet(struct callback_ctx *cb, const unsigned char *packet, 
     memset(&meta, 0, sizeof(meta));
     struct socket_meta fallback_meta;
     if (resolve_packet_meta(cb->state, &e, &fallback_meta)) {
+        // 优先命中 BPF map 或现有 cache 时，可以完全跳过 /proc 重扫。
         meta = fallback_meta;
     } else if ((cb->state->sockets.last_refresh_ms == 0 ||
                 now - cb->state->sockets.last_refresh_ms > SOCKET_CACHE_REFRESH_MS) &&
                rebuild_socket_cache(&cb->state->sockets) &&
                resolve_packet_meta(cb->state, &e, &fallback_meta)) {
+        // 只有缓存过期或首次为空时才重建 socket 快照，避免每个包都去扫 /proc。
         meta = fallback_meta;
     }
 
@@ -2375,6 +2387,7 @@ out:
 static bool configure_capture_program(struct bpf_object *obj, const struct monitor_config *cfg)
 {
     // 把 interface / pcaprules 两个参数写入 BPF map，供 capture_prog 在内核里读取。
+    // 内核侧只需要知道“接口限制”和“pcap 指令”；更细的 pid/comm/CIDR 过滤仍放在 userspace。
     int config_fd = bpf_object__find_map_fd_by_name(obj, "capture_config_map");
     int pcap_fd = bpf_object__find_map_fd_by_name(obj, "pcap_insns");
     if (config_fd < 0 || pcap_fd < 0) {
@@ -2410,6 +2423,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 {
     // TCP 主处理路径：按 flow 缓冲数据，再尝试 TLS/HTTP 解析，成功后输出 JSON。
     // 这部分是 userspace 的核心状态机：先把同一条连接的数据聚到一起，再决定它到底是 HTTP 还是 TLS。
+    // 这里的 flow 是按方向保存的，因此 request 和 response 各有自己的缓冲；peer 负责跨方向共享上下文。
     struct flow_key key;
     memset(&key, 0, sizeof(key));
     key.family = e->family;
@@ -2462,6 +2476,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
     // 这里允许缓冲前面有少量噪声前缀，以适应抓包从连接中途接入或首段不完整的情况。
     ssize_t req_off = !flow->tls_emitted ? find_tls_handshake_record_offset(flow->tcp_buffer.data, flow->tcp_buffer.len, 0x01) : -1;
     if (req_off >= 0) {
+        // 只要当前缓冲里找到一个完整 ClientHello，就立即输出 HTTPS request，并消费当前方向缓冲。
         const unsigned char *tls_data = flow->tcp_buffer.data + req_off;
         size_t tls_len = flow->tcp_buffer.len - (size_t)req_off;
         char sni[256] = {0};
@@ -2484,6 +2499,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 
     ssize_t resp_off = !flow->tls_emitted ? find_tls_handshake_record_offset(flow->tcp_buffer.data, flow->tcp_buffer.len, 0x02) : -1;
     if (resp_off >= 0) {
+        // ServerHello 侧重点是协商结果；没有域名时，优先借用对端 flow 已保存的 domain。
         const unsigned char *tls_data = flow->tcp_buffer.data + resp_off;
         size_t tls_len = flow->tcp_buffer.len - (size_t)resp_off;
         char sni[256] = {0};
@@ -2549,6 +2565,7 @@ static void process_udp_packet(const struct event_t *e, const struct socket_meta
 {
     // UDP 侧主要看 QUIC Initial 中的 TLS ClientHello，不做完整 QUIC 解密。
     // 这里的目标只是从明文握手里提取 SNI/ALPN，给 HTTPS over UDP 留下可读上下文。
+    // 当前实现只输出 request 侧信息，因为在不解密的前提下 response 侧几乎没有同等级别的可读元数据。
     if (e->cap_len < 6) return;
     const unsigned char *payload = e->payload;
     uint32_t payload_len = e->cap_len;
@@ -2634,6 +2651,7 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
 {
     // 解析命令行参数并填充 monitor_config。
     // 这一层只做字符串到字段的映射，不做更深的业务判定。
+    // 参数合法性尽量在入口处拦截，后面的运行逻辑默认拿到的配置已经是自洽的。
     memset(cfg, 0, sizeof(*cfg));
     cfg->direction_filter = -1;
     cfg->body_limit = -1;
@@ -2734,6 +2752,7 @@ static bool open_and_attach_bpf(int sock_fd,
 {
     // 直接从内存中的嵌入字节码打开 BPF 对象，避免依赖磁盘上的 ebpf_capture.o 文件。
     // 这样打包出来的 monitor 就是一个自包含二进制，不需要额外分发 .o 文件。
+    // monitor 最终只依赖运行时库和内核能力，不依赖部署现场再去寻找外部 BPF 目标文件。
     size_t obj_size = (size_t)(_binary_ebpf_capture_o_end - _binary_ebpf_capture_o_start);
     struct bpf_object *obj = bpf_object__open_mem(_binary_ebpf_capture_o_start, obj_size, NULL);
     if (libbpf_get_error(obj)) {
@@ -2822,6 +2841,7 @@ int main(int argc, char **argv)
 {
     // 程序主入口：解析参数、初始化 socket、装载 BPF、进入事件循环。
     // 整体流程可以理解成：先准备抓包环境，再把 BPF 和 packet socket 绑起来，最后持续消费事件。
+    // 真正的数据主路径是：packet socket 收包 -> handle_packet -> 元数据回填/过滤 -> TCP/UDP 处理器 -> JSON 输出。
     struct monitor_config cfg;
     if (!parse_args(argc, argv, &cfg)) return 1;
 

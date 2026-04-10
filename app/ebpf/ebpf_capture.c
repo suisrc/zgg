@@ -145,6 +145,8 @@ struct {
     __type(value, __u8);
 } tracked_flow_map SEC(".maps");
 
+// userspace 会把 interface 和 -pcap-rules 两个运行时参数写进这里。
+// capture_prog 每次处理包时都先读这个配置，决定是否先走 ifindex 限制和 classic BPF 规则。
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
@@ -152,6 +154,8 @@ struct {
     __type(value, struct capture_config);
 } capture_config_map SEC(".maps");
 
+// userspace 编译出的 classic BPF 指令数组。
+// 内核侧只解释一个受限子集，目的是减少进入 userspace 的无关流量，而不是完整复刻 tcpdump 运行时。
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, PCAP_RULES_MAX_INSNS);
@@ -161,12 +165,14 @@ struct {
 
 static __always_inline int load_byte(struct __sk_buff *skb, __u32 offset, __u8 *value)
 {
+    // classic BPF 的 byte load 最终统一收敛到这里，先做边界检查再读字节。
     if (offset >= (__u32)skb->len) return -1;
     return bpf_skb_load_bytes(skb, offset, value, sizeof(*value));
 }
 
 static __always_inline int load_half(struct __sk_buff *skb, __u32 offset, __u32 *value)
 {
+    // 按网络字节序手工拼 16 位值，避免未对齐访问给 verifier 带来额外复杂度。
     __u8 buf[2];
     if (offset + sizeof(buf) > (__u32)skb->len) return -1;
     if (bpf_skb_load_bytes(skb, offset, buf, sizeof(buf)) < 0) return -1;
@@ -176,6 +182,7 @@ static __always_inline int load_half(struct __sk_buff *skb, __u32 offset, __u32 
 
 static __always_inline int load_word(struct __sk_buff *skb, __u32 offset, __u32 *value)
 {
+    // 32 位读取同样手工拼接，保持和 classic BPF ABS/IND 语义一致。
     __u8 buf[4];
     if (offset + sizeof(buf) > (__u32)skb->len) return -1;
     if (bpf_skb_load_bytes(skb, offset, buf, sizeof(buf)) < 0) return -1;
@@ -501,6 +508,7 @@ static __always_inline int fill_tracked_flow_key(struct tracked_flow_key *key,
                                                  const unsigned char *daddr,
                                                  __u16 sport, __u16 dport)
 {
+    // capture_prog 的 lookup/store 共用一份 key，减少重复初始化和地址拷贝。
     __builtin_memset(key, 0, sizeof(*key));
     key->family = family;
     key->l4_proto = l4_proto;
@@ -527,6 +535,7 @@ static __always_inline int tracked_flow_lookup(const struct tracked_flow_key *ke
 static __always_inline void tracked_flow_store(const struct tracked_flow_key *key)
 {
     // 同时写正向和反向 key：这样请求方向和响应方向都能命中同一条已追踪流。
+    // 一旦某个首包确认是目标流量，后续整条连接都可以绕过前缀探测，直接放行到 userspace。
     struct tracked_flow_key reverse = {};
     __u8 value = 1;
 
@@ -592,6 +601,7 @@ int capture_prog(struct __sk_buff *skb)
 
     if (h_proto == ETH_P_IP) {
         // IPv4：读取 IP 头，确认上层是 TCP/UDP，再提取源/目的地址。
+        // 这里保持“每走一步就做一次边界判断”，目的是让 verifier 更容易证明所有访问都安全。
         struct iphdr iph;
         __u32 ihl = 0;
         if (bpf_skb_load_bytes(skb, offset, &iph, sizeof(iph)) < 0) return 0;
@@ -605,6 +615,7 @@ int capture_prog(struct __sk_buff *skb)
         offset += ihl;
     } else if (h_proto == ETH_P_IPV6) {
         // IPv6：先读取基础头，再跳过常见扩展头，最后定位到 TCP/UDP。
+        // IPv6 比 IPv4 更容易因为扩展头漏掉真实 L4 起点，所以这里专门做有限层数的扩展头跳转。
         struct ipv6hdr ip6;
         if (bpf_skb_load_bytes(skb, offset, &ip6, sizeof(ip6)) < 0) return 0;
         family = AF_INET6;
@@ -621,6 +632,7 @@ int capture_prog(struct __sk_buff *skb)
     // 到这里 offset 已经指向 TCP/UDP 头。后面要做 payload 特征探测，
     // 所以需要继续跳过 L4 头，不能把 TCP/UDP 头字节当成 HTTP/TLS 前缀。
     if (l4_proto == IPPROTO_TCP) {
+        // TCP payload 起点不是固定值，必须根据 doff 跳过 options 后再做协议前缀判断。
         struct tcphdr tcph;
         __u32 tcp_hdr_len = 0;
         if (offset + sizeof(tcph) > (__u64)skb->len) return 0;
@@ -632,6 +644,7 @@ int capture_prog(struct __sk_buff *skb)
         sport = bpf_ntohs(tcph.source);
         dport = bpf_ntohs(tcph.dest);
     } else if (l4_proto == IPPROTO_UDP) {
+        // UDP 头固定 8 字节，因此 payload 起点更简单，但仍然需要先做长度检查。
         struct udphdr udph;
         if (offset + sizeof(udph) > (__u64)skb->len) return 0;
         if (bpf_skb_load_bytes(skb, offset, &udph, sizeof(udph)) < 0) return 0;
@@ -656,6 +669,7 @@ int capture_prog(struct __sk_buff *skb)
 
     // 非典型端口时，再取 payload 前 64 字节做轻量窗口扫描。
     // 这一步仍然远比 userspace 解析便宜，但能覆盖更多代理/TLS 1.3 场景。
+    // 这里保留 64/32/16/8/5 的固定分档，是为了兼顾 verifier 稳定性与足够的探测窗口。
     if (payload_offset + 5 > (__u64)skb_len) return 0;
     unsigned char probe[64] = {};
     __u32 probe_len = 5;
@@ -671,6 +685,7 @@ int capture_prog(struct __sk_buff *skb)
     if (bpf_skb_load_bytes(skb, payload_offset, probe, probe_len) < 0) return 0;
 
     if (payload_has_l7_signature(probe, probe_len, l4_proto)) {
+        // 命中后把双向五元组都写进 tracked_flow_map，后面同一连接的包就不需要重复扫描了。
         tracked_flow_store(&flow_key);
         return skb->len;
     }
