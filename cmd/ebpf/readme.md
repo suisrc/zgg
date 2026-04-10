@@ -6,7 +6,7 @@
 - 支持 IPv4/IPv6
 - 支持 TCP HTTP、TLS over TCP，以及 QUIC/HTTPS over UDP
 - 输出：源 IP、源端口、目标 IP、目标端口、流量方向、域名（HTTPS 使用 SNI）
-- HTTP 请求/响应会尽量保留 headers 和 body，body 支持按 `-mbody` 控制截断
+- HTTP 请求/响应会尽量保留 headers 和 body，`-max-body-size` 同时作用于 request body 和 response body
 
 ## 编译
 
@@ -28,20 +28,26 @@ apt install -y linux-headers-$(uname -r)
 编译完成后，直接运行数据收集程序：
 
 ```sh
-sudo ./monitor -i eth0
+sudo ./monitor -interface eth0
 ```
 
 程序会创建原始 AF_PACKET 套接字，并附加一个最小 eBPF socket filter 作为放行器；真正的 HTTP/HTTPS 解析、PID/进程名关联和 JSON 输出都在 userspace 完成。
 
 常用参数：
-- `-i eth0` 监听接口
-- `-t ingress|egress` 只看入站或出站流量，默认双向
-- `-p 123` 按进程 pid 过滤
-- `-n app` 按进程名过滤
+- `-interface eth0` 监听接口
+- `-direction ingress|egress` 只看入站或出站流量，默认双向
+- `-pid 123` 按进程 pid 过滤
+- `-comm app` 按进程名称过滤
 - `-src` / `-dst` 支持 CIDR 和 `!` 排除规则
 - `-sport` 仅对 ingress 生效
 - `-dport` 仅对 egress 生效
-- `-mbody` 控制 body 最大记录长度，`<0` 不记录，`0` 不限制，`>0` 截断
+- `-max-body-size` 控制 request/response body 最大记录长度，`<0` 不记录，`0` 不限制，`>0` 截断
+
+示例：
+
+```sh
+sudo ./monitor -interface eth0 -direction ingress -pid 123 -comm app -max-body-size 4096
+```
 
 ## 清理
 
@@ -52,4 +58,4 @@ make clean
 ## 注意
 
 - 由于 HTTPS 流量本身被加密，程序仅解析 SNI/ALPN 等明文握手信息，不进行解密。
-- PID/进程名过滤依赖 `/proc` 连接表和 socket inode 关联，属于 best-effort 方案。
+- PID/进程名关联现在基于 socket cookie 侧链完成，不再依赖 `/proc` 五元组或 inode 回填。

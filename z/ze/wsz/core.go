@@ -40,7 +40,7 @@ type Hook interface {
 	Close() error
 }
 
-// SendFunc 是一个函数类型，定义了向客户端发送消息的回调函数
+// SendFunc 是一个函数类型，定义了向客户端发送消息的回调函数 send vs recv
 type SendFunc func(byte, []byte) error
 
 // NewHookFunc 是一个函数类型，定义了创建新的 Hook 的回调函数

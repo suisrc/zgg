@@ -27,7 +27,8 @@ __zgg.*
 ksql
 # model_test.go
 
-capture.o
+ebpf_capture.o
+ebpf_capture_blob.o
 monitor
 
 Untitled-*.json
