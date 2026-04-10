@@ -1,5 +1,12 @@
-//go:build cgo
-// +build cgo
+//go:build ignore
+// +build ignore
+
+//-go:build cgo
+//- +build cgo
+
+// 案例应用，不参与编译
+// 通过 cgo 调用 libpcap 编译 pcap 规则， 需要 CGO_ENABLED=1 和 libpcap 开发包支持
+// 已经被 pcap_compile_google.go 中的方案替代，这里仅保留作为参考
 
 package ebpfgo
 

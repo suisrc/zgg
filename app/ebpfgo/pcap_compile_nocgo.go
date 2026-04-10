@@ -1,5 +1,10 @@
-//go:build !cgo
-// +build !cgo
+//go:build ignore
+// +build ignore
+
+//-go:build !cgo
+//- +build !cgo
+
+// pcap_compile_nocgo.go 对应的适配文件
 
 package ebpfgo
 

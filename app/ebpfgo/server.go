@@ -1,3 +1,9 @@
+//go:build ignore
+// +build ignore
+
+// kwbee 纯 golang 实现的 eBPF 监控
+// 为保持项目的 "零" 依赖, 该部分内容不参与编译，仅作为案例代码存在
+
 package ebpfgo
 
 import (
