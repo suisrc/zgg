@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/suisrc/zgg/z/zc"
 	"github.com/suisrc/zgg/z/ze/proc"
 )
 
@@ -43,4 +44,13 @@ func TestProcess2(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	os.Exit(0)
+}
+
+// go test -v z/ze/proc/process_test.go -run TestParseCmd
+
+func TestParseCmd(t *testing.T) {
+	command := `./_out/ecapture tls -w ./_out/capture.pcapng -l ./_out/capture.log -m text "'outbound and' len < 32768 and not dst net 127.0.0/8"`
+	cmd, args := proc.ParseCmd(command)
+	t.Logf("command: %s", cmd)
+	t.Logf("args: %v", zc.ToStrJSON(args))
 }

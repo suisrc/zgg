@@ -26,3 +26,9 @@ __zgg.*
 
 ksql
 # model_test.go
+
+capture.o
+monitor
+
+Untitled-*.json
+agent-task.md

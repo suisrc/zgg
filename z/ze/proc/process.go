@@ -10,6 +10,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/suisrc/zgg/z/zc"
 )
 
 var (
@@ -58,7 +60,21 @@ func NewProcess(logger io.Writer, command string, args ...string) Process {
 }
 
 func (p *process0) String() string {
-	return p.command + " " + strings.Join(p.args, " ")
+	// return p.command + " " + strings.Join(p.args, " ")
+	buf := strings.Builder{}
+	buf.WriteString(p.command)
+	for _, arg := range p.args {
+		if strings.Contains(arg, " ") {
+			buf.WriteByte(' ')
+			buf.WriteByte('"')
+			buf.WriteString(arg)
+			buf.WriteByte('"')
+		} else {
+			buf.WriteByte(' ')
+			buf.WriteString(arg)
+		}
+	}
+	return buf.String()
 }
 
 // Pid 返回当前进程的 PID，如果没有在运行，返回 0
@@ -117,8 +133,13 @@ func (p *process0) enforce() (func(), error) {
 	done := p.done
 	// 等待进程结束, 并在结束后更新状态
 	return func() {
-		_ = cmd.Wait()
+		err := cmd.Wait()
 		p.markStopped(cmd, done)
+		if err != nil {
+			zc.Logn("[_process]: process exited with error:", err)
+		} else {
+			zc.Logn("[_process]: process exited successfully")
+		}
 	}, nil
 }
 
@@ -236,4 +257,46 @@ func (p *process0) restoreRunning(cmd *exec.Cmd) {
 	if p.cmd == cmd && p.state == stateStopping {
 		p.state = stateRunning
 	}
+}
+
+// ./_out/ecapture tls -w ./_out/capture.pcapng -l ./_out/capture.log -m text "outbound and len < 32768 and not dst net 127.0.0/8"
+// "", ” 中的内容不能分割
+func ParseCmd(cmd string) (string, []string) {
+	// 解析应用命令行
+	var args []string
+	var current strings.Builder
+	inQuote := false
+	quoteChar := byte(0)
+	for i := 0; i < len(cmd); i++ {
+		c := cmd[i]
+		switch c {
+		case ' ', '\t':
+			if !inQuote {
+				if current.Len() > 0 {
+					args = append(args, current.String())
+					current.Reset()
+				}
+			} else {
+				current.WriteByte(c)
+			}
+		case '\'', '"':
+			if !inQuote {
+				inQuote = true
+				quoteChar = c
+			} else if quoteChar == c {
+				inQuote = false
+			} else {
+				current.WriteByte(c)
+			}
+		default:
+			current.WriteByte(c)
+		}
+	}
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+	if len(args) == 0 {
+		return "", nil
+	}
+	return args[0], args[1:]
 }
