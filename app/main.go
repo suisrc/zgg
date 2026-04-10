@@ -9,7 +9,9 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 	_ "github.com/suisrc/zgg/z/ze/log"
 	_ "github.com/suisrc/zgg/z/ze/rdx"
+
 	// _ "github.com/suisrc/zgg/app/zhe" // 测试模块
+	_ "github.com/suisrc/zgg/app/ebpfgo" // 监控模块
 )
 
 //go:embed vname
