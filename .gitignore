@@ -27,9 +27,9 @@ __zgg.*
 ksql
 # model_test.go
 
+app/ebpf/tasks
+agenttask.md
 ebpf_capture.o
 ebpf_capture_blob.o
 monitor
-
 Untitled-*.json
-agent-task.md

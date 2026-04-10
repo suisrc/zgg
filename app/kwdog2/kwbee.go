@@ -56,7 +56,7 @@ func InitKwbee(ifn InitKwbeeFunc) {
 
 	flag.BoolVar(&C.Kwbee2.Disabled, "b2disabled", true, "是否禁用kwbee2")
 	flag.StringVar(&C.Kwbee2.AddrPort, "b2addr", "127.0.0.1:28255", "代理服务器地址和端口")
-	flag.StringVar(&C.Kwbee2.Command, "b2command", "ecapture", "ecapture命令")
+	flag.StringVar(&C.Kwbee2.Command, "b2command", "monitor", "monitor 命令")
 	flag.Var(z.NewStrArr(&C.Kwbee2.CmdArgs, []string{"tls", "--pid", "<pid>", "--logaddr", "<ws-addr>", PCAP}), "b2cmdargs", "ecapture参数")
 	flag.StringVar(&C.Kwbee2.Logger, "b2logger", "", "ecapture: 适配并截取日志, stdout: 直接输出到控制台, 空字符串: 不输出(可以通过 logaddr 输出日志)")
 	flag.IntVar(&C.Kwbee2.Webdocket, "b2webdocket", 1, "启用 websocket 方式")

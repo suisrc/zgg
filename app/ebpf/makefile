@@ -12,10 +12,10 @@ ebpf_capture.o: ebpf_capture.c
 	$(CLANG) $(BPF_CFLAGS) -c ebpf_capture.c -o ebpf_capture.o
 
 ebpf_capture_blob.o: ebpf_capture.o
-	$(LD) -r -b binary ebpf_capture.o -o ebpf_capture_blob.o
+	$(LD) -r -z noexecstack -b binary ebpf_capture.o -o ebpf_capture_blob.o
 
 monitor: monitor.c ebpf_capture_blob.o
-	$(CLANG) -O2 -static  -o monitor monitor.c ebpf_capture_blob.o -lbpf -lelf -lz
+	$(CLANG) -O2 -o monitor monitor.c ebpf_capture_blob.o -lbpf -lpcap -lelf -lz
 
 clean:
 	rm -f ebpf_capture.o ebpf_capture_blob.o monitor

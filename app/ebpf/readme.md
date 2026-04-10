@@ -11,7 +11,7 @@
 ## 编译
 
 ```sh
-cd cmd/ebpf
+cd app/ebpf
 make all
 ```
 
@@ -21,7 +21,7 @@ make all
 
 ```sh
 apt update
-apt install -y clang llvm libbpf-dev libelf-dev libelf1 pkg-config libssl-dev zlib1g-dev git make bpftool iproute2
+apt install -y clang llvm libbpf-dev libelf-dev libpcap-dev libelf1 pkg-config libssl-dev zlib1g-dev git make bpftool iproute2
 apt install -y linux-headers-$(uname -r)
 ```
 
@@ -35,10 +35,13 @@ apt install -y linux-headers-$(uname -r)
 sudo ./monitor -interface eth0
 ```
 
-程序会创建原始 AF_PACKET 套接字，并附加一个最小 eBPF socket filter 作为放行器；真正的 HTTP/HTTPS 解析、PID/进程名关联和 JSON 输出都在 userspace 完成。
+程序会创建原始 AF_PACKET 套接字，并把 `capture_prog` 挂到 packet socket 上。
+`-interface` 和 `-pcap-rules` 都会先由 userspace 写入 BPF map，再由 `capture_prog` 在内核里读取并执行；其他过滤参数仍保持在 userspace 过滤。
+默认 `-pcap-rules` 为空，此时只使用内置的 HTTP/HTTPS/QUIC 粗筛；显式传入规则后，会先在内核里执行对应的 classic BPF 指令，减少进入 userspace 的流量。
 
 常用参数：
 - `-interface eth0` 监听接口
+- `-pcap-rules 'tcp port 80 or tcp port 443'` 可选的内核侧 pcap 过滤规则，默认空，编译后最多 256 条指令
 - `-direction ingress|egress` 只看入站或出站流量，默认双向
 - `-pid 123` 按进程 pid 过滤
 - `-cpid 123` 按容器内 pid 过滤
@@ -55,6 +58,10 @@ sudo ./monitor -interface eth0
 sudo ./monitor -interface eth0 -direction ingress -pid 123 -comm app -max-body-size 4096
 ```
 
+```sh
+sudo ./monitor -interface eth0 -pcap-rules 'tcp port 80 or tcp port 443'
+```
+
 ## 清理
 
 ```sh
@@ -65,3 +72,4 @@ make clean
 
 - 由于 HTTPS 流量本身被加密，程序仅解析 SNI/ALPN 等明文握手信息，不进行解密。
 - PID/进程名关联优先使用 BPF 侧的 socket 归属信息，缺失时会回退到 `/proc` 扫描结果做补齐。
+- `flow_owner_map` / `tracked_flow_map` 使用 LRU map，userspace 的 flow 缓冲、socket cache 和 inode owner 索引也都有上限，避免高流量场景下无限增长。

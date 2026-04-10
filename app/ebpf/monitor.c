@@ -12,7 +12,6 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
-#include <limits.h>
 #include <fcntl.h>
 #include <net/ethernet.h>
 #include <net/if.h>
@@ -22,6 +21,9 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <netinet/in.h>
+#define bpf_insn pcap_bpf_insn
+#include <pcap/pcap.h>
+#undef bpf_insn
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -39,11 +41,15 @@ extern unsigned char _binary_ebpf_capture_o_start[];
 extern unsigned char _binary_ebpf_capture_o_end[];
 
 #define CAP_PAYLOAD 4096
-#define FLOW_BUCKETS 4096
+#define FLOW_BUCKETS 8192
 #define COMM_LEN 16
 #define FLOW_BUFFER_CAP 32768
 #define SOCKET_CACHE_MAX_ITEMS 8192
+#define SOCKET_CACHE_BUCKETS 2048
+#define PROC_OWNER_MAX_ITEMS 65536
+#define SOCKET_CACHE_REFRESH_MS 1000
 #define FLOW_STATE_MAX_ITEMS 4096
+#define PCAP_RULES_MAX_INSNS 256
 
 #ifndef bpf_ntohs
 #define bpf_ntohs(x) __builtin_bswap16(x)
@@ -134,10 +140,27 @@ struct flow_owner_value {
     char comm[COMM_LEN];
 };
 
+// BPF socket filter 的运行参数：
+// ifindex 控制接口级过滤；pcap_len 表示当前装载了多少条 classic BPF 指令。
+struct capture_config {
+    uint32_t ifindex;
+    uint32_t pcap_len;
+};
+
+// userspace 与 eBPF 共享的 classic BPF 指令布局。
+struct pcap_rule_insn {
+    uint16_t code;
+    uint8_t jt;
+    uint8_t jf;
+    uint32_t k;
+};
+
 // userspace socket 缓存：
 // 这是对 /proc/net/* 和 /proc/<pid>/fd 的二次整理结果，供失败回退使用。
 struct socket_cache {
     struct socket_meta *items;
+    size_t *next_idx;
+    size_t buckets[SOCKET_CACHE_BUCKETS];
     size_t len;
     size_t cap;
     size_t max_items;
@@ -186,6 +209,7 @@ struct flow_state {
 // 所有过滤条件、body 限制和接口选择都集中到这里，方便后续统一判断。
 struct monitor_config {
     const char *ifname;
+    const char *pcap_rules;
     int ifindex;
     int direction_filter;
     bool have_pid_filter;
@@ -298,7 +322,7 @@ static uint64_t fnv1a64_update(uint64_t hash, const void *data, size_t len);
 
 static void flow_key_hex(const struct event_t *e, pid_t pid, char out[17])
 {
-    uint64_t h = 1469598103934665603ULL;
+    uint64_t h = 14695981039346656037ULL;
     size_t len = e->family == AF_INET ? 4 : 16;
     char pid_buf[32];
     snprintf(pid_buf, sizeof(pid_buf), "%d", pid);
@@ -341,7 +365,7 @@ static void record_key_hex(const struct event_t *e, const struct socket_meta *me
     // 优先用 cookie 生成 key；cookie 不可用时，再退回到五元组 + pid 的组合 hash。
     pid_t pid = meta && meta->pid > 0 ? meta->pid : 0;
     if (e->cookie) {
-        uint64_t h = 1469598103934665603ULL;
+        uint64_t h = 14695981039346656037ULL;
         char pid_buf[32];
         uint64_t cookie = e->cookie;
         snprintf(pid_buf, sizeof(pid_buf), "%d", pid);
@@ -430,7 +454,7 @@ static uint64_t fnv1a64(const void *data, size_t len)
 {
     // 标准 FNV-1a 64 位哈希。
     const unsigned char *p = data;
-    uint64_t hash = 1469598103934665603ULL;
+    uint64_t hash = 14695981039346656037ULL;
     for (size_t i = 0; i < len; ++i) {
         hash ^= p[i];
         hash *= 1099511628211ULL;
@@ -447,6 +471,33 @@ static uint64_t fnv1a64_update(uint64_t hash, const void *data, size_t len)
         hash *= 1099511628211ULL;
     }
     return hash;
+}
+
+static size_t socket_cache_hash_key(int family, int proto,
+                                    const unsigned char *saddr,
+                                    const unsigned char *daddr,
+                                    uint16_t sport, uint16_t dport)
+{
+    size_t addr_len = family == AF_INET ? 4 : 16;
+    uint64_t hash = 14695981039346656037ULL;
+    hash = fnv1a64_update(hash, &family, sizeof(family));
+    hash = fnv1a64_update(hash, &proto, sizeof(proto));
+    hash = fnv1a64_update(hash, saddr, addr_len);
+    hash = fnv1a64_update(hash, daddr, addr_len);
+    hash = fnv1a64_update(hash, &sport, sizeof(sport));
+    hash = fnv1a64_update(hash, &dport, sizeof(dport));
+    return (size_t)(hash % SOCKET_CACHE_BUCKETS);
+}
+
+static void socket_cache_reset(struct socket_cache *cache)
+{
+    free(cache->items);
+    free(cache->next_idx);
+    cache->items = NULL;
+    cache->next_idx = NULL;
+    cache->len = 0;
+    cache->cap = 0;
+    for (size_t i = 0; i < SOCKET_CACHE_BUCKETS; ++i) cache->buckets[i] = (size_t)-1;
 }
 
 static size_t flow_bucket(const struct flow_key *key)
@@ -739,6 +790,7 @@ static bool inode_owner_add(struct proc_owner **owners, size_t *len, size_t *cap
     for (size_t i = 0; i < *len; ++i) {
         if ((*owners)[i].inode == inode) return true;
     }
+    if (*len >= PROC_OWNER_MAX_ITEMS) return true;
     if (*len == *cap) {
         size_t next_cap = *cap ? *cap * 2 : 1024;
         struct proc_owner *next = realloc(*owners, next_cap * sizeof(**owners));
@@ -921,12 +973,28 @@ static bool socket_cache_push(struct socket_cache *cache, const struct socket_me
     }
     if (cache->len == cache->cap) {
         size_t next_cap = cache->cap ? cache->cap * 2 : 1024;
-        struct socket_meta *next = realloc(cache->items, next_cap * sizeof(*next));
-        if (!next) return false;
+        struct socket_meta *next = malloc(next_cap * sizeof(*next));
+        size_t *next_idx = malloc(next_cap * sizeof(*next_idx));
+        if (!next || !next_idx) {
+            free(next);
+            free(next_idx);
+            return false;
+        }
+        if (cache->items) memcpy(next, cache->items, cache->len * sizeof(*next));
+        if (cache->next_idx) memcpy(next_idx, cache->next_idx, cache->len * sizeof(*next_idx));
+        free(cache->items);
+        free(cache->next_idx);
         cache->items = next;
+        cache->next_idx = next_idx;
         cache->cap = next_cap;
     }
-    cache->items[cache->len++] = *meta;
+    size_t bucket = socket_cache_hash_key(meta->family, meta->proto,
+                                          meta->saddr, meta->daddr,
+                                          meta->sport, meta->dport);
+    cache->items[cache->len] = *meta;
+    cache->next_idx[cache->len] = cache->buckets[bucket];
+    cache->buckets[bucket] = cache->len;
+    cache->len++;
     return true;
 }
 
@@ -1016,10 +1084,7 @@ static bool rebuild_socket_cache(struct socket_cache *cache)
         return false;
     }
 
-    free(cache->items);
-    cache->items = NULL;
-    cache->len = 0;
-    cache->cap = 0;
+    socket_cache_reset(cache);
     if (cache->max_items == 0) cache->max_items = SOCKET_CACHE_MAX_ITEMS;
 
     bool ok = true;
@@ -1033,44 +1098,25 @@ static bool rebuild_socket_cache(struct socket_cache *cache)
     return ok;
 }
 
-static const struct socket_meta *socket_cache_lookup(const struct socket_cache *cache,
-                                                     const struct event_t *e)
-{
-    // 不看方向，按双向五元组在 cache 里查找 socket。
-    for (size_t i = 0; i < cache->len; ++i) {
-        const struct socket_meta *m = &cache->items[i];
-        if (m->family != e->family || m->proto != e->l4_proto) continue;
-        size_t addr_len = e->family == AF_INET ? 4 : 16;
-        bool direct = m->sport == e->sport && m->dport == e->dport &&
-                      memcmp(m->saddr, e->saddr, addr_len) == 0 &&
-                      memcmp(m->daddr, e->daddr, addr_len) == 0;
-        bool reverse = m->sport == e->dport && m->dport == e->sport &&
-                       memcmp(m->saddr, e->daddr, addr_len) == 0 &&
-                       memcmp(m->daddr, e->saddr, addr_len) == 0;
-        if (direct || reverse) return m;
-    }
-    return NULL;
-}
-
 static const struct socket_meta *socket_cache_lookup_directional(const struct socket_cache *cache,
                                                                  const struct event_t *e)
 {
-    // 根据 direction 判断是按正向匹配还是反向匹配。
-    for (size_t i = 0; i < cache->len; ++i) {
-        const struct socket_meta *m = &cache->items[i];
+    // 根据 direction 先做哈希定位，把查找复杂度从 O(n) 收敛到近似 O(1)。
+    if (!cache->items || !cache->next_idx || cache->len == 0) return NULL;
+    size_t addr_len = e->family == AF_INET ? 4 : 16;
+    const unsigned char *saddr = e->direction == 1 ? e->saddr : e->daddr;
+    const unsigned char *daddr = e->direction == 1 ? e->daddr : e->saddr;
+    uint16_t sport = e->direction == 1 ? e->sport : e->dport;
+    uint16_t dport = e->direction == 1 ? e->dport : e->sport;
+    size_t bucket = socket_cache_hash_key(e->family, e->l4_proto, saddr, daddr, sport, dport);
+
+    for (size_t idx = cache->buckets[bucket]; idx != (size_t)-1; idx = cache->next_idx[idx]) {
+        const struct socket_meta *m = &cache->items[idx];
         if (m->family != e->family || m->proto != e->l4_proto) continue;
-        size_t addr_len = e->family == AF_INET ? 4 : 16;
-        bool direct = m->sport == e->sport && m->dport == e->dport &&
-                      memcmp(m->saddr, e->saddr, addr_len) == 0 &&
-                      memcmp(m->daddr, e->daddr, addr_len) == 0;
-        bool reverse = m->sport == e->dport && m->dport == e->sport &&
-                       memcmp(m->saddr, e->daddr, addr_len) == 0 &&
-                       memcmp(m->daddr, e->saddr, addr_len) == 0;
-        if (e->direction == 1) {
-            if (direct) return m;
-        } else {
-            if (reverse) return m;
-        }
+        if (m->sport != sport || m->dport != dport) continue;
+        if (memcmp(m->saddr, saddr, addr_len) != 0) continue;
+        if (memcmp(m->daddr, daddr, addr_len) != 0) continue;
+        return m;
     }
     return NULL;
 }
@@ -1428,32 +1474,37 @@ static bool parse_tls_clienthello(const unsigned char *data, uint32_t len,
     if (data[0] != 0x16) return false;
 
     uint16_t record_version = (uint16_t)((data[1] << 8) | data[2]);
+    uint16_t record_len = (uint16_t)((data[3] << 8) | data[4]);
     if (tls_version_out) *tls_version_out = record_version;
+    if ((uint32_t)record_len + 5U > len) return false;
 
     if (len < 9) return false;
     const unsigned char *p = data + 5;
     if (p[0] != 0x01) return false;
+    uint32_t hello_len = ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    const unsigned char *hello_end = p + 4 + hello_len;
+    if (hello_end > data + 5 + record_len) return false;
 
     if (5 + 4 + 2 + 32 > len) return false;
     const unsigned char *q = p + 4 + 2 + 32;
-    if (q + 1 > data + len) return false;
+    if (q + 1 > hello_end) return false;
 
     uint8_t sid_len = q[0];
     q += 1 + sid_len;
-    if (q + 2 > data + len) return false;
+    if (q + 2 > hello_end) return false;
 
     uint16_t cs_len = (uint16_t)((q[0] << 8) | q[1]);
     q += 2 + cs_len;
-    if (q + 1 > data + len) return false;
+    if (q + 1 > hello_end) return false;
 
     uint8_t comp_len = q[0];
     q += 1 + comp_len;
-    if (q + 2 > data + len) return false;
+    if (q + 2 > hello_end) return false;
 
     uint16_t ext_len = (uint16_t)((q[0] << 8) | q[1]);
     q += 2;
     const unsigned char *ext_end = q + ext_len;
-    if (ext_end > data + len) return false;
+    if (ext_end > hello_end) return false;
 
     while (q + 4 <= ext_end) {
         uint16_t ext_type = (uint16_t)((q[0] << 8) | q[1]);
@@ -1494,16 +1545,25 @@ static bool parse_tls_clienthello(const unsigned char *data, uint32_t len,
                 }
             }
         } else if (ext_type == 0x002b) {
-            if (ext_size >= 3 && q[0] == 0x02) {
-                uint16_t negotiated = (uint16_t)((q[1] << 8) | q[2]);
-                if (tls_version_out) *tls_version_out = negotiated;
+            if (ext_size >= 3) {
+                uint8_t versions_len = q[0];
+                const unsigned char *versions = q + 1;
+                const unsigned char *versions_end = versions + versions_len;
+                uint16_t best = 0;
+                if (versions_end > q + ext_size) versions_end = q + ext_size;
+                while (versions + 1 < versions_end) {
+                    uint16_t candidate = (uint16_t)((versions[0] << 8) | versions[1]);
+                    if (candidate > best) best = candidate;
+                    versions += 2;
+                }
+                if (best != 0 && tls_version_out) *tls_version_out = best;
             }
         }
 
         q += ext_size;
     }
 
-    return sni[0] || alpn[0] || tls_version_out;
+    return true;
 }
 
 static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
@@ -1515,24 +1575,28 @@ static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
     if (len < 5 || data[0] != 0x16) return false;
 
     uint16_t record_version = (uint16_t)((data[1] << 8) | data[2]);
+    uint16_t record_len = (uint16_t)((data[3] << 8) | data[4]);
     if (tls_version_out) *tls_version_out = record_version;
+    if ((uint32_t)record_len + 5U > len) return false;
 
     if (len < 9) return false;
     const unsigned char *p = data + 5;
     if (p[0] != 0x02) return false;
+    uint32_t hello_len = ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    const unsigned char *hello_end = p + 4 + hello_len;
+    if (hello_end > data + 5 + record_len) return false;
 
     const unsigned char *q = p + 4;
-    if (q + 2 + 32 + 1 > data + len) return false;
+    if (q + 2 + 32 + 1 > hello_end) return false;
     q += 2 + 32;
     uint8_t sid_len = q[0];
     q += 1 + sid_len;
-    if (q + 2 + 1 + 2 > data + len) return false;
-    q += 2 + 1 + 2;
-    if (q + 2 > data + len) return false;
+    if (q + 2 + 1 + 2 > hello_end) return false;
+    q += 2 + 1;
     uint16_t ext_len = (uint16_t)((q[0] << 8) | q[1]);
     q += 2;
     const unsigned char *ext_end = q + ext_len;
-    if (ext_end > data + len) return false;
+    if (ext_end > hello_end) return false;
 
     while (q + 4 <= ext_end) {
         uint16_t ext_type = (uint16_t)((q[0] << 8) | q[1]);
@@ -1556,8 +1620,8 @@ static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
                 }
             }
         } else if (ext_type == 0x002b) {
-            if (ext_size >= 3 && q[0] == 0x02) {
-                uint16_t negotiated = (uint16_t)((q[1] << 8) | q[2]);
+            if (ext_size >= 2) {
+                uint16_t negotiated = (uint16_t)((q[0] << 8) | q[1]);
                 if (tls_version_out) *tls_version_out = negotiated;
             }
         }
@@ -1565,7 +1629,7 @@ static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
         q += ext_size;
     }
 
-    return tls_version_out != NULL || alpn[0];
+    return true;
 }
 
 static const char *tls_version_name(uint16_t v)
@@ -2022,11 +2086,42 @@ static bool emit_json_https(const struct event_t *e, const struct socket_meta *m
     return true;
 }
 
-static bool looks_like_tls(const unsigned char *data, size_t len)
+static bool looks_like_tls_record(const unsigned char *data, size_t len)
 {
     // 通过 record layer 的 type/version 做轻量 TLS 识别。
-    // 这里只做快速启发式判断，不追求严格完整性校验。
-    return len >= 5 && data[0] == 0x16 && data[1] == 0x03;
+    // 这里允许 handshake/ccs/alert/appdata 四类记录头，便于继续向后扫描真实握手消息。
+    if (len < 5 || data[1] != 0x03 || data[2] > 0x04) return false;
+    return data[0] == 0x14 || data[0] == 0x15 || data[0] == 0x16 || data[0] == 0x17;
+}
+
+static ssize_t find_tls_handshake_record_offset(const unsigned char *data, size_t len, uint8_t handshake_type)
+{
+    // 某些服务端首包会在 ServerHello 前夹带 CCS 等兼容记录；
+    // 这里按 TLS record 顺序向后走，直到找到目标握手类型，避免 response 因记录前缀不同而漏掉。
+    if (len < 5) return -1;
+
+    size_t max_scan = len - 5;
+    if (max_scan > 128) max_scan = 128;
+
+    for (size_t i = 0; i <= max_scan; ++i) {
+        if (!looks_like_tls_record(data + i, len - i)) continue;
+
+        size_t offset = i;
+        for (size_t depth = 0; depth < 8 && offset + 5 <= len; ++depth) {
+            const unsigned char *record = data + offset;
+            if (!looks_like_tls_record(record, len - offset)) break;
+
+            size_t record_len = (size_t)(((uint16_t)record[3] << 8) | record[4]);
+            size_t total_len = 5 + record_len;
+            if (offset + total_len > len) return -1;
+
+            if (record[0] == 0x16 && record_len >= 4 && record[5] == handshake_type) {
+                return (ssize_t)offset;
+            }
+            offset += total_len;
+        }
+    }
+    return -1;
 }
 
 static bool parse_packet(const unsigned char *packet, size_t len, uint8_t direction,
@@ -2144,6 +2239,8 @@ static void process_udp_packet(const struct event_t *e, const struct socket_meta
 static bool packet_matches_filters(const struct event_t *e, const struct socket_meta *meta,
                                    const struct monitor_config *cfg);
 
+static bool parse_port(const char *s, uint16_t *out);
+
 static void handle_packet(struct callback_ctx *cb, const unsigned char *packet, size_t len, uint8_t direction)
 {
     // 单包处理入口：解析 packet -> 回填元数据 -> 过滤 -> 分发到 TCP/UDP 处理器。
@@ -2151,16 +2248,15 @@ static void handle_packet(struct callback_ctx *cb, const unsigned char *packet, 
     if (!parse_packet(packet, len, direction, &e)) return;
 
     uint64_t now = now_ms();
-    if (cb->state->sockets.last_refresh_ms == 0 || now - cb->state->sockets.last_refresh_ms > 1000) {
-        rebuild_socket_cache(&cb->state->sockets);
-    }
 
     struct socket_meta meta;
     memset(&meta, 0, sizeof(meta));
     struct socket_meta fallback_meta;
     if (resolve_packet_meta(cb->state, &e, &fallback_meta)) {
         meta = fallback_meta;
-    } else if (rebuild_socket_cache(&cb->state->sockets) &&
+    } else if ((cb->state->sockets.last_refresh_ms == 0 ||
+                now - cb->state->sockets.last_refresh_ms > SOCKET_CACHE_REFRESH_MS) &&
+               rebuild_socket_cache(&cb->state->sockets) &&
                resolve_packet_meta(cb->state, &e, &fallback_meta)) {
         meta = fallback_meta;
     }
@@ -2200,6 +2296,113 @@ static void drain_packet_socket(int sock, struct callback_ctx *cb)
         perror("recvfrom");
         break;
     }
+}
+
+static bool compile_pcap_rules(const char *rules,
+                               struct pcap_rule_insn out[PCAP_RULES_MAX_INSNS],
+                               uint32_t *out_count)
+{
+    // userspace 负责把 pcap 表达式编译成 classic BPF，并筛掉当前内核解释器不支持的 opcode。
+    // 这样既满足 pcaprules 走 classic BPF 指令的要求，也把 verifier 成本控制在可接受范围内。
+    *out_count = 0;
+    if (!rules || rules[0] == '\0') return true;
+
+    struct bpf_program program = {};
+    // 优先使用 pcap_compile_nopcap，避免依赖运行态 pcap 句柄；
+    // 某些环境下如果它不可用或失败，再退回 pcap_open_dead + pcap_compile 取详细错误信息。
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    int nopcap_rc = pcap_compile_nopcap(65535, DLT_EN10MB, &program, rules, 1, PCAP_NETMASK_UNKNOWN);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+    if (nopcap_rc != 0) {
+        pcap_t *pcap = pcap_open_dead(DLT_EN10MB, 65535);
+        if (!pcap) {
+            fprintf(stderr, "failed to create pcap compiler context\n");
+            return false;
+        }
+        if (pcap_compile(pcap, &program, rules, 1, PCAP_NETMASK_UNKNOWN) != 0) {
+            fprintf(stderr, "failed to compile -pcap-rules: %s\n", pcap_geterr(pcap));
+            pcap_close(pcap);
+            return false;
+        }
+        pcap_close(pcap);
+    }
+
+    bool ok = false;
+    if (program.bf_len == 0 || program.bf_len > PCAP_RULES_MAX_INSNS) {
+        fprintf(stderr, "-pcap-rules compiled to %u instructions, limit is %u\n",
+                program.bf_len, PCAP_RULES_MAX_INSNS);
+        goto out;
+    }
+
+    for (u_int i = 0; i < program.bf_len; ++i) {
+        struct pcap_bpf_insn insn = program.bf_insns[i];
+        switch (insn.code) {
+        case BPF_LD | BPF_W | BPF_ABS:
+        case BPF_LD | BPF_H | BPF_ABS:
+        case BPF_LD | BPF_B | BPF_ABS:
+        case BPF_LD | BPF_W | BPF_IND:
+        case BPF_LD | BPF_H | BPF_IND:
+        case BPF_LD | BPF_B | BPF_IND:
+        case BPF_LDX | BPF_B | BPF_MSH:
+        case BPF_JMP | BPF_JA:
+        case BPF_JMP | BPF_JEQ | BPF_K:
+        case BPF_JMP | BPF_JSET | BPF_K:
+        case BPF_RET | BPF_K:
+            out[i].code = insn.code;
+            out[i].jt = insn.jt;
+            out[i].jf = insn.jf;
+            out[i].k = insn.k;
+            break;
+        default:
+            fprintf(stderr, "unsupported classic BPF opcode 0x%x in -pcap-rules\n", insn.code);
+            goto out;
+        }
+    }
+
+    *out_count = (uint32_t)program.bf_len;
+    ok = true;
+
+out:
+    pcap_freecode(&program);
+    return ok;
+}
+
+static bool configure_capture_program(struct bpf_object *obj, const struct monitor_config *cfg)
+{
+    // 把 interface / pcaprules 两个参数写入 BPF map，供 capture_prog 在内核里读取。
+    int config_fd = bpf_object__find_map_fd_by_name(obj, "capture_config_map");
+    int pcap_fd = bpf_object__find_map_fd_by_name(obj, "pcap_insns");
+    if (config_fd < 0 || pcap_fd < 0) {
+        fprintf(stderr, "failed to find capture config maps\n");
+        return false;
+    }
+
+    struct capture_config capture_cfg = {
+        .ifindex = cfg->ifindex > 0 ? (uint32_t)cfg->ifindex : 0,
+        .pcap_len = 0,
+    };
+    struct pcap_rule_insn insns[PCAP_RULES_MAX_INSNS];
+    memset(insns, 0, sizeof(insns));
+    if (!compile_pcap_rules(cfg->pcap_rules, insns, &capture_cfg.pcap_len)) return false;
+
+    for (uint32_t i = 0; i < capture_cfg.pcap_len; ++i) {
+        if (bpf_map_update_elem(pcap_fd, &i, &insns[i], BPF_ANY) != 0) {
+            perror("bpf_map_update_elem(pcap_insns)");
+            return false;
+        }
+    }
+
+    uint32_t key = 0;
+    if (bpf_map_update_elem(config_fd, &key, &capture_cfg, BPF_ANY) != 0) {
+        perror("bpf_map_update_elem(capture_config_map)");
+        return false;
+    }
+    return true;
 }
 
 static void process_tcp_flow(struct monitor_state *state, struct monitor_config *cfg,
@@ -2256,11 +2459,15 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 
     // 先判定是否为 TLS，避免把 HTTPS 流量误按 HTTP 解析。
     // 一旦进入 TLS 分支，这条 flow 就会被视作加密会话，后续优先输出 TLS/SNI/ALPN 信息。
-    if (!flow->tls_emitted && looks_like_tls(flow->tcp_buffer.data, flow->tcp_buffer.len)) {
+    // 这里允许缓冲前面有少量噪声前缀，以适应抓包从连接中途接入或首段不完整的情况。
+    ssize_t req_off = !flow->tls_emitted ? find_tls_handshake_record_offset(flow->tcp_buffer.data, flow->tcp_buffer.len, 0x01) : -1;
+    if (req_off >= 0) {
+        const unsigned char *tls_data = flow->tcp_buffer.data + req_off;
+        size_t tls_len = flow->tcp_buffer.len - (size_t)req_off;
         char sni[256] = {0};
         char alpn[128] = {0};
         uint16_t ver = 0;
-        if (parse_tls_clienthello(flow->tcp_buffer.data, (uint32_t)flow->tcp_buffer.len,
+        if (parse_tls_clienthello(tls_data, (uint32_t)tls_len,
                                   sni, sizeof(sni), alpn, sizeof(alpn), &ver)) {
             if (sni[0]) {
                 strncpy(flow->domain, sni, sizeof(flow->domain) - 1);
@@ -2268,22 +2475,28 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
                 flow->has_domain = true;
             }
             emit_json_https(e, meta, "request", http_version_from_alpn(alpn), tls_version_name(ver),
-                            sni, alpn, ver, flow->tcp_buffer.data, flow->tcp_buffer.len, "tcp");
+                            sni, alpn, ver, tls_data, tls_len, "tcp");
             flow->tls_emitted = true;
             buffer_consume(&flow->tcp_buffer, flow->tcp_buffer.len);
             return;
         }
+    }
 
-        memset(alpn, 0, sizeof(alpn));
-        ver = 0;
-        if (parse_tls_serverhello(flow->tcp_buffer.data, (uint32_t)flow->tcp_buffer.len,
+    ssize_t resp_off = !flow->tls_emitted ? find_tls_handshake_record_offset(flow->tcp_buffer.data, flow->tcp_buffer.len, 0x02) : -1;
+    if (resp_off >= 0) {
+        const unsigned char *tls_data = flow->tcp_buffer.data + resp_off;
+        size_t tls_len = flow->tcp_buffer.len - (size_t)resp_off;
+        char sni[256] = {0};
+        char alpn[128] = {0};
+        uint16_t ver = 0;
+        if (parse_tls_serverhello(tls_data, (uint32_t)tls_len,
                                   alpn, sizeof(alpn), &ver)) {
             if (!sni[0] && peer && peer->has_domain) {
                 strncpy(sni, peer->domain, sizeof(sni) - 1);
                 sni[sizeof(sni) - 1] = '\0';
             }
             emit_json_https(e, meta, "response", http_version_from_alpn(alpn), tls_version_name(ver),
-                            sni, alpn, ver, flow->tcp_buffer.data, flow->tcp_buffer.len, "tcp");
+                            sni, alpn, ver, tls_data, tls_len, "tcp");
             flow->tls_emitted = true;
             buffer_consume(&flow->tcp_buffer, flow->tcp_buffer.len);
             return;
@@ -2382,8 +2595,9 @@ static void usage(const char *prog)
     // 打印命令行帮助。
     // 这里把所有参数一次性列出来，方便用户直接复制命令行模板。
     fprintf(stderr,
-            "Usage: %s [-interface iface] [-direction ingress|egress] [-pid pid] [-cpid pid] [-crid id] [-comm comm] [-src spec] [-dst spec] [-sport port] [-dport port] [-max-body-size n]\n"
+            "Usage: %s [-interface iface] [-pcap-rules expr] [-direction ingress|egress] [-pid pid] [-cpid pid] [-crid id] [-comm comm] [-src spec] [-dst spec] [-sport port] [-dport port] [-max-body-size n]\n"
             "  -interface      monitor interface\n"
+            "  -pcap-rules     optional kernel-side pcap filter, empty by default, max 256 instructions\n"
             "  -direction      ingress | egress, default both\n"
             "  -pid            process pid filter\n"
             "  -cpid           container pid filter\n"
@@ -2423,6 +2637,7 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
     memset(cfg, 0, sizeof(*cfg));
     cfg->direction_filter = -1;
     cfg->body_limit = -1;
+    cfg->pcap_rules = "";
 
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
@@ -2431,6 +2646,8 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
             return false;
         } else if (!strcmp(arg, "-interface") && i + 1 < argc) {
             cfg->ifname = argv[++i];
+        } else if (!strcmp(arg, "-pcap-rules") && i + 1 < argc) {
+            cfg->pcap_rules = argv[++i];
         } else if (!strcmp(arg, "-direction") && i + 1 < argc) {
             const char *v = argv[++i];
             if (!strcmp(v, "ingress")) cfg->direction_filter = 0;
@@ -2508,6 +2725,7 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
 }
 
 static bool open_and_attach_bpf(int sock_fd,
+                                const struct monitor_config *cfg,
                                 struct bpf_object **obj_out,
                                 struct bpf_link **tcp_connect_link_out,
                                 struct bpf_link **tcp_accept_link_out,
@@ -2528,13 +2746,20 @@ static bool open_and_attach_bpf(int sock_fd,
         bpf_object__close(obj);
         return false;
     }
+
+    if (!configure_capture_program(obj, cfg)) {
+        bpf_object__close(obj);
+        return false;
+    }
+
     // 下面这几个 kprobe/kretprobe 负责把“哪个进程在用这个 socket”持续写回 map。
     struct bpf_program *tcp_connect_prog = bpf_object__find_program_by_name(obj, "track_tcp_connect");
     struct bpf_program *tcp_accept_prog = bpf_object__find_program_by_name(obj, "track_tcp_accept");
     struct bpf_program *tcp_send_prog = bpf_object__find_program_by_name(obj, "track_tcp_sendmsg");
     struct bpf_program *udp_send_prog = bpf_object__find_program_by_name(obj, "track_udp_sendmsg");
+    struct bpf_program *capture_prog = bpf_object__find_program_by_name(obj, "capture_prog");
     if (!tcp_connect_prog || !tcp_accept_prog ||
-        !tcp_send_prog || !udp_send_prog) {
+        !tcp_send_prog || !udp_send_prog || !capture_prog) {
         fprintf(stderr, "failed to find kprobe programs\n");
         bpf_object__close(obj);
         return false;
@@ -2570,30 +2795,21 @@ static bool open_and_attach_bpf(int sock_fd,
         bpf_link__destroy(tcp_send_link);
         bpf_link__destroy(tcp_accept_link);
         bpf_link__destroy(tcp_connect_link);
-        bpf_link__destroy(tcp_send_link);
         bpf_object__close(obj);
         return false;
     }
 
-    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "capture_prog");
-    if (!prog) {
-        fprintf(stderr, "failed to find capture_prog\n");
-        bpf_link__destroy(udp_send_link);
-        bpf_link__destroy(tcp_send_link);
-        bpf_object__close(obj);
-        return false;
-    }
-
-    int prog_fd = bpf_program__fd(prog);
+    int prog_fd = bpf_program__fd(capture_prog);
     if (setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_BPF, &prog_fd, sizeof(prog_fd)) < 0) {
         perror("SO_ATTACH_BPF");
-        bpf_link__destroy(tcp_accept_link);
-        bpf_link__destroy(tcp_connect_link);
         bpf_link__destroy(udp_send_link);
         bpf_link__destroy(tcp_send_link);
+        bpf_link__destroy(tcp_accept_link);
+        bpf_link__destroy(tcp_connect_link);
         bpf_object__close(obj);
         return false;
     }
+
     *obj_out = obj;
     if (tcp_connect_link_out) *tcp_connect_link_out = tcp_connect_link;
     if (tcp_accept_link_out) *tcp_accept_link_out = tcp_accept_link;
@@ -2654,7 +2870,8 @@ int main(int argc, char **argv)
     struct bpf_link *tcp_accept_link = NULL;
     struct bpf_link *tcp_sendmsg_link = NULL;
     struct bpf_link *udp_sendmsg_link = NULL;
-    if (!open_and_attach_bpf(sock, &obj,
+    if (!open_and_attach_bpf(sock, &cfg,
+                             &obj,
                              &tcp_connect_link,
                              &tcp_accept_link,
                              &tcp_sendmsg_link,
@@ -2665,6 +2882,7 @@ int main(int argc, char **argv)
 
     struct monitor_state state;
     memset(&state, 0, sizeof(state));
+    socket_cache_reset(&state.sockets);
     state.flow_owner_map_fd = bpf_object__find_map_fd_by_name(obj, "flow_owner_map");
     state.last_gc_ms = 0;
     state.sockets.max_items = SOCKET_CACHE_MAX_ITEMS;
@@ -2674,8 +2892,10 @@ int main(int argc, char **argv)
 
     struct callback_ctx cb_ctx = { .state = &state, .cfg = &cfg };
 
-    fprintf(stderr, "listening for HTTP/HTTPS events on %s, Ctrl-C to exit\n",
-            cfg.ifname ? cfg.ifname : "all interfaces");
+    fprintf(stderr, "listening on %s%s%s, Ctrl-C to exit\n",
+            cfg.ifname ? cfg.ifname : "all interfaces",
+            cfg.pcap_rules[0] ? ", pcap filter: " : "",
+            cfg.pcap_rules[0] ? cfg.pcap_rules : "");
 
     while (!exiting) {
         struct pollfd fds[1];
@@ -2702,7 +2922,7 @@ int main(int argc, char **argv)
     bpf_object__close(obj);
     close(sock);
 
-    free(state.sockets.items);
+    socket_cache_reset(&state.sockets);
     for (size_t i = 0; i < FLOW_BUCKETS; ++i) {
         struct flow_state *flow = state.flows[i];
         while (flow) {
