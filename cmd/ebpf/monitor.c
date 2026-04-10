@@ -760,6 +760,7 @@ static bool inode_owner_add(struct proc_owner **owners, size_t *len, size_t *cap
 static bool read_uid_file(pid_t pid, uid_t *uid)
 {
     // 从 /proc/<pid>/status 读取真实 UID，用作用户身份回填。
+    // 这里直接读取内核导出的真实用户 ID，不做任何推断，避免把 euid/fsuid 之类的值混进来。
     char path[64];
     snprintf(path, sizeof(path), "/proc/%d/status", pid);
     FILE *fp = fopen(path, "r");
@@ -784,6 +785,7 @@ static bool read_uid_file(pid_t pid, uid_t *uid)
 static bool read_cr_pid_file(pid_t pid, uint32_t *cr_pid)
 {
     // 从 NSpid 行读取最内层 PID，也就是容器视角下的 pid。
+    // NSpid 里可能包含多级 namespace 的 pid；最右侧那个值才是当前 namespace 看到的 pid。
     char path[64];
     snprintf(path, sizeof(path), "/proc/%d/status", pid);
     FILE *fp = fopen(path, "r");
@@ -818,6 +820,7 @@ static bool read_cr_pid_file(pid_t pid, uint32_t *cr_pid)
 static bool read_cr_id_file(pid_t pid, uint64_t *cr_id)
 {
     // 读取 /proc/<pid>/ns/pid 的 inode，作为容器 PID namespace 标识。
+    // 这个 inode 对同一 namespace 是稳定的，适合做 cr_id 过滤键。
     char path[64];
     char link_target[128];
     snprintf(path, sizeof(path), "/proc/%d/ns/pid", pid);
@@ -850,6 +853,7 @@ static bool read_comm_file(pid_t pid, char comm[COMM_LEN])
 static bool build_inode_owners(struct proc_owner **owners_out, size_t *owners_len_out)
 {
     // 扫描 /proc：先拿到进程基础信息，再遍历 fd 收集 socket inode，形成 inode -> owner 映射。
+    // 这一步是 userspace 兜底索引，目标是把“socket 属于谁”尽量恢复出来。
     DIR *proc = opendir("/proc");
     if (!proc) return false;
 
@@ -931,6 +935,7 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
                                  struct socket_cache *cache)
 {
     // 从 /proc/net/tcp* 和 /proc/net/udp* 解析 socket 视图，补齐 address/port/inode 对应关系。
+    // 这里拿到的是系统当前的 socket 快照，不是网络包本身；它主要用于 BPF map 缺失时的回填。
     FILE *fp = fopen(path, "r");
     if (!fp) return false;
 
@@ -967,6 +972,7 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
         memset(&meta, 0, sizeof(meta));
         meta.family = family;
         meta.proto = proto;
+        // 把本地地址、对端地址、本地端口、对端端口都留住，后面可以直接和 packet 里的五元组做比对。
         memcpy(meta.saddr, local_addr, 16);
         memcpy(meta.daddr, remote_addr, 16);
         meta.sport = local_port;
@@ -975,6 +981,7 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
 
         const struct proc_owner *owner = owner_find(owners, owners_len, inode);
         if (owner) {
+            // 如果 inode 能匹配到进程 owner，就把宿主 pid、容器 pid、namespace id 和 comm 一起补齐。
             meta.pid = owner->pid;
             meta.uid = owner->uid;
             meta.cr_id = owner->cr_id;
@@ -1001,6 +1008,7 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
 static bool rebuild_socket_cache(struct socket_cache *cache)
 {
     // 重新构建 socket cache：先整理 inode owner，再遍历各类 /proc/net 表项。
+    // 这个步骤相当于重新建立一份“socket -> owner”的索引表，后面解析包时就能直接查。
     struct proc_owner *owners = NULL;
     size_t owners_len = 0;
     if (!build_inode_owners(&owners, &owners_len)) {
@@ -1113,6 +1121,7 @@ static bool flow_owner_map_lookup(const struct monitor_state *state,
                                   struct socket_meta *meta)
 {
     // 优先查 BPF 侧 map，失败后再走 userspace 缓存回填。
+    // BPF 侧的信息通常最接近真实执行上下文，因此这里优先级最高。
     if (state->flow_owner_map_fd < 0) return false;
 
     struct flow_owner_key key;
@@ -1144,6 +1153,7 @@ static const struct socket_meta *resolve_packet_meta(const struct monitor_state 
                                                      struct socket_meta *scratch)
 {
     // 元数据解析优先级：BPF map -> 监听 socket -> /proc socket cache。
+    // 这个顺序是为了尽量先拿到最准确的归属，再退回到更慢但更稳的 userspace 快照。
     if (flow_owner_map_lookup(state, e, scratch)) return scratch;
 
     if (e->l4_proto == IPPROTO_TCP) {
@@ -1660,6 +1670,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
                                struct http_message *msg)
 {
     // HTTP 报文解析主入口：识别请求/响应、解析头部、再根据 body 规则决定是否截取 body。
+    // 这里的原则是：只要报文还不完整，就直接返回 false，让上层继续缓冲，不提前消费数据。
     memset(msg, 0, sizeof(*msg));
 
     if (len < 4) return false;
@@ -1686,6 +1697,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
 
     if (is_resp) {
         msg->response = true;
+        // 响应行一般形如 HTTP/1.1 200 OK，这里只拆版本和状态码，原因短语不作为结构化字段单独保存。
         char *sp1 = strchr(line, ' ');
         if (sp1) {
             size_t version_len = (size_t)(sp1 - line);
@@ -1702,6 +1714,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
             strncpy(msg->version, line, sizeof(msg->version) - 1);
         }
     } else {
+        // 请求行一般形如 METHOD SP PATH SP VERSION，这里只提取 method、path 和 version。
         char *sp1 = strchr(line, ' ');
         if (!sp1) {
             free(headers_copy);
@@ -1741,6 +1754,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
     if (!no_body_request && !no_body_response) {
         if (chunked) {
             // chunked body 需要先拼接块；如果 body_limit < 0，则只保留协议骨架，不保留 body。
+            // 也就是说，这里仍然要判断“这条 HTTP 是否完整”，只是 body 内容不记录。
             if (body_limit < 0) {
                 msg->body_len = 0;
                 msg->consumed = header_end;
@@ -1761,6 +1775,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
         }
 
         // 非 chunked 时，根据 Content-Length / 已见字节数 / body_limit 决定保留多少。
+        // 如果 body 还没到齐，返回 false，把半包留在缓冲里，等下一次 TCP 分段继续拼。
         size_t body_to_keep = 0;
         if (body_limit < 0) {
             body_to_keep = 0;
@@ -1828,6 +1843,7 @@ static bool emit_json_http(const struct event_t *e, const struct socket_meta *me
                            const unsigned char *body, size_t body_len)
 {
     // HTTP 事件输出：把事件、元数据、headers/body 组装成一行 JSON。
+    // 这层输出尽量保持字段顺序稳定，便于后续 grep、jq、日志平台和人工阅读。
     char *json = NULL;
     size_t json_len = 0;
     FILE *out = open_memstream(&json, &json_len);
@@ -1926,6 +1942,7 @@ static bool emit_json_https(const struct event_t *e, const struct socket_meta *m
                             const char *transport)
 {
     // HTTPS 事件输出：保留握手元数据，不尝试解密 payload。
+    // HTTPS 的正文通常是密文，所以这里重点保留的是握手层能直接观察到的明文元信息。
     char *json = NULL;
     size_t json_len = 0;
     FILE *out = open_memstream(&json, &json_len);
@@ -2008,6 +2025,7 @@ static bool emit_json_https(const struct event_t *e, const struct socket_meta *m
 static bool looks_like_tls(const unsigned char *data, size_t len)
 {
     // 通过 record layer 的 type/version 做轻量 TLS 识别。
+    // 这里只做快速启发式判断，不追求严格完整性校验。
     return len >= 5 && data[0] == 0x16 && data[1] == 0x03;
 }
 
@@ -2188,6 +2206,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
                              const struct event_t *e, const struct socket_meta *meta)
 {
     // TCP 主处理路径：按 flow 缓冲数据，再尝试 TLS/HTTP 解析，成功后输出 JSON。
+    // 这部分是 userspace 的核心状态机：先把同一条连接的数据聚到一起，再决定它到底是 HTTP 还是 TLS。
     struct flow_key key;
     memset(&key, 0, sizeof(key));
     key.family = e->family;
@@ -2203,6 +2222,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
     flow->last_seen_ms = now_ms();
 
     // 抓到可用元数据时，先把它写进 flow，后续缺失时可以直接复用。
+    // 这样做的目的是：一旦某个方向先识别到 owner，后面同一条流的另一侧也能共享这份身份信息。
     if (meta && meta->pid > 0) {
         flow->pid = meta->pid;
         flow->uid = meta->uid;
@@ -2219,6 +2239,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
     struct socket_meta peer_meta;
     memset(&peer_meta, 0, sizeof(peer_meta));
     // 当前方向没有拿到归属时，尝试借用对端已经解析到的进程信息。
+    // 代理、复用连接、请求/响应分离等场景里，这个兜底能显著减少“这一包没有 owner”的情况。
     if (meta->pid <= 0 && peer && peer->pid > 0) {
         peer_meta.pid = peer->pid;
         peer_meta.uid = peer->uid;
@@ -2230,9 +2251,11 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
     }
 
     // 先把当前包的 payload 拼到流缓冲里，再进行协议识别。
+    // 如果这里失败，通常表示缓冲扩容或内存压力出了问题；当前包就不继续参与解析。
     if (!buffer_append(&flow->tcp_buffer, e->payload, e->cap_len)) return;
 
     // 先判定是否为 TLS，避免把 HTTPS 流量误按 HTTP 解析。
+    // 一旦进入 TLS 分支，这条 flow 就会被视作加密会话，后续优先输出 TLS/SNI/ALPN 信息。
     if (!flow->tls_emitted && looks_like_tls(flow->tcp_buffer.data, flow->tcp_buffer.len)) {
         char sni[256] = {0};
         char alpn[128] = {0};
@@ -2268,6 +2291,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
     }
 
     // HTTP 可能跨多个 TCP 包到达，所以这里循环尝试解析；不完整就保留缓冲继续等。
+    // 循环的意思是：当前缓冲里如果已经包含多个完整 HTTP 报文，就尽量一次消费完。
     while (flow->tcp_buffer.len > 0) {
         struct http_message msg;
         if (!parse_http_message(flow->tcp_buffer.data, flow->tcp_buffer.len, cfg->body_limit, &msg)) {
@@ -2277,6 +2301,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
         if (msg.consumed == 0 || msg.consumed > flow->tcp_buffer.len) break;
 
         // 当前报文没有 Host 时，尝试继承对端已经识别出的域名。
+        // 这个继承动作主要是为了 response 侧没有 Host 头时，仍然能保留同一条会话的域名上下文。
         if (!msg.host[0] && peer && peer->has_domain) {
             strncpy(msg.host, peer->domain, sizeof(msg.host) - 1);
             msg.host[sizeof(msg.host) - 1] = '\0';
@@ -2291,12 +2316,15 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
         const unsigned char *body = NULL;
         size_t body_len = msg.body_len;
         if (msg.body_copy && msg.body_len > 0) {
+            // chunked body 的内容已经解析并复制到临时缓冲，这里直接用临时副本输出即可。
             body = msg.body_copy;
         } else if (msg.body_len > 0 && msg.header_end + msg.body_len <= flow->tcp_buffer.len) {
+            // 非 chunked body 且当前缓冲已经完整包含 body 时，直接引用原始缓冲，避免重复拷贝。
             body = flow->tcp_buffer.data + msg.header_end;
         }
 
         // 输出 HTTP 事件，然后消费掉已经成功解析的字节。
+        // 消费后剩余部分要么是下一条 HTTP 报文，要么是下一段 TCP 分片的残留。
         emit_json_http(e, meta, &msg, flow->tcp_buffer.data, msg.header_end, body, body_len);
         http_message_free(&msg);
         buffer_consume(&flow->tcp_buffer, msg.consumed);
@@ -2307,6 +2335,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 static void process_udp_packet(const struct event_t *e, const struct socket_meta *meta)
 {
     // UDP 侧主要看 QUIC Initial 中的 TLS ClientHello，不做完整 QUIC 解密。
+    // 这里的目标只是从明文握手里提取 SNI/ALPN，给 HTTPS over UDP 留下可读上下文。
     if (e->cap_len < 6) return;
     const unsigned char *payload = e->payload;
     uint32_t payload_len = e->cap_len;
@@ -2327,6 +2356,7 @@ static bool packet_matches_filters(const struct event_t *e, const struct socket_
                                    const struct monitor_config *cfg)
 {
     // 过滤顺序尽量从便宜到昂贵：方向、端口、网段、进程/容器属性。
+    // 先做简单数值判断，可以尽早返回，减少后面元数据比对的开销。
     if (cfg->direction_filter >= 0 && e->direction != (uint8_t)cfg->direction_filter) return false;
 
     if (cfg->have_sport_filter && e->direction == 0 && e->sport != cfg->sport_filter) return false;
@@ -2336,6 +2366,7 @@ static bool packet_matches_filters(const struct event_t *e, const struct socket_
     if (!cidr_set_accepts(&cfg->dst_rules, e->family, e->daddr)) return false;
 
     if (cfg->have_pid_filter || cfg->have_cpid_filter || cfg->have_crid_filter || cfg->have_comm_filter) {
+        // 一旦启用了进程类过滤，就必须先有 meta，否则无法判断 pid / cpid / crid / comm。
         if (!meta) return false;
         if (cfg->have_pid_filter && meta->pid != cfg->pid_filter) return false;
         if (cfg->have_cpid_filter && meta->cr_pid != cfg->cpid_filter) return false;
@@ -2349,6 +2380,7 @@ static bool packet_matches_filters(const struct event_t *e, const struct socket_
 static void usage(const char *prog)
 {
     // 打印命令行帮助。
+    // 这里把所有参数一次性列出来，方便用户直接复制命令行模板。
     fprintf(stderr,
             "Usage: %s [-interface iface] [-direction ingress|egress] [-pid pid] [-cpid pid] [-crid id] [-comm comm] [-src spec] [-dst spec] [-sport port] [-dport port] [-max-body-size n]\n"
             "  -interface      monitor interface\n"
@@ -2387,6 +2419,7 @@ static bool parse_port(const char *s, uint16_t *out)
 static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
 {
     // 解析命令行参数并填充 monitor_config。
+    // 这一层只做字符串到字段的映射，不做更深的业务判定。
     memset(cfg, 0, sizeof(*cfg));
     cfg->direction_filter = -1;
     cfg->body_limit = -1;
@@ -2412,6 +2445,7 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
                 fprintf(stderr, "Invalid pid\n");
                 return false;
             }
+            // pid 是宿主机视角的进程号。
             cfg->have_pid_filter = true;
             cfg->pid_filter = (pid_t)pid;
         } else if (!strcmp(arg, "-cpid") && i + 1 < argc) {
@@ -2420,6 +2454,7 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
                 fprintf(stderr, "Invalid cpid\n");
                 return false;
             }
+            // cpid 是容器视角下的 PID。
             cfg->have_cpid_filter = true;
             cfg->cpid_filter = (uint32_t)cpid;
         } else if (!strcmp(arg, "-crid") && i + 1 < argc) {
@@ -2428,6 +2463,7 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
                 fprintf(stderr, "Invalid crid\n");
                 return false;
             }
+            // crid 是 PID namespace 的 inode 号，也就是容器 namespace 的身份标识。
             cfg->have_crid_filter = true;
             cfg->crid_filter = (uint64_t)crid;
         } else if (!strcmp(arg, "-comm") && i + 1 < argc) {
@@ -2479,6 +2515,7 @@ static bool open_and_attach_bpf(int sock_fd,
                                 struct bpf_link **udp_sendmsg_link_out)
 {
     // 直接从内存中的嵌入字节码打开 BPF 对象，避免依赖磁盘上的 ebpf_capture.o 文件。
+    // 这样打包出来的 monitor 就是一个自包含二进制，不需要额外分发 .o 文件。
     size_t obj_size = (size_t)(_binary_ebpf_capture_o_end - _binary_ebpf_capture_o_start);
     struct bpf_object *obj = bpf_object__open_mem(_binary_ebpf_capture_o_start, obj_size, NULL);
     if (libbpf_get_error(obj)) {
@@ -2491,6 +2528,7 @@ static bool open_and_attach_bpf(int sock_fd,
         bpf_object__close(obj);
         return false;
     }
+    // 下面这几个 kprobe/kretprobe 负责把“哪个进程在用这个 socket”持续写回 map。
     struct bpf_program *tcp_connect_prog = bpf_object__find_program_by_name(obj, "track_tcp_connect");
     struct bpf_program *tcp_accept_prog = bpf_object__find_program_by_name(obj, "track_tcp_accept");
     struct bpf_program *tcp_send_prog = bpf_object__find_program_by_name(obj, "track_tcp_sendmsg");
@@ -2567,6 +2605,7 @@ static bool open_and_attach_bpf(int sock_fd,
 int main(int argc, char **argv)
 {
     // 程序主入口：解析参数、初始化 socket、装载 BPF、进入事件循环。
+    // 整体流程可以理解成：先准备抓包环境，再把 BPF 和 packet socket 绑起来，最后持续消费事件。
     struct monitor_config cfg;
     if (!parse_args(argc, argv, &cfg)) return 1;
 
