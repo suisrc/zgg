@@ -13,7 +13,7 @@ import (
 
 var (
 	Logf = func(format string, v ...any) {
-		if C.Logger.File {
+		if G.Logger.File {
 			slog.Info(strings.TrimSuffix(fmt.Sprintf(format, v...), "\n"), "file", LogTrace(1, -1))
 		} else {
 			slog.Info(strings.TrimSuffix(fmt.Sprintf(format, v...), "\n"))
@@ -21,7 +21,7 @@ var (
 	}
 
 	Logn = func(v ...any) {
-		if C.Logger.File {
+		if G.Logger.File {
 			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
 		} else {
 			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
@@ -29,7 +29,7 @@ var (
 	}
 
 	Logz = func(depth int, v ...any) {
-		if C.Logger.File {
+		if G.Logger.File {
 			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(depth+1, -1))
 		} else {
 			slog.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
@@ -37,7 +37,7 @@ var (
 	}
 
 	Exit = func(v ...any) {
-		if C.Logger.File {
+		if G.Logger.File {
 			slog.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
 		} else {
 			slog.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
@@ -73,7 +73,7 @@ func Stdout() *slog.Logger {
 
 // 向默认控制台输出
 func LogTty(v ...any) {
-	if C.Logger.File {
+	if G.Logger.File {
 		stdLogger.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
 	} else {
 		stdLogger.Info(strings.TrimSuffix(LogSprint(" ", v...), "\n"))
@@ -82,7 +82,7 @@ func LogTty(v ...any) {
 
 // 向默认控制台输出
 func ErrTty(v ...any) {
-	if C.Logger.File {
+	if G.Logger.File {
 		stdLogger.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"), "file", LogTrace(1, -1))
 	} else {
 		stdLogger.Error(strings.TrimSuffix(LogSprint(" ", v...), "\n"))

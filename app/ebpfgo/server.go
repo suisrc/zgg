@@ -14,7 +14,7 @@ import (
 	"github.com/suisrc/zgg/z/zc"
 )
 
-var C = struct {
+var A = struct {
 	Ebpfgo Config `json:"ebpfgo"`
 }{
 	Ebpfgo: Config{
@@ -29,24 +29,24 @@ func init() {
 }
 
 func Init3(ifn InitFunc) {
-	z.Config(&C)
+	z.Config(&A)
 
-	flag.BoolVar(&C.Ebpfgo.Disabled, "e3disabled", false, "是否禁用 ebpfgo")
-	flag.StringVar(&C.Ebpfgo.IfName, "e3ifname", "", "抓包网卡名称")
-	flag.StringVar(&C.Ebpfgo.PcapRules, "e3pcap", "", "pcap 过滤表达式")
-	flag.StringVar(&C.Ebpfgo.Direction, "e3direction", "", "流量方向: ingress|egress")
-	flag.UintVar(&C.Ebpfgo.PID, "e3pid", 0, "PID 过滤值")
-	flag.UintVar(&C.Ebpfgo.CPID, "e3cpid", 0, "容器 PID 过滤值")
-	flag.Uint64Var(&C.Ebpfgo.CRID, "e3crid", 0, "容器命名空间过滤值")
-	flag.StringVar(&C.Ebpfgo.Comm, "e3comm", "", "进程 comm 过滤")
-	flag.StringVar(&C.Ebpfgo.SrcSpec, "e3src", "", "源地址 CIDR 过滤")
-	flag.StringVar(&C.Ebpfgo.DstSpec, "e3dst", "", "目标地址 CIDR 过滤")
-	flag.UintVar(&C.Ebpfgo.Sport, "e3sport", 0, "源端口过滤值")
-	flag.UintVar(&C.Ebpfgo.Dport, "e3dport", 0, "目标端口过滤值")
-	flag.Int64Var(&C.Ebpfgo.MaxBodySize, "e3maxbodysize", -1, "HTTP body 保留上限，默认 -1")
+	flag.BoolVar(&A.Ebpfgo.Disabled, "e3disabled", false, "是否禁用 ebpfgo")
+	flag.StringVar(&A.Ebpfgo.IfName, "e3ifname", "", "抓包网卡名称")
+	flag.StringVar(&A.Ebpfgo.PcapRules, "e3pcap", "", "pcap 过滤表达式")
+	flag.StringVar(&A.Ebpfgo.Direction, "e3direction", "", "流量方向: ingress|egress")
+	flag.UintVar(&A.Ebpfgo.PID, "e3pid", 0, "PID 过滤值")
+	flag.UintVar(&A.Ebpfgo.CPID, "e3cpid", 0, "容器 PID 过滤值")
+	flag.Uint64Var(&A.Ebpfgo.CRID, "e3crid", 0, "容器命名空间过滤值")
+	flag.StringVar(&A.Ebpfgo.Comm, "e3comm", "", "进程 comm 过滤")
+	flag.StringVar(&A.Ebpfgo.SrcSpec, "e3src", "", "源地址 CIDR 过滤")
+	flag.StringVar(&A.Ebpfgo.DstSpec, "e3dst", "", "目标地址 CIDR 过滤")
+	flag.UintVar(&A.Ebpfgo.Sport, "e3sport", 0, "源端口过滤值")
+	flag.UintVar(&A.Ebpfgo.Dport, "e3dport", 0, "目标端口过滤值")
+	flag.Int64Var(&A.Ebpfgo.MaxBodySize, "e3maxbodysize", -1, "HTTP body 保留上限，默认 -1")
 
 	z.Register("14-ebpfgo", func(zgg *z.Zgg) z.Closed {
-		cfg := normalizeInitConfig(C.Ebpfgo)
+		cfg := normalizeInitConfig(A.Ebpfgo)
 		if cfg.Disabled {
 			z.Logn("[_ebpfgo_]: disabled")
 			return nil

@@ -40,24 +40,24 @@ type InitKwratFunc func(hdl *KwratHandler, zgg *z.Zgg)
 
 func InitKwrat(ifn InitKwratFunc) {
 
-	flag.BoolVar(&C.Kwrat2.Disabled, "p2disabled", true, "是否禁用proxy2")
-	flag.StringVar(&C.Kwrat2.AddrPort, "p2addr", "0.0.0.0:12012", "代理服务器地址和端口")
-	flag.StringVar(&C.Kwrat2.CrtCA, "p2crt", "", "CA证书文件")
-	flag.StringVar(&C.Kwrat2.KeyCA, "p2key", "", "CA私钥文件")
-	flag.BoolVar(&C.Kwrat2.IsSAA, "p2saa", false, "是否为中间证书")
-	flag.StringVar(&C.Kwrat2.Expiry, "p2exp", "20y", "创建根证书的有效期")
-	flag.StringVar(&C.Kwrat2.Logger, "p2logger", "none", "日志发送地址, none: 表示不记录日志")
-	flag.BoolVar(&C.Kwrat2.LogBody, "p2logbody", false, "记录日志中的Body")
-	flag.IntVar(&C.Kwrat2.Record, "p2record", -1, "记录级别")
+	flag.BoolVar(&G.Kwrat2.Disabled, "p2disabled", true, "是否禁用proxy2")
+	flag.StringVar(&G.Kwrat2.AddrPort, "p2addr", "0.0.0.0:12012", "代理服务器地址和端口")
+	flag.StringVar(&G.Kwrat2.CrtCA, "p2crt", "", "CA证书文件")
+	flag.StringVar(&G.Kwrat2.KeyCA, "p2key", "", "CA私钥文件")
+	flag.BoolVar(&G.Kwrat2.IsSAA, "p2saa", false, "是否为中间证书")
+	flag.StringVar(&G.Kwrat2.Expiry, "p2exp", "20y", "创建根证书的有效期")
+	flag.StringVar(&G.Kwrat2.Logger, "p2logger", "none", "日志发送地址, none: 表示不记录日志")
+	flag.BoolVar(&G.Kwrat2.LogBody, "p2logbody", false, "记录日志中的Body")
+	flag.IntVar(&G.Kwrat2.Record, "p2record", -1, "记录级别")
 
 	z.Register("12-kwrat2", func(zgg *z.Zgg) z.Closed {
-		if C.Kwrat2.Disabled {
+		if G.Kwrat2.Disabled {
 			z.Logn("[_kwrat2_]: disabled")
 			return nil
 		}
 
 		// ...
-		switch C.Kwrat2.Record {
+		switch G.Kwrat2.Record {
 		case 0:
 			RecordFrowardFunc = gte.ToRecord0
 		case 1:
@@ -65,11 +65,11 @@ func InitKwrat(ifn InitKwratFunc) {
 		}
 
 		hdl := new(KwratHandler)
-		if err := hdl.Init(C.Kwrat2); err != nil {
+		if err := hdl.Init(G.Kwrat2); err != nil {
 			zgg.ServeStop("register kwrat2 error,", err.Error())
 			return nil
 		}
-		zgg.Servers.Add(z.NewServer("(KWRAT)", hdl, C.Kwrat2.AddrPort, nil))
+		zgg.Servers.Add(z.NewServer("(KWRAT)", hdl, G.Kwrat2.AddrPort, nil))
 
 		if ifn != nil {
 			ifn(hdl, zgg) // 初始化方法
@@ -87,7 +87,7 @@ func (hdl *KwratHandler) Init(cfg KwratConfig) error {
 	if cfg.Logger != "none" {
 		hdl.GtwDefault.RecordPool = gte.NewRecorder(
 			cfg.Logger,
-			zc.C.Logger.Pty,
+			zc.G.Logger.Pty,
 			cfg.LogTty,
 			cfg.LogBody,
 			RecordFrowardFunc,

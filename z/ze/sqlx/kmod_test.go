@@ -49,7 +49,7 @@ type AuthzRepo struct {
 }
 
 func genDB() *sqlx.DB {
-	sqlx.C.Sqlx.ShowSQL = true
+	sqlx.G.Sqlx.ShowSQL = true
 	cfg := sqlx.DatabaseConfig{
 		Driver: "mysql",
 		// DataSource: "xxx:xxx@tcp(mysql.base.svc:3306)/cfg?charset=utf8&parseTime=True&loc=Asia%2FShanghai",
@@ -345,7 +345,7 @@ func TestSelect5(t *testing.T) {
 // go test -v z/ze/sqlx/kmod_test.go -run TestSelect6
 func TestSelect6(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
-	sqlx.C.Sqlx.KsqlTbl = true
+	sqlx.G.Sqlx.KsqlTbl = true
 
 	_ = sqlx.NewRepo[AuthzRepo](nil)
 	dsc := sqlx.NewDsc(genDB())
@@ -370,7 +370,7 @@ SELECT /*+ xxx */ * FROM {::entity.AuthzDO} WHERE 1=1
 // go test -v z/ze/sqlx/kmod_test.go -run TestSelect7
 func TestSelect7(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
-	sqlx.C.Sqlx.KsqlTbl = true
+	sqlx.G.Sqlx.KsqlTbl = true
 
 	_ = sqlx.NewRepo[AuthzRepo](nil)
 	dsc := sqlx.NewDsc(genDB())
@@ -399,7 +399,7 @@ SELECT
 // go test -v z/ze/sqlx/kmod_test.go -run TestSelect8
 func TestSelect8(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
-	sqlx.C.Sqlx.KsqlTbl = true
+	sqlx.G.Sqlx.KsqlTbl = true
 
 	_ = sqlx.NewRepo[AuthzRepo](nil)
 	dsc := sqlx.NewDsc(genDB())
@@ -428,7 +428,7 @@ ORDER BY id
 // go test -v z/ze/sqlx/kmod_test.go -run TestSelect9
 func TestSelect9(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
-	sqlx.C.Sqlx.KsqlTbl = true
+	sqlx.G.Sqlx.KsqlTbl = true
 
 	dsc := sqlx.NewDsc(genDB())
 
@@ -493,7 +493,7 @@ func (r *AuthzRepo) GetByKsqlDemo(dsc sqlx.Dsc, isAny bool) ([]AuthzDO, int64, e
 // go test -v z/ze/sqlx/kmod_test.go -run TestKsql1
 func TestKsql1(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
-	sqlx.C.Sqlx.KsqlTbl = true
+	sqlx.G.Sqlx.KsqlTbl = true
 	dsc := sqlx.NewDsc(genDB())
 
 	repo := sqlx.NewRepo[AuthzRepo](nil)
@@ -508,7 +508,7 @@ func TestKsql1(t *testing.T) {
 // go test -v z/ze/sqlx/kmod_test.go -run TestKsql2
 func TestKsql2(t *testing.T) {
 	sqlx.RegKsqlEvalue("entity", sqlx.KsqlTblExt)
-	sqlx.C.Sqlx.KsqlTbl = true
+	sqlx.G.Sqlx.KsqlTbl = true
 	dsc := sqlx.NewDsc(genDB())
 
 	repo := sqlx.NewRepo[AuthzRepo](nil)

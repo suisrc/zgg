@@ -10,13 +10,13 @@ import (
 )
 
 var (
-	C = struct {
+	G = struct {
 		Sqlx Config `json:"sqlx"`
 	}{}
 )
 
 func init() {
-	zc.Register(&C)
+	zc.Register(&G)
 }
 
 type Config struct {
@@ -103,9 +103,9 @@ func ConnectDB(cfg *DatabaseConfig, log func(...any)) (*DB, error) {
 }
 
 func GetTableByEnv(typ, def string) string {
-	if C.Sqlx.TblName.Mapping == nil {
-	} else if tbl, ok := C.Sqlx.TblName.Mapping[typ]; ok {
-		return C.Sqlx.TblName.Prefix + tbl
+	if G.Sqlx.TblName.Mapping == nil {
+	} else if tbl, ok := G.Sqlx.TblName.Mapping[typ]; ok {
+		return G.Sqlx.TblName.Prefix + tbl
 	}
-	return C.Sqlx.TblName.Prefix + def
+	return G.Sqlx.TblName.Prefix + def
 }

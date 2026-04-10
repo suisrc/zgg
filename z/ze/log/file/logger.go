@@ -25,8 +25,8 @@ func init() {
 
 func InitAppLog() {
 	// 创建 syslog.Writer
-	writer := NewWriter(zc.C.Logger.Folder, 0, zc.C.Logger.Tty)
-	switch zc.C.Logger.Type {
+	writer := NewWriter(zc.G.Logger.Folder, 0, zc.G.Logger.Tty)
+	switch zc.G.Logger.Type {
 	case "text":
 		logger := slog.New(slog.NewTextHandler(writer, nil))
 		slog.SetDefault(logger) // 替换默认日志记录器
@@ -95,7 +95,7 @@ func (aa *RollingFile) Writex(bts ...[]byte) (int, error) {
 		aa.MaxSize = 10 * 1024 * 1024 // 默认10MB
 	}
 	if aa.AbsPath == "" {
-		aa.AbsPath = zc.C.Logger.Folder // 默认路径
+		aa.AbsPath = zc.G.Logger.Folder // 默认路径
 	}
 	var fpkey string
 	if aa.FileKey != "" {

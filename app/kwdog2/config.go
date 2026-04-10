@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	C = struct {
+	G = struct {
 		Kwdog2 KwdogConfig
 		Kwrat2 KwratConfig
 		Kwcat2 KwcatConfig
@@ -19,7 +19,7 @@ var (
 )
 
 func Init3(ifn1 InitKwdogFunc) {
-	z.Config(&C)
+	z.Config(&G)
 	InitKwdog(ifn1)
 	InitKwrat(nil)
 	InitKwcat(nil)

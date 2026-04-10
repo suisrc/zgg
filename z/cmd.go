@@ -42,7 +42,7 @@ func Execute(appname, version, appinfo string) {
 // 包括项目中非闭包内容的所有依赖， 便于清晰确认核心组件对外部的依赖
 
 func IsDebug() bool {
-	return zc.C.Debug
+	return zc.G.Debug
 }
 
 var (
@@ -86,20 +86,20 @@ var (
 // 注册默认方法
 func Initializ() {
 	// 注册配置函数
-	Config(C)
+	Config(G)
 
-	flag.Var(NewBoolVal(&(zc.C.Debug)), "debug", "debug mode")
-	flag.Var(NewBoolVal(&(zc.C.Print)), "print", "print mode")
-	flag.Var(NewBoolVal(&(C.Server.Fxser)), "fxser", "http header flag xser-*")
-	flag.Var(NewBoolVal(&(C.Server.Local)), "local", "http server local mode")
-	flag.StringVar(&(C.Server.Addr), "addr", "0.0.0.0", "http server addr")
-	flag.IntVar(&(C.Server.Port), "port", 80, "http server Port")
-	flag.IntVar(&(C.Server.Ptls), "ptls", 443, "https server Port")
-	flag.BoolVar(&(C.Server.Dual), "dual", false, "running http and https server")
-	flag.StringVar(&(C.Server.Engine), "eng", "map", "http server router engine")
-	flag.StringVar(&(C.Server.ApiRoot), "api", "", "http server api root")
-	flag.StringVar(&(C.Server.TplPath), "tpl", "", "templates folder path")
-	flag.StringVar(&(C.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
+	flag.Var(NewBoolVal(&(zc.G.Debug)), "debug", "debug mode")
+	flag.Var(NewBoolVal(&(zc.G.Print)), "print", "print mode")
+	flag.Var(NewBoolVal(&(G.Server.Fxser)), "fxser", "http header flag xser-*")
+	flag.Var(NewBoolVal(&(G.Server.Local)), "local", "http server local mode")
+	flag.StringVar(&(G.Server.Addr), "addr", "0.0.0.0", "http server addr")
+	flag.IntVar(&(G.Server.Port), "port", 80, "http server Port")
+	flag.IntVar(&(G.Server.Ptls), "ptls", 443, "https server Port")
+	flag.BoolVar(&(G.Server.Dual), "dual", false, "running http and https server")
+	flag.StringVar(&(G.Server.Engine), "eng", "map", "http server router engine")
+	flag.StringVar(&(G.Server.ApiRoot), "api", "", "http server api root")
+	flag.StringVar(&(G.Server.TplPath), "tpl", "", "templates folder path")
+	flag.StringVar(&(G.Server.ReqXrtd), "xrt", "", "X-Request-Rt default value")
 
 	//  register default serve
 	Register("90-server", RegisterHttpServe)

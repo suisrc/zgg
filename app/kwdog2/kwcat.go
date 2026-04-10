@@ -28,19 +28,19 @@ type InitKwcatFunc func(hdl *KwcatHandler, zgg *z.Zgg)
 
 func InitKwcat(ifn InitKwcatFunc) {
 
-	flag.BoolVar(&C.Kwcat2.Disabled, "c2disabled", true, "是否禁用kwcat2")
-	flag.StringVar(&C.Kwcat2.AddrPort, "c2addr", "0.0.0.0:443", "代理服务器地址和端口")
-	flag.Var(z.NewStrMap(&C.Kwcat2.Routers, z.HM{}), "c2rmap", "其他服务转发")
+	flag.BoolVar(&G.Kwcat2.Disabled, "c2disabled", true, "是否禁用kwcat2")
+	flag.StringVar(&G.Kwcat2.AddrPort, "c2addr", "0.0.0.0:443", "代理服务器地址和端口")
+	flag.Var(z.NewStrMap(&G.Kwcat2.Routers, z.HM{}), "c2rmap", "其他服务转发")
 
 	z.Register("13-kwcat2", func(zgg *z.Zgg) z.Closed {
-		if C.Kwcat2.Disabled {
+		if G.Kwcat2.Disabled {
 			z.Logn("[_kwcat2_]: disabled")
 			return nil
 		}
 		hdl := &KwcatHandler{
-			Address: C.Kwcat2.AddrPort,
-			Routers: C.Kwcat2.Routers,
-			MaxConn: C.Kwcat2.MaxConn,
+			Address: G.Kwcat2.AddrPort,
+			Routers: G.Kwcat2.Routers,
+			MaxConn: G.Kwcat2.MaxConn,
 		}
 		zgg.Servers.Add(hdl)
 

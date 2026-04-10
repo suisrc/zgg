@@ -32,18 +32,18 @@ func init() {
 }
 
 func InitSysLog() {
-	if zc.C.Logger.Syslog == "" {
+	if zc.G.Logger.Syslog == "" {
 		return // 不进行初始化
 	}
-	network, address := "", zc.C.Logger.Syslog
+	network, address := "", zc.G.Logger.Syslog
 	if strings.HasPrefix(address, "udp://") {
 		network, address = "udp", address[6:]
 	} else if strings.HasPrefix(address, "tcp://") {
 		network, address = "tcp", address[6:]
 	}
 	// 创建 syslog.Writer
-	writer := NewWriter(address, network, 0, zc.C.Logger.Tty)
-	switch zc.C.Logger.Type {
+	writer := NewWriter(address, network, 0, zc.G.Logger.Tty)
+	switch zc.G.Logger.Type {
 	case "text":
 		logger := slog.New(slog.NewTextHandler(writer, nil))
 		slog.SetDefault(logger) // 替换默认日志记录器

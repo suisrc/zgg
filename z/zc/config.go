@@ -21,14 +21,14 @@ import (
 
 func init() {
 	slog.SetDefault(Stdout()) // 设置默认日志记录器为控制台输出
-	Register(C)
+	Register(G)
 }
 
 var (
-	// C 全局配置(需要先执行MustLoad，否则拿不到配置)
-	C = new(Config)
-	// cs 配置对象集合
-	CS = map[string]any{}    // 需要初始化配置
+	// G 全局配置(需要先执行MustLoad，否则拿不到配置)
+	G = new(Config)
+	// GS 配置对象集合
+	GS = map[string]any{}    // 需要初始化配置
 	FS = map[string]func(){} // 配置初始化函数
 	LS = map[string]func(){} // 日志处理器集合
 )
@@ -64,20 +64,20 @@ type ILoader interface {
 // --------------------------------------------------------------------------------
 
 // Register 注册配置对象， Pointer or Func[func()] 函数，如果有异常，使用 panic/os.Exit(2) 终止
-func Register(c any) {
-	ctype := reflect.TypeOf(c)
+func Register(b any) {
+	ctype := reflect.TypeOf(b)
 	if ctype.Kind() == reflect.Func {
-		fn, ok := c.(func())
+		fn, ok := b.(func())
 		if !ok {
 			panic("z/zc: Register f(arg) must be [func()]")
 		}
-		FS[fmt.Sprintf("%p", c)] = fn
+		FS[fmt.Sprintf("%p", b)] = fn
 		return
 	}
 	if ctype.Kind() != reflect.Pointer {
-		panic("z/zc: Register c(arg) must be pointer")
+		panic("z/zc: Register b must be pointer")
 	}
-	CS[fmt.Sprintf("%v.%p", ctype.Elem(), c)] = c
+	GS[fmt.Sprintf("%v.%p", ctype.Elem(), b)] = b
 }
 
 func LoadConfig(cfs string) {
@@ -129,7 +129,7 @@ func LoadConfig(cfs string) {
 
 		// ---------------------------------------------------------------
 		// load config
-		for _, conf := range CS {
+		for _, conf := range GS {
 			for _, loader := range loaders {
 				if err := loader.Load(conf); err != nil {
 					ErrTty(err)
@@ -140,20 +140,20 @@ func LoadConfig(cfs string) {
 		for _, fn := range FS {
 			fn()
 		}
-		if !C.Cache {
+		if !G.Cache {
 			vcache = nil // 禁用缓存， 缓存是在 Env 中完成初始化的
 		}
-		if C.Print {
-			for name, conf := range CS {
+		if G.Print {
+			for name, conf := range GS {
 				LogTty("--------" + name)
 				LogTty(ToStrJSON(conf))
 			}
 			LogTty("----------------------------------------------")
 		}
-		if C.Logger.Folder == "" {
-			C.Logger.Folder = "./logs"
+		if G.Logger.Folder == "" {
+			G.Logger.Folder = "./logs"
 		}
-		if fn, ok := LS[C.Logger.Kind]; ok {
+		if fn, ok := LS[G.Logger.Kind]; ok {
 			fn() // 初始化日志处理器
 		}
 	})

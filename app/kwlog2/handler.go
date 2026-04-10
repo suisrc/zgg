@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	C = struct {
+	G = struct {
 		Kwlog2 Config
 	}{}
 )
@@ -37,34 +37,34 @@ type Config struct {
 type InitFunc func(hdl *KwlogHandler, zgg *z.Zgg)
 
 func Init3(ifn InitFunc) {
-	z.Config(&C)
+	z.Config(&G)
 
-	flag.StringVar(&C.Kwlog2.StorePath, "logstore", "logs", "日志存储路径")
-	flag.StringVar(&C.Kwlog2.RoutePath, "logroute", "api/logs", "路由访问路径")
-	flag.StringVar(&C.Kwlog2.Token, "logtoken", "", "存储日志秘钥")
-	flag.BoolVar(&C.Kwlog2.UseOrigin, "logorigin", false, "保存原始数据")
-	flag.Int64Var(&C.Kwlog2.MaxSize, "logmaxsize", 10*1024*1024, "日志文件最大大小, 默认 10M")
-	flag.StringVar(&C.Kwlog2.LogTime, "logtimerfc", time.RFC3339, "日志时间格式")
+	flag.StringVar(&G.Kwlog2.StorePath, "logstore", "logs", "日志存储路径")
+	flag.StringVar(&G.Kwlog2.RoutePath, "logroute", "api/logs", "路由访问路径")
+	flag.StringVar(&G.Kwlog2.Token, "logtoken", "", "存储日志秘钥")
+	flag.BoolVar(&G.Kwlog2.UseOrigin, "logorigin", false, "保存原始数据")
+	flag.Int64Var(&G.Kwlog2.MaxSize, "logmaxsize", 10*1024*1024, "日志文件最大大小, 默认 10M")
+	flag.StringVar(&G.Kwlog2.LogTime, "logtimerfc", time.RFC3339, "日志时间格式")
 
 	z.Register("31-kwlog2", func(zgg *z.Zgg) z.Closed {
-		if !z.IsDebug() && strings.Contains(C.Kwlog2.StorePath, "../") {
-			zgg.ServeStop("logstore path error, contains '../':", C.Kwlog2.StorePath)
+		if !z.IsDebug() && strings.Contains(G.Kwlog2.StorePath, "../") {
+			zgg.ServeStop("logstore path error, contains '../':", G.Kwlog2.StorePath)
 			return nil
 		}
-		if C.Kwlog2.RoutePath == "" {
+		if G.Kwlog2.RoutePath == "" {
 			zgg.ServeStop("logroute path error, is empty")
 			return nil
 		}
-		rpath := C.Kwlog2.RoutePath
+		rpath := G.Kwlog2.RoutePath
 		if rpath[0] == '/' {
 			rpath = rpath[1:]
 		}
-		hdl := &KwlogHandler{Config: C.Kwlog2}
+		hdl := &KwlogHandler{Config: G.Kwlog2}
 		hdl.Config.RoutePath = "/" + rpath
-		hdl.Config.StorePath, _ = filepath.Abs(C.Kwlog2.StorePath)
+		hdl.Config.StorePath, _ = filepath.Abs(G.Kwlog2.StorePath)
 		z.Logf("[logstore]: store-path -> %s", hdl.Config.StorePath)
 		hdl.HttpFS = http.FS(os.DirFS(hdl.Config.StorePath))
-		// z.Logn(zc.ToStrJSON(C.Kwlog2), zc.ToStrJSON(hdl.Config))
+		// z.Logn(zc.ToStrJSON(G.Kwlog2), zc.ToStrJSON(hdl.Config))
 		mime.AddExtensionType(".log", "text/plain")
 		zgg.AddRouter("GET "+rpath, hdl.ShowFiles) // 显示列表日志
 		if hdl.Config.Token != "" {                // 增加访问令牌

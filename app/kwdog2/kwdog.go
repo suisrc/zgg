@@ -43,31 +43,31 @@ type InitKwdogFunc func(hdl *KwdogHandler, zgg *z.Zgg)
 
 func InitKwdog(ifn InitKwdogFunc) {
 
-	flag.BoolVar(&C.Kwdog2.Disabled, "k2disabled", false, "是否禁用kwdog2")
-	flag.StringVar(&C.Kwdog2.AddrPort, "k2addr", "0.0.0.0:12006", "代理服务器地址和端口")
-	flag.StringVar(&C.Kwdog2.NextAddr, "k2next", "http://127.0.0.1:80", "后端服务地址")
-	flag.StringVar(&C.Kwdog2.AuthAddr, "k2auth", "", "认证服务地址， 默认只支持 f1kin 服务")
-	flag.BoolVar(&C.Kwdog2.AuthSkip, "k2askip", false, "在存在鉴权头部信息时，是否跳过鉴权")
-	flag.Var(z.NewStrMap(&C.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
-	flag.BoolVar(&C.Kwdog2.Rtrack, "k2track", false, "是否记录其他路由的日志")
-	flag.StringVar(&C.Kwdog2.Rauthz, "k2rauth", "", "其他路由是否进行鉴权")
-	flag.Var(z.NewStrArr(&C.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
-	flag.StringVar(&C.Kwdog2.Logger, "k2logger", "", "日志发送地址， none: 表示不记录日志")
-	flag.BoolVar(&C.Kwdog2.LogBody, "k2logbody", false, "记录日志中的Body")
-	flag.IntVar(&C.Kwdog2.Record, "k2record", -1, "记录级别")
+	flag.BoolVar(&G.Kwdog2.Disabled, "k2disabled", false, "是否禁用kwdog2")
+	flag.StringVar(&G.Kwdog2.AddrPort, "k2addr", "0.0.0.0:12006", "代理服务器地址和端口")
+	flag.StringVar(&G.Kwdog2.NextAddr, "k2next", "http://127.0.0.1:80", "后端服务地址")
+	flag.StringVar(&G.Kwdog2.AuthAddr, "k2auth", "", "认证服务地址， 默认只支持 f1kin 服务")
+	flag.BoolVar(&G.Kwdog2.AuthSkip, "k2askip", false, "在存在鉴权头部信息时，是否跳过鉴权")
+	flag.Var(z.NewStrMap(&G.Kwdog2.Routers, z.HM{}), "k2rmap", "其他服务转发")
+	flag.BoolVar(&G.Kwdog2.Rtrack, "k2track", false, "是否记录其他路由的日志")
+	flag.StringVar(&G.Kwdog2.Rauthz, "k2rauth", "", "其他路由是否进行鉴权")
+	flag.Var(z.NewStrArr(&G.Kwdog2.Sites, []string{}), "k2sites", "需要标记 _xc 的站点")
+	flag.StringVar(&G.Kwdog2.Logger, "k2logger", "", "日志发送地址， none: 表示不记录日志")
+	flag.BoolVar(&G.Kwdog2.LogBody, "k2logbody", false, "记录日志中的Body")
+	flag.IntVar(&G.Kwdog2.Record, "k2record", -1, "记录级别")
 
 	z.Register("11-kwdog2", func(zgg *z.Zgg) z.Closed {
-		if C.Kwdog2.Disabled {
+		if G.Kwdog2.Disabled {
 			z.Logn("[_kwdog2_]: disabled")
 			return nil
 		}
-		if strings.HasSuffix(C.Kwdog2.AddrPort, ":80") && C.Kwdog2.NextAddr == "http://127.0.0.1:80" {
-			C.Kwdog2.NextAddr = "http://127.0.0.1:81" // 避免循环
-			z.Logn("[_kwdog2_]: default next address changed to", C.Kwdog2.NextAddr)
+		if strings.HasSuffix(G.Kwdog2.AddrPort, ":80") && G.Kwdog2.NextAddr == "http://127.0.0.1:80" {
+			G.Kwdog2.NextAddr = "http://127.0.0.1:81" // 避免循环
+			z.Logn("[_kwdog2_]: default next address changed to", G.Kwdog2.NextAddr)
 		}
 
 		// ...
-		switch C.Kwdog2.Record {
+		switch G.Kwdog2.Record {
 		case 0:
 			RecordReverseFunc = gte.ToRecord0
 		case 1:
@@ -75,12 +75,12 @@ func InitKwdog(ifn InitKwdogFunc) {
 		}
 
 		hdl := new(KwdogHandler)
-		if err := hdl.Init(C.Kwdog2); err != nil {
+		if err := hdl.Init(G.Kwdog2); err != nil {
 			zgg.ServeStop("register kwdog2 error,", err.Error())
 			return nil
 		}
 		z.Logn("[_kwdog2_]: routers", hdl.RouterKey, "domains", hdl.DomainMap)
-		zgg.Servers.Add(z.NewServer("(KWDOG)", hdl, C.Kwdog2.AddrPort, nil))
+		zgg.Servers.Add(z.NewServer("(KWDOG)", hdl, G.Kwdog2.AddrPort, nil))
 
 		if ifn != nil {
 			ifn(hdl, zgg) // 初始化方法
@@ -96,7 +96,7 @@ func (hdl *KwdogHandler) Init(cfg KwdogConfig) error {
 	if cfg.Logger != "none" {
 		rsp = gte.NewRecorder(
 			cfg.Logger,
-			zc.C.Logger.Pty,
+			zc.G.Logger.Pty,
 			cfg.LogTty,
 			cfg.LogBody,
 			RecordReverseFunc,

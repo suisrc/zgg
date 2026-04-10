@@ -12,7 +12,6 @@ import (
 	"hash/fnv"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -61,7 +60,7 @@ var embeddedCaptureObject []byte
 type Config struct {
 	Disabled    bool   `json:"disabled"`
 	IfName      string `json:"ifname"`
-	PcapRules   string `json:"pcap_rules"`
+	PcapRules   string `json:"pcaprules"`
 	Direction   string `json:"direction"`
 	PID         uint   `json:"pid"`
 	CPID        uint   `json:"cpid"`
@@ -871,6 +870,28 @@ func (s *Server) baseRecord(e *PacketEvent, meta *SocketMeta) map[string]any {
 	return record
 }
 
+func flowKeyHex(e PacketEvent, pid int) string {
+	h := fnv.New64a()
+	addrLen := 4
+	if e.Family == afINET6 {
+		addrLen = 16
+	}
+	leftAddr := e.Saddr[:addrLen]
+	rightAddr := e.Daddr[:addrLen]
+	leftPort, rightPort := e.Sport, e.Dport
+	if cmp := bytes.Compare(leftAddr, rightAddr); cmp > 0 || (cmp == 0 && leftPort > rightPort) {
+		leftAddr, rightAddr = rightAddr, leftAddr
+		leftPort, rightPort = rightPort, leftPort
+	}
+	_, _ = h.Write(leftAddr)
+	_, _ = h.Write([]byte{byte(leftPort >> 8), byte(leftPort)})
+	_, _ = h.Write(rightAddr)
+	_, _ = h.Write([]byte{byte(rightPort >> 8), byte(rightPort)})
+	_, _ = h.Write([]byte{e.L4Proto})
+	_, _ = h.Write([]byte(strconv.Itoa(pid)))
+	return fmt.Sprintf("%016x", h.Sum64())
+}
+
 func (s *Server) flowGet(key flowKey, now time.Time) *flowState {
 	if flow, ok := s.state.flows[key]; ok {
 		flow.LastSeen = now
@@ -972,36 +993,7 @@ func compilePcapRules(rules string) ([]pcapRuleInsn, error) {
 	if rules == "" {
 		return nil, nil
 	}
-	args := []string{"-ddd", "-y", "EN10MB", "-s", "65535"}
-	args = append(args, strings.Fields(rules)...)
-	out, err := exec.Command("tcpdump", args...).Output()
-	if err != nil {
-		return nil, fmt.Errorf("compile -pcap-rules via tcpdump -ddd: %w", err)
-	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 0 {
-		return nil, errors.New("empty tcpdump output")
-	}
-	count, err := strconv.Atoi(strings.TrimSpace(lines[0]))
-	if err != nil {
-		return nil, err
-	}
-	if count <= 0 || count > pcapRulesMaxInsns || len(lines) < count+1 {
-		return nil, fmt.Errorf("pcap instruction count %d invalid", count)
-	}
-	insns := make([]pcapRuleInsn, 0, count)
-	for _, line := range lines[1 : count+1] {
-		fields := strings.Fields(line)
-		if len(fields) != 4 {
-			return nil, fmt.Errorf("invalid tcpdump insn line: %s", line)
-		}
-		code, _ := strconv.ParseUint(fields[0], 10, 16)
-		jt, _ := strconv.ParseUint(fields[1], 10, 8)
-		jf, _ := strconv.ParseUint(fields[2], 10, 8)
-		k, _ := strconv.ParseUint(fields[3], 10, 32)
-		insns = append(insns, pcapRuleInsn{Code: uint16(code), JT: uint8(jt), JF: uint8(jf), K: uint32(k)})
-	}
-	return insns, nil
+	return compilePcapRulesWithLibpcap(rules)
 }
 
 func openPacketSocket(ifIndex int) (int, error) {
@@ -1840,29 +1832,19 @@ func makeRecordID(seq *atomic.Uint64, ts time.Time) string {
 }
 
 func recordKeyHex(e PacketEvent, meta *SocketMeta) string {
-	h := fnv.New64a()
-	addrLen := 4
-	if e.Family == afINET6 {
-		addrLen = 16
-	}
-	leftAddr := e.Saddr[:addrLen]
-	rightAddr := e.Daddr[:addrLen]
-	leftPort, rightPort := e.Sport, e.Dport
-	if cmp := bytes.Compare(leftAddr, rightAddr); cmp > 0 || (cmp == 0 && leftPort > rightPort) {
-		leftAddr, rightAddr = rightAddr, leftAddr
-		leftPort, rightPort = rightPort, leftPort
-	}
-	_, _ = h.Write(leftAddr)
-	_, _ = h.Write([]byte{byte(leftPort >> 8), byte(leftPort)})
-	_, _ = h.Write(rightAddr)
-	_, _ = h.Write([]byte{byte(rightPort >> 8), byte(rightPort)})
-	_, _ = h.Write([]byte{e.L4Proto})
 	pid := 0
 	if meta != nil {
 		pid = meta.PID
 	}
-	_, _ = h.Write([]byte(strconv.Itoa(pid)))
-	return fmt.Sprintf("%016x", h.Sum64())
+	if e.Cookie != 0 {
+		h := fnv.New64a()
+		cookie := [8]byte{}
+		binary.LittleEndian.PutUint64(cookie[:], e.Cookie)
+		_, _ = h.Write(cookie[:])
+		_, _ = h.Write([]byte(strconv.Itoa(pid)))
+		return fmt.Sprintf("%016x", h.Sum64())
+	}
+	return flowKeyHex(e, pid)
 }
 
 func parseCIDRList(spec string) ([]cidrRule, error) {

@@ -91,7 +91,7 @@ var (
 		if page != nil {
 			stmt = page.Patch(stmt, driver)
 		}
-		if C.Sqlx.ShowSQL {
+		if G.Sqlx.ShowSQL {
 			z.Logf("[_showsql]: %s | %s", stmt, z.ToStr(args))
 		}
 		return stmt, nil

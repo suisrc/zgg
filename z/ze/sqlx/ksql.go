@@ -37,7 +37,7 @@ Example:
 // ===================================================================================
 //go:embed ksql/*
 var ksfs embed.FS
-var ksgr = sqlx.Ksgr(ksfs, "ksql/") // if sqlx.C.Sqlx.KsqlDebug { ksgr = sqlx.Ksgr(os.DirFS("ksql"), "") }
+var ksgr = sqlx.Ksgr(ksfs, "ksql/") // if sqlx.G.Sqlx.KsqlDebug { ksgr = sqlx.Ksgr(os.DirFS("ksql"), "") }
 
 rst, siz, err := sqlx.Ksgs("authz_find_all", ksgr, NewDsc(), karg, page)
 // ===================================================================================
@@ -188,7 +188,7 @@ func Ksgs[T any](dsc Dsc, ksgr KsqlGetter, name string, karg map[string]any, pag
 
 func Ksgr(ksfs fs.FS, kdir string) KsqlGetter {
 	return func(name string) (string, error) {
-		if C.Sqlx.KsqlDebug || KsqlStmCache == nil {
+		if G.Sqlx.KsqlDebug || KsqlStmCache == nil {
 			if fsf, err := ksfs.Open(kdir + name + ".sql"); err != nil {
 				return "", err
 			} else if bts, err := io.ReadAll(fsf); err != nil {
@@ -290,7 +290,7 @@ var (
 		}
 	}
 
-	// 在 ksql 文中，使用 {::entity.xxx} 获取对象对应的 TableName，用于动态绑定表名, 需要启动 sqlx.C.Sqlx.KsqlTbl = true
+	// 在 ksql 文中，使用 {::entity.xxx} 获取对象对应的 TableName，用于动态绑定表名, 需要启动 sqlx.G.Sqlx.KsqlTbl = true
 	// sqlx.RegKsqlEvalue("entity", sqlx.KsqlTbl)
 	KsqlTblExt KsqlExt = func(key string, obj any) any {
 		if tbl := GetKsqlEnt(key); tbl != "" {
@@ -407,7 +407,7 @@ func RegKsqlEvalue(name string, evalue any) {
 
 // 获取 Entity 对应的 TableName
 func GetKsqlEnt(typ string) string {
-	if ksqlc.etables == nil || !C.Sqlx.KsqlTbl {
+	if ksqlc.etables == nil || !G.Sqlx.KsqlTbl {
 		return "" // 已被禁用
 	}
 	ksqlc.etablex.RLock()
@@ -417,7 +417,7 @@ func GetKsqlEnt(typ string) string {
 
 // 获取 Entity 对应的所有 TableName
 func GetKsqlEnts() map[string]string {
-	if ksqlc.etables == nil || !C.Sqlx.KsqlTbl {
+	if ksqlc.etables == nil || !G.Sqlx.KsqlTbl {
 		return make(map[string]string) // 已被禁用
 	}
 	ksqlc.etablex.RLock()
@@ -440,7 +440,7 @@ func ClsKsqlEnt(disable bool) {
 
 // 注册 Entity 对应的 TableName, model.InitRepo 默认会调用该方法
 func RegKsqlEnt(typ, tbl string) {
-	if ksqlc.etables == nil || !C.Sqlx.KsqlTbl {
+	if ksqlc.etables == nil || !G.Sqlx.KsqlTbl {
 		return // 已被禁用
 	}
 	ksqlc.etablex.Lock()

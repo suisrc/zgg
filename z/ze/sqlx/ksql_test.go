@@ -169,11 +169,11 @@ func TestParser5(t *testing.T) {
 	sqlx.RegKsqlEvalue("env", sqlx.KsqlPreExt("sqlx.namex."))
 
 	// 模拟配置文件配置
-	sqlx.C.Sqlx.TblName.Prefix = "sqlx_"
-	// sqlx.C.Sqlx.TblName.Mapping = map[string]string{ "AffiliatesMasterDO": "affiliates_master"}
-	sqlx.C.Sqlx.KsqlTbl = true
-	zc.C.Cache = true
-	zc.C.Print = true
+	sqlx.G.Sqlx.TblName.Prefix = "sqlx_"
+	// sqlx.G.Sqlx.TblName.Mapping = map[string]string{ "AffiliatesMasterDO": "affiliates_master"}
+	sqlx.G.Sqlx.KsqlTbl = true
+	zc.G.Cache = true
+	zc.G.Print = true
 	zc.LoadConfig("") // 加载配置，激活环境
 
 	_ = sqlx.NewRepo[AffiliatesMasterRepo](nil) // 注册仓库

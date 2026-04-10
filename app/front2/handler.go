@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	C = struct {
+	G = struct {
 		Front2 Config
 	}{}
 )
@@ -49,23 +49,23 @@ type Config struct {
 type InitFunc func(hdl *FrontHandler, zgg *z.Zgg)
 
 func Init3(www fs.FS, ifn InitFunc) {
-	z.Config(&C)
+	z.Config(&G)
 
-	flag.StringVar(&C.Front2.ShowPath, "f2show", "", "show www resource uri")
-	flag.BoolVar(&C.Front2.IsNative, "f2native", false, "use native file server")
-	flag.StringVar(&C.Front2.Index, "f2index", "index.html", "index file name")
-	flag.Var(z.NewStrMap(&C.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file map")
-	flag.Var(z.NewStrMap(&C.Front2.Routers, z.HM{}), "f2routers", "router path replace")
-	flag.StringVar(&C.Front2.TmplRoot, "f2troot", "/ROOT_PATH", "root path, empty is disabled")
-	flag.Var(z.NewStrArr(&C.Front2.TmplFile, []string{"^app.", "^umi.", "^runtime.", ".html", ".htm", ".css", ".map", ".js", ".json"}), "f2tfile", "replace tmpl file")
-	flag.BoolVar(&C.Front2.Change, "f2change", false, "change file when file change")
+	flag.StringVar(&G.Front2.ShowPath, "f2show", "", "show www resource uri")
+	flag.BoolVar(&G.Front2.IsNative, "f2native", false, "use native file server")
+	flag.StringVar(&G.Front2.Index, "f2index", "index.html", "index file name")
+	flag.Var(z.NewStrMap(&G.Front2.Indexs, z.HM{"/zgg": "index.htm"}), "f2indexs", "index file map")
+	flag.Var(z.NewStrMap(&G.Front2.Routers, z.HM{}), "f2routers", "router path replace")
+	flag.StringVar(&G.Front2.TmplRoot, "f2troot", "/ROOT_PATH", "root path, empty is disabled")
+	flag.Var(z.NewStrArr(&G.Front2.TmplFile, []string{"^app.", "^umi.", "^runtime.", ".html", ".htm", ".css", ".map", ".js", ".json"}), "f2tfile", "replace tmpl file")
+	flag.BoolVar(&G.Front2.Change, "f2change", false, "change file when file change")
 
 	z.Register("41-front2", func(zgg *z.Zgg) z.Closed {
-		hdl := NewHandler(www, C.Front2, "[_front2_]")
+		hdl := NewHandler(www, G.Front2, "[_front2_]")
 		// 增加路由
 		zgg.AddRouter("", hdl.Serve)
-		if C.Front2.ShowPath != "" {
-			zgg.AddRouter("GET "+C.Front2.ShowPath, hdl.ShowFiles)
+		if G.Front2.ShowPath != "" {
+			zgg.AddRouter("GET "+G.Front2.ShowPath, hdl.ShowFiles)
 		}
 		if ifn != nil {
 			ifn(hdl, zgg) // 初始化方法

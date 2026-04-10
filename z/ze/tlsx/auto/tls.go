@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	C = struct {
+	G = struct {
 		Server ServerConfig
 	}{}
 )
@@ -29,24 +29,24 @@ type ServerConfig struct {
 }
 
 func init() {
-	z.Config(&C)
-	flag.StringVar(&(C.Server.CrtCA), "cacrt", "", "http server crt ca file")
-	flag.StringVar(&(C.Server.KeyCA), "cakey", "", "http server key ca file")
-	flag.BoolVar(&C.Server.IsSAA, "casaa", false, "是否是中间证书")
+	z.Config(&G)
+	flag.StringVar(&(G.Server.CrtCA), "cacrt", "", "http server crt ca file")
+	flag.StringVar(&(G.Server.KeyCA), "cakey", "", "http server key ca file")
+	flag.BoolVar(&G.Server.IsSAA, "casaa", false, "是否是中间证书")
 
 	z.Register("10-tlsauto", func(zgg *z.Zgg) z.Closed {
-		if C.Server.CrtCA == "" || C.Server.KeyCA == "" {
+		if G.Server.CrtCA == "" || G.Server.KeyCA == "" {
 			z.Logn("[_tlsauto]: cacrt file or cakey file is empty")
 			return nil
 		}
-		z.Logn("[_tlsauto]: crt=", C.Server.CrtCA, " key=", C.Server.KeyCA)
+		z.Logn("[_tlsauto]: crt=", G.Server.CrtCA, " key=", G.Server.KeyCA)
 
-		caCrtBts, err := os.ReadFile(C.Server.CrtCA)
+		caCrtBts, err := os.ReadFile(G.Server.CrtCA)
 		if err != nil {
 			zgg.ServeStop("[_tlsauto]: cacrt file error:", err.Error())
 			return nil
 		}
-		caKeyBts, err := os.ReadFile(C.Server.KeyCA)
+		caKeyBts, err := os.ReadFile(G.Server.KeyCA)
 		if err != nil {
 			zgg.ServeStop("[_tlsauto]: cakey file error:", err.Error())
 			return nil
@@ -67,7 +67,7 @@ func init() {
 			CaKeyBts: caKeyBts,
 			CaCrtBts: caCrtBts,
 			CertConf: certConf,
-			IsSaCert: C.Server.IsSAA,
+			IsSaCert: G.Server.IsSAA,
 		}).GetCertificate
 		zgg.TLSConf = cfg
 

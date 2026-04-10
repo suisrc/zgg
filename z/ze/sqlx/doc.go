@@ -16,14 +16,14 @@ package sqlx
 /**
 Example:
 // 创建数据库 -------------------------------------------------
-dsc, err := sqlx.ConnectDB(&C.Database, z.Logn)
+dsc, err := sqlx.ConnectDB(&G.Database, z.Logn)
 if err != nil {
 	zgg.ServeStop(err.Error())
 	return nil
 }
 z.RegKey(zgg.SvcKit, false, "dsc", dsc)
 NewDsc = func() sqlx.Dsc { return &sqlx.Dsx{Ex: dsc} }
-if sqlx.C.Sqlx.KsqlDebug {
+if sqlx.G.Sqlx.KsqlDebug {
 	ksgr = sqlx.Ksgr(os.DirFS("app/zdb/ksql"), "")
 }
 // 注册数据仓 -------------------------------------------------
@@ -32,7 +32,7 @@ z.RegKey(zgg.SvcKit, false, "", sqlx.NewRepo[AuthzRepo](ksgr))
 -----------------------------------------------------------------
 //go:embed ksql/*
 var ksfs embed.FS
-var ksgr = sqlx.Ksgr(ksfs, "ksql/") // if sqlx.C.Sqlx.KsqlDebug { ksgr = sqlx.Ksgr(os.DirFS("ksql"), "") }
+var ksgr = sqlx.Ksgr(ksfs, "ksql/") // if sqlx.G.Sqlx.KsqlDebug { ksgr = sqlx.Ksgr(os.DirFS("ksql"), "") }
 
 rst, siz, err := sqlx.Ksgs("authz_find_all", ksgr, NewDsc(), karg, page)
 -----------------------------------------------------------------

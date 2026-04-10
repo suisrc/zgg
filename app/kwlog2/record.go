@@ -36,7 +36,7 @@ func (rc *Record) UnmarshalJSON(data []byte) error {
 	// 		rc.Message = map_ // 尝试解析 message 内容
 	// 	}
 	// }
-	if rc.Message != nil && !C.Kwlog2.UseOrigin {
+	if rc.Message != nil && !G.Kwlog2.UseOrigin {
 		if str, ok := rc.Message.(string); ok {
 			// 消息将被替换，补充一些容器信息
 			pre := ""
@@ -116,7 +116,7 @@ func (aa *KwlogHandler) record(rcs []Record, ktag string) {
 		fkey := fmt.Sprintf("%s/%s/%s/%02d/%02d/%s_", ktag, rc.Namespace, rc.AppName, //
 			date.Year(), date.Month(), date.Format(time.DateOnly)) // time.RFC3339 ? 缺少微秒， 日志统计到微妙
 		// 将日志写入Writer中，日志格式为： [时间]-[容器名称]: 日志内容
-		fpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(C.Kwlog2.LogTime), rc.PodName)
+		fpre := fmt.Sprintf("[%s]-[%s]: ", date.Format(G.Kwlog2.LogTime), rc.PodName)
 		aa.Writer.Write(fkey, []byte(fpre), rc.Origin, []byte("\n"))
 	}
 }

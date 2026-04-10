@@ -44,7 +44,7 @@ var (
 		"mux": NewMuxRouter,
 	}
 
-	C = new(struct {
+	G = new(struct {
 		Server ServerConfig
 	})
 
@@ -99,17 +99,17 @@ func (aa *Zgg) ServeInit() bool {
 	if aa.SvcKit == nil {
 		aa.SvcKit = NewSvcKit(aa)
 	}
-	if builder, ok := Engines[C.Server.Engine]; !ok {
-		Logf("[_router_]: router not found by [-eng %s]\n", C.Server.Engine)
+	if builder, ok := Engines[G.Server.Engine]; !ok {
+		Logf("[_router_]: router not found by [-eng %s]\n", G.Server.Engine)
 		return false
 	} else {
 		aa.Engine = builder(aa.SvcKit)
-		Logf("[_router_]: build %s.router by [-eng %s]\n", aa.Engine.Name(), C.Server.Engine)
+		Logf("[_router_]: build %s.router by [-eng %s]\n", aa.Engine.Name(), G.Server.Engine)
 	}
 	if aa.TplKit == nil {
 		aa.TplKit = NewTplKit(aa)
-		if C.Server.TplPath != "" {
-			err := aa.TplKit.Preload(C.Server.TplPath)
+		if G.Server.TplPath != "" {
+			err := aa.TplKit.Preload(G.Server.TplPath)
 			if err != nil {
 				Logf("[_tplkit_]: Preload error: %v\n", err)
 			}
@@ -246,7 +246,7 @@ func (aa *Zgg) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if IsDebug() {
 		Logf("[_request]: [%s] %s %s\n", aa.Engine.Name(), rr.Method, rr.URL.String())
 	}
-	if C.Server.Fxser {
+	if G.Server.Fxser {
 		rw.Header().Set("Xser-Routerz", aa.Engine.Name())
 		rw.Header().Set("Xser-Version", AppName+":"+Version)
 	}
@@ -275,9 +275,9 @@ func (aa *Zgg) AddRouter(key string, handle HandleFunc) {
 	if len(action) > 0 && action[0] == '/' { // 去除 action 前 /
 		action = action[1:]
 	}
-	if C.Server.ApiRoot != "" { // 补充 api root
-		// action = filepath.Join(C.Server.ApiRoot, action)
-		action = C.Server.ApiRoot + "/" + action
+	if G.Server.ApiRoot != "" { // 补充 api root
+		// action = filepath.Join(G.Server.ApiRoot, action)
+		action = G.Server.ApiRoot + "/" + action
 		if action[0] == '/' {
 			action = action[1:]
 		}
@@ -639,15 +639,15 @@ func RegisterHttpServe(zgg *Zgg) Closed {
 	if !HttpServeDef {
 		return nil // 不启动默认服务
 	}
-	if C.Server.Local {
-		C.Server.Addr = "127.0.0.1"
+	if G.Server.Local {
+		G.Server.Addr = "127.0.0.1"
 	}
-	if C.Server.Ptls > 0 && zgg.TLSConf != nil {
-		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Ptls)
+	if G.Server.Ptls > 0 && zgg.TLSConf != nil {
+		addr := fmt.Sprintf("%s:%d", G.Server.Addr, G.Server.Ptls)
 		zgg.Servers.Add(NewServer("(HTTPS)", zgg, addr, zgg.TLSConf))
 	}
-	if C.Server.Port > 0 && (zgg.TLSConf == nil || C.Server.Dual) {
-		addr := fmt.Sprintf("%s:%d", C.Server.Addr, C.Server.Port)
+	if G.Server.Port > 0 && (zgg.TLSConf == nil || G.Server.Dual) {
+		addr := fmt.Sprintf("%s:%d", G.Server.Addr, G.Server.Port)
 		zgg.Servers.Add(NewServer("(HTTP1)", zgg, addr, nil))
 	}
 	zgg.AddRouter("healthz", Healthz) // 默认注册健康检查
@@ -701,7 +701,7 @@ func GetTraceID(request *http.Request) string {
 func GetReqType(request *http.Request) string {
 	reqtype := request.Header.Get("X-Request-Rt")
 	if reqtype == "" {
-		reqtype = C.Server.ReqXrtd
+		reqtype = G.Server.ReqXrtd
 		if reqtype != "" {
 			request.Header.Set("X-Request-Rt", reqtype)
 		}

@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	C = struct {
+	G = struct {
 		Server ServerConfig
 	}{}
 )
@@ -26,21 +26,21 @@ type ServerConfig struct {
 }
 
 func init() {
-	z.Config(&C)
-	flag.StringVar(&(C.Server.CrtFile), "crt", "", "http server crt file")
-	flag.StringVar(&(C.Server.KeyFile), "key", "", "http server key file")
+	z.Config(&G)
+	flag.StringVar(&(G.Server.CrtFile), "crt", "", "http server crt file")
+	flag.StringVar(&(G.Server.KeyFile), "key", "", "http server key file")
 
 	z.Register("10-tlsfile", func(zgg *z.Zgg) z.Closed {
-		if C.Server.CrtFile == "" || C.Server.KeyFile == "" {
+		if G.Server.CrtFile == "" || G.Server.KeyFile == "" {
 			z.Logn("[_tlsfile]: crtfile or keyfile is empty")
 			return nil
 		}
-		z.Logn("[_tlsfile]: crt=", C.Server.CrtFile, " key=", C.Server.KeyFile)
+		z.Logn("[_tlsfile]: crt=", G.Server.CrtFile, " key=", G.Server.KeyFile)
 		var err error
 
 		cfg := &tls.Config{}
 		cfg.Certificates = make([]tls.Certificate, 1)
-		cfg.Certificates[0], err = tls.LoadX509KeyPair(C.Server.CrtFile, C.Server.KeyFile)
+		cfg.Certificates[0], err = tls.LoadX509KeyPair(G.Server.CrtFile, G.Server.KeyFile)
 		if err != nil {
 			zgg.ServeStop("[_tlsfile]: error:", err.Error())
 			return nil

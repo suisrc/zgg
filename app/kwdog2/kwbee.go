@@ -38,19 +38,19 @@ type InitKwbeeFunc func(hdl *KwbeeHandler, zgg *z.Zgg)
 
 func InitKwbee(ifn InitKwbeeFunc) {
 
-	flag.BoolVar(&C.Kwbee2.Disabled, "b2disabled", true, "是否禁用kwbee2")
-	flag.StringVar(&C.Kwbee2.Command, "b2command", "monitor", "monitor 命令")
-	flag.Var(z.NewStrArr(&C.Kwbee2.CmdArgs, []string{"-cpid", "<pid>"}), "b2cmdargs", "monitor 参数")
+	flag.BoolVar(&G.Kwbee2.Disabled, "b2disabled", true, "是否禁用kwbee2")
+	flag.StringVar(&G.Kwbee2.Command, "b2command", "monitor", "monitor 命令")
+	flag.Var(z.NewStrArr(&G.Kwbee2.CmdArgs, []string{"-cpid", "<pid>"}), "b2cmdargs", "monitor 参数")
 
 	z.Register("14-kwbee2", func(zgg *z.Zgg) z.Closed {
-		if C.Kwbee2.Disabled {
+		if G.Kwbee2.Disabled {
 			z.Logn("[_kwbee2_]: disabled")
 			return nil
 		}
 		// 优先使用 command 中的参数， 如果参数不存在，在使用 args 中的参数
-		cmd, args := proc.ParseCmd(C.Kwbee2.Command)
+		cmd, args := proc.ParseCmd(G.Kwbee2.Command)
 		if len(args) == 0 {
-			args = C.Kwbee2.CmdArgs
+			args = G.Kwbee2.CmdArgs
 		}
 		hdl := &KwbeeHandler{}
 		hdl.process = proc.NewProcess(hdl, cmd, FixCmdArgs(args)...)
