@@ -5,7 +5,7 @@
 本目录提供一个 eBPF 监控方案，用于捕获 HTTP 和 HTTPS 流量：
 - 支持 IPv4/IPv6
 - 支持 TCP HTTP、TLS over TCP，以及 QUIC/HTTPS over UDP
-- 输出：源 IP、源端口、目标 IP、目标端口、流量方向、域名（HTTPS 使用 SNI）
+- 输出：源 IP、源端口、目标 IP、目标端口、流量方向、域名（HTTPS 使用 SNI）、`uid`、`cr_id`、`cr_pid`
 - HTTP 请求/响应会尽量保留 headers 和 body，`-max-body-size` 同时作用于 request body 和 response body
 
 ## 编译
@@ -25,6 +25,10 @@ apt install -y clang llvm libbpf-dev libelf-dev libelf1 pkg-config libssl-dev zl
 apt install -y linux-headers-$(uname -r)
 ```
 
+运行环境要求内核 5.8+。
+原因是 `cr_id` / `cr_pid` 通过 CO-RE 从 `task_struct -> thread_pid -> pid->numbers[...]` 读取，需要内核提供可用于重定位的 BTF 字段信息；低于 5.8 的内核在这条读取链路上不够稳定，容器内 PID 和 namespace 标识可能无法可靠获取。
+其中 `cr_id` 表示 PID namespace 的 inode 号，`cr_pid` 表示该进程在对应 namespace 下看到的 pid。
+
 编译完成后，直接运行数据收集程序：
 
 ```sh
@@ -37,6 +41,8 @@ sudo ./monitor -interface eth0
 - `-interface eth0` 监听接口
 - `-direction ingress|egress` 只看入站或出站流量，默认双向
 - `-pid 123` 按进程 pid 过滤
+- `-cpid 123` 按容器内 pid 过滤
+- `-crid 123` 按容器 id 过滤
 - `-comm app` 按进程名称过滤
 - `-src` / `-dst` 支持 CIDR 和 `!` 排除规则
 - `-sport` 仅对 ingress 生效
@@ -58,4 +64,4 @@ make clean
 ## 注意
 
 - 由于 HTTPS 流量本身被加密，程序仅解析 SNI/ALPN 等明文握手信息，不进行解密。
-- PID/进程名关联现在基于 socket cookie 侧链完成，不再依赖 `/proc` 五元组或 inode 回填。
+- PID/进程名关联优先使用 BPF 侧的 socket 归属信息，缺失时会回退到 `/proc` 扫描结果做补齐。

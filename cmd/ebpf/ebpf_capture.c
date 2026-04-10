@@ -35,6 +35,28 @@
 #define CAP_PAYLOAD 256
 #endif
 
+struct ns_common {
+    __u32 inum;
+};
+
+struct pid_namespace {
+    struct ns_common ns;
+};
+
+struct upid {
+    int nr;
+    struct pid_namespace *ns;
+};
+
+struct pid {
+    int level;
+    struct upid numbers[1];
+};
+
+struct task_struct {
+    struct pid *thread_pid;
+};
+
 struct socket_owner_key {
     __u64 sk_addr;
 };
@@ -56,6 +78,9 @@ struct flow_owner_key {
 
 struct flow_owner_value {
     __u64 pid_tgid;
+    __u32 uid;
+    __u64 cr_id;
+    __u32 cr_pid;
     char comm[16];
 };
 
@@ -128,10 +153,28 @@ static __always_inline int record_socket_owner(void *sk, __u8 l4_proto)
     struct flow_owner_key flow_key = {};
     struct flow_owner_value flow_value = {};
     struct sock_common_bpf common = {};
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    struct pid *pid = NULL;
+    int level = 0;
 
     if (!sk) return 0;
 
     flow_value.pid_tgid = bpf_get_current_pid_tgid();
+    flow_value.uid = (__u32)bpf_get_current_uid_gid();
+    // 初始化默认值：非容器时都为0
+    flow_value.cr_pid = 0;
+    flow_value.cr_id = 0;
+
+    pid = BPF_CORE_READ(task, thread_pid);
+    if (pid) {
+        level = BPF_CORE_READ(pid, level);
+        // 只有level>0（容器进程）时才赋值
+        if (level > 0) {
+            flow_value.cr_pid = BPF_CORE_READ(pid, numbers[level].nr);
+            flow_value.cr_id = BPF_CORE_READ(pid, numbers[level].ns, ns.inum);
+        }
+        // level=0（宿主机进程）时保持默认值0，不需要处理
+    }
     if (bpf_get_current_comm(&flow_value.comm, sizeof(flow_value.comm)) < 0) return 0;
 
     if (l4_proto != IPPROTO_TCP && l4_proto != IPPROTO_UDP) return 0;

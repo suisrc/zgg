@@ -64,6 +64,8 @@ struct event_t {
     unsigned char payload[CAP_PAYLOAD];
 } __attribute__((packed));
 
+// 单条 CIDR 规则：
+// deny 表示拒绝规则，family/prefix_len/addr 描述匹配范围。
 struct cidr_rule {
     bool deny;
     int family;
@@ -74,18 +76,27 @@ struct cidr_rule {
     } addr;
 };
 
+// 一组 CIDR 规则：
+// 规则会按命令行顺序保存，匹配时先看拒绝规则，再看允许规则。
 struct cidr_set {
     struct cidr_rule *items;
     size_t len;
     size_t cap;
 };
 
+// /proc 扫描得到的 socket 拥有者信息：
+// inode 是 socket 的稳定索引，pid/uid/cr_id/cr_pid/comm 用于恢复运行实体。
 struct proc_owner {
     unsigned long long inode;
     pid_t pid;
+    uid_t uid;
+    uint64_t cr_id;
+    uint32_t cr_pid;
     char comm[COMM_LEN];
 };
 
+// 最终用于输出和过滤的 socket 元数据：
+// 这个结构体统一承接 BPF map 回填和 /proc 回填结果。
 struct socket_meta {
     int family;
     int proto;
@@ -95,9 +106,14 @@ struct socket_meta {
     uint16_t dport;
     unsigned long long inode;
     pid_t pid;
+    uid_t uid;
+    uint64_t cr_id;
+    uint32_t cr_pid;
     char comm[COMM_LEN];
 };
 
+// BPF map key：
+// 由协议族、方向、四元组组成，用来在内核侧快速定位流归属。
 struct flow_owner_key {
     uint8_t family;
     uint8_t l4_proto;
@@ -108,11 +124,18 @@ struct flow_owner_key {
     unsigned char daddr[16];
 };
 
+// BPF map value：
+// 保存抓包瞬间的进程身份和容器视角身份。
 struct flow_owner_value {
     uint64_t pid_tgid;
+    uint32_t uid;
+    uint64_t cr_id;
+    uint32_t cr_pid;
     char comm[COMM_LEN];
 };
 
+// userspace socket 缓存：
+// 这是对 /proc/net/* 和 /proc/<pid>/fd 的二次整理结果，供失败回退使用。
 struct socket_cache {
     struct socket_meta *items;
     size_t len;
@@ -121,12 +144,16 @@ struct socket_cache {
     uint64_t last_refresh_ms;
 };
 
+// 可增长的字节缓冲区：
+// TCP 负载可能分段到达，需要在 userspace 里先拼接再解析。
 struct byte_buffer {
     unsigned char *data;
     size_t len;
     size_t cap;
 };
 
+// flow 状态 key：
+// 同一条连接的双向数据需要区分方向，否则请求和响应会写进同一个状态槽。
 struct flow_key {
     uint8_t family;
     uint8_t l4_proto;
@@ -138,11 +165,16 @@ struct flow_key {
     unsigned char daddr[16];
 };
 
+// 单条流的运行状态：
+// 这里保存 TCP 重组缓冲、最近一次元数据和 TLS/域名识别结果。
 struct flow_state {
     struct flow_key key;
     struct byte_buffer tcp_buffer;
     uint64_t last_seen_ms;
     pid_t pid;
+    uid_t uid;
+    uint64_t cr_id;
+    uint32_t cr_pid;
     char comm[COMM_LEN];
     bool tls_emitted;
     bool has_domain;
@@ -150,12 +182,18 @@ struct flow_state {
     struct flow_state *next;
 };
 
+// 命令行配置：
+// 所有过滤条件、body 限制和接口选择都集中到这里，方便后续统一判断。
 struct monitor_config {
     const char *ifname;
     int ifindex;
     int direction_filter;
     bool have_pid_filter;
     pid_t pid_filter;
+    bool have_cpid_filter;
+    uint32_t cpid_filter;
+    bool have_crid_filter;
+    uint64_t crid_filter;
     bool have_comm_filter;
     char comm_filter[COMM_LEN];
     bool have_sport_filter;
@@ -167,6 +205,8 @@ struct monitor_config {
     struct cidr_set dst_rules;
 };
 
+// 进程级运行状态：
+// 维护 flow 哈希桶、socket cache 和 BPF map fd。
 struct monitor_state {
     struct flow_state *flows[FLOW_BUCKETS];
     struct socket_cache sockets;
@@ -175,6 +215,8 @@ struct monitor_state {
     size_t flow_count;
 };
 
+// 回调上下文：
+// 把 state 和 cfg 传入抓包回调，避免使用全局变量。
 struct callback_ctx {
     struct monitor_state *state;
     struct monitor_config *cfg;
@@ -234,6 +276,7 @@ static void iso8601_ms(uint64_t ms, char *out, size_t out_len)
 
 static uint64_t rand64(void)
 {
+    // 组合多个 rand() 输出，得到一个分布稍好的 64 位伪随机数。
     uint64_t a = (uint64_t)rand();
     uint64_t b = (uint64_t)rand();
     uint64_t c = (uint64_t)rand();
@@ -243,6 +286,7 @@ static uint64_t rand64(void)
 
 static void make_record_id(char out[25], uint64_t ms)
 {
+    // 记录 ID 用时间戳前缀加随机/序列后缀，目标是“短、顺手、低碰撞”。
     static unsigned long long seq = 0;
     unsigned long long left = (unsigned long long)(ms & 0x7ffffffffffULL);
     unsigned long long right = ((unsigned long long)__sync_fetch_and_add(&seq, 1) ^ rand64()) & 0x1ffffffffffffULL;
@@ -259,7 +303,7 @@ static void flow_key_hex(const struct event_t *e, pid_t pid, char out[17])
     char pid_buf[32];
     snprintf(pid_buf, sizeof(pid_buf), "%d", pid);
 
-    // canonicalize by comparing source/destination tuples so request/response share the same key.
+    // 做五元组规范化，保证同一条连接的正反向数据生成同一个 key。
     unsigned char left[24] = {0};
     unsigned char right[24] = {0};
     unsigned char a[24] = {0};
@@ -294,6 +338,7 @@ static void flow_key_hex(const struct event_t *e, pid_t pid, char out[17])
 
 static void record_key_hex(const struct event_t *e, const struct socket_meta *meta, char out[17])
 {
+    // 优先用 cookie 生成 key；cookie 不可用时，再退回到五元组 + pid 的组合 hash。
     pid_t pid = meta && meta->pid > 0 ? meta->pid : 0;
     if (e->cookie) {
         uint64_t h = 1469598103934665603ULL;
@@ -311,6 +356,7 @@ static void record_key_hex(const struct event_t *e, const struct socket_meta *me
 
 static void emit_json_line(const char *json)
 {
+    // 所有输出都统一走这一层，保证前缀一致，也便于后续按行消费。
     flockfile(stdout);
     fputs("EBPF_CAPTURE: ", stdout);
     fputs(json, stdout);
@@ -321,6 +367,7 @@ static void emit_json_line(const char *json)
 
 static void buffer_free(struct byte_buffer *buf)
 {
+    // 释放并清空缓冲区，防止流被淘汰后继续持有旧内存。
     free(buf->data);
     buf->data = NULL;
     buf->len = 0;
@@ -329,6 +376,7 @@ static void buffer_free(struct byte_buffer *buf)
 
 static bool buffer_reserve(struct byte_buffer *buf, size_t need)
 {
+    // 指数扩容，减少频繁 realloc 带来的拷贝开销。
     if (need <= buf->cap) return true;
     size_t next_cap = buf->cap ? buf->cap : 1024;
     while (next_cap < need) next_cap *= 2;
@@ -343,6 +391,7 @@ static bool buffer_append(struct byte_buffer *buf, const unsigned char *data, si
 {
     if (len == 0) return true;
 
+    // 对单条流的缓存做上限控制，避免慢连接把内存拖爆。
     if (buf->len + len > FLOW_BUFFER_CAP) {
         if (len >= FLOW_BUFFER_CAP) {
             data += len - FLOW_BUFFER_CAP;
@@ -367,6 +416,7 @@ static bool buffer_append(struct byte_buffer *buf, const unsigned char *data, si
 
 static void buffer_consume(struct byte_buffer *buf, size_t n)
 {
+    // 消费掉已解析前缀，把剩余内容前移，继续等待下一批字节。
     if (n == 0) return;
     if (n >= buf->len) {
         buf->len = 0;
@@ -378,6 +428,7 @@ static void buffer_consume(struct byte_buffer *buf, size_t n)
 
 static uint64_t fnv1a64(const void *data, size_t len)
 {
+    // 标准 FNV-1a 64 位哈希。
     const unsigned char *p = data;
     uint64_t hash = 1469598103934665603ULL;
     for (size_t i = 0; i < len; ++i) {
@@ -389,6 +440,7 @@ static uint64_t fnv1a64(const void *data, size_t len)
 
 static uint64_t fnv1a64_update(uint64_t hash, const void *data, size_t len)
 {
+    // 在已有 hash 上继续滚动更新，便于把多个字段串成一个组合 key。
     const unsigned char *p = data;
     for (size_t i = 0; i < len; ++i) {
         hash ^= p[i];
@@ -399,11 +451,13 @@ static uint64_t fnv1a64_update(uint64_t hash, const void *data, size_t len)
 
 static size_t flow_bucket(const struct flow_key *key)
 {
+    // 用 hash 结果把流分散到固定数量的桶里。
     return (size_t)(fnv1a64(key, sizeof(*key)) % FLOW_BUCKETS);
 }
 
 static struct flow_state *flow_find(struct monitor_state *state, const struct flow_key *key)
 {
+    // 在指定桶链表里查找已有 flow。
     size_t bucket = flow_bucket(key);
     for (struct flow_state *flow = state->flows[bucket]; flow; flow = flow->next) {
         if (memcmp(&flow->key, key, sizeof(*key)) == 0) return flow;
@@ -413,6 +467,7 @@ static struct flow_state *flow_find(struct monitor_state *state, const struct fl
 
 static struct flow_state *flow_get(struct monitor_state *state, const struct flow_key *key)
 {
+    // 先查找，查不到再新建；如果状态满了，先淘汰最老的 flow。
     struct flow_state *flow = flow_find(state, key);
     if (flow) return flow;
 
@@ -450,6 +505,7 @@ static struct flow_state *flow_get(struct monitor_state *state, const struct flo
 
 static void flow_gc(struct monitor_state *state, uint64_t cutoff_ms)
 {
+    // 周期性清理过期流，避免长时间无流量的连接一直占着状态。
     for (size_t i = 0; i < FLOW_BUCKETS; ++i) {
         struct flow_state **pp = &state->flows[i];
         while (*pp) {
@@ -468,6 +524,7 @@ static void flow_gc(struct monitor_state *state, uint64_t cutoff_ms)
 
 static void cidr_set_free(struct cidr_set *set)
 {
+    // 释放 CIDR 规则列表。
     free(set->items);
     set->items = NULL;
     set->len = 0;
@@ -476,6 +533,7 @@ static void cidr_set_free(struct cidr_set *set)
 
 static bool cidr_set_push(struct cidr_set *set, const struct cidr_rule *rule)
 {
+    // 追加一条规则，容量不够时自动扩容。
     if (set->len == set->cap) {
         size_t next_cap = set->cap ? set->cap * 2 : 8;
         struct cidr_rule *next = realloc(set->items, next_cap * sizeof(*next));
@@ -489,6 +547,7 @@ static bool cidr_set_push(struct cidr_set *set, const struct cidr_rule *rule)
 
 static char *trim_ws(char *s)
 {
+    // 去掉首尾空白，方便解析命令行里的 CIDR 列表。
     while (*s && isspace((unsigned char)*s)) s++;
     char *end = s + strlen(s);
     while (end > s && isspace((unsigned char)end[-1])) --end;
@@ -498,6 +557,7 @@ static char *trim_ws(char *s)
 
 static bool parse_cidr_rule(const char *token, bool deny, struct cidr_rule *rule)
 {
+    // 把单个 CIDR token 转成规则结构，同时记录它是 allow 还是 deny。
     memset(rule, 0, sizeof(*rule));
     rule->deny = deny;
 
@@ -532,6 +592,7 @@ static bool parse_cidr_rule(const char *token, bool deny, struct cidr_rule *rule
 
 static bool parse_cidr_list(const char *spec, struct cidr_set *set)
 {
+    // 逗号分隔的 CIDR 列表；前缀 ! 表示拒绝规则。
     if (!spec || !*spec) return true;
     char *tmp = strdup(spec);
     if (!tmp) return false;
@@ -577,6 +638,7 @@ static bool cidr_match_v6(const struct cidr_rule *rule, const unsigned char *add
 
 static bool cidr_set_accepts(const struct cidr_set *set, int family, const unsigned char *addr)
 {
+    // 规则优先级：拒绝规则先命中先拒绝；如果存在允许规则，则必须命中其中之一。
     bool has_allow = false;
     bool allow_hit = false;
 
@@ -644,6 +706,7 @@ static bool parse_proc_ipv6(const char *token, unsigned char out[16], uint16_t *
 
 static bool parse_socket_token(int family, const char *token, unsigned char addr[16], uint16_t *port)
 {
+    // /proc/net 中的地址格式是十六进制、小端混排，需要单独解码。
     if (family == AF_INET) {
         unsigned char v4[4] = {0};
         if (!parse_proc_ipv4(token, v4, port)) return false;
@@ -670,7 +733,8 @@ static const struct proc_owner *owner_find(const struct proc_owner *owners, size
 }
 
 static bool inode_owner_add(struct proc_owner **owners, size_t *len, size_t *cap,
-                            unsigned long long inode, pid_t pid, const char *comm)
+                            unsigned long long inode, pid_t pid, uid_t uid,
+                            uint64_t cr_id, uint32_t cr_pid, const char *comm)
 {
     for (size_t i = 0; i < *len; ++i) {
         if ((*owners)[i].inode == inode) return true;
@@ -684,14 +748,92 @@ static bool inode_owner_add(struct proc_owner **owners, size_t *len, size_t *cap
     }
     (*owners)[*len].inode = inode;
     (*owners)[*len].pid = pid;
+    (*owners)[*len].uid = uid;
+    (*owners)[*len].cr_id = cr_id;
+    (*owners)[*len].cr_pid = cr_pid;
     strncpy((*owners)[*len].comm, comm, COMM_LEN - 1);
     (*owners)[*len].comm[COMM_LEN - 1] = '\0';
     (*len)++;
     return true;
 }
 
+static bool read_uid_file(pid_t pid, uid_t *uid)
+{
+    // 从 /proc/<pid>/status 读取真实 UID，用作用户身份回填。
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/status", pid);
+    FILE *fp = fopen(path, "r");
+    if (!fp) return false;
+
+    char line[256];
+    bool ok = false;
+    while (fgets(line, sizeof(line), fp)) {
+        if (strncmp(line, "Uid:", 4) != 0) continue;
+        unsigned int real_uid = 0;
+        if (sscanf(line + 4, "%u", &real_uid) == 1) {
+            *uid = (uid_t)real_uid;
+            ok = true;
+        }
+        break;
+    }
+
+    fclose(fp);
+    return ok;
+}
+
+static bool read_cr_pid_file(pid_t pid, uint32_t *cr_pid)
+{
+    // 从 NSpid 行读取最内层 PID，也就是容器视角下的 pid。
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/status", pid);
+    FILE *fp = fopen(path, "r");
+    if (!fp) return false;
+
+    char line[256];
+    bool ok = false;
+    while (fgets(line, sizeof(line), fp)) {
+        if (strncmp(line, "NSpid:", 6) != 0) continue;
+        char *cursor = line + 6;
+        char *end = NULL;
+        unsigned long long value = 0;
+        while (*cursor) {
+            while (*cursor == ' ' || *cursor == '\t') cursor++;
+            if (*cursor == '\0' || *cursor == '\n') break;
+            errno = 0;
+            value = strtoull(cursor, &end, 10);
+            if (errno || end == cursor) break;
+            cursor = end;
+            ok = true;
+        }
+        if (ok) {
+            *cr_pid = (uint32_t)value;
+        }
+        break;
+    }
+
+    fclose(fp);
+    return ok;
+}
+
+static bool read_cr_id_file(pid_t pid, uint64_t *cr_id)
+{
+    // 读取 /proc/<pid>/ns/pid 的 inode，作为容器 PID namespace 标识。
+    char path[64];
+    char link_target[128];
+    snprintf(path, sizeof(path), "/proc/%d/ns/pid", pid);
+    ssize_t n = readlink(path, link_target, sizeof(link_target) - 1);
+    if (n <= 0) return false;
+    link_target[n] = '\0';
+
+    unsigned long long value = 0;
+    if (sscanf(link_target, "pid:[%llu]", &value) != 1) return false;
+    *cr_id = (uint64_t)value;
+    return true;
+}
+
 static bool read_comm_file(pid_t pid, char comm[COMM_LEN])
 {
+    // 读取 /proc/<pid>/comm 作为进程名。
     char path[64];
     snprintf(path, sizeof(path), "/proc/%d/comm", pid);
     FILE *fp = fopen(path, "r");
@@ -707,6 +849,7 @@ static bool read_comm_file(pid_t pid, char comm[COMM_LEN])
 
 static bool build_inode_owners(struct proc_owner **owners_out, size_t *owners_len_out)
 {
+    // 扫描 /proc：先拿到进程基础信息，再遍历 fd 收集 socket inode，形成 inode -> owner 映射。
     DIR *proc = opendir("/proc");
     if (!proc) return false;
 
@@ -724,6 +867,14 @@ static bool build_inode_owners(struct proc_owner **owners_out, size_t *owners_le
         char comm[COMM_LEN] = {0};
         if (!read_comm_file(pid, comm)) continue;
 
+        uid_t uid = 0;
+        if (!read_uid_file(pid, &uid)) continue;
+
+        uint32_t cr_pid = 0;
+        uint64_t cr_id = 0;
+        if (!read_cr_pid_file(pid, &cr_pid)) continue;
+        if (!read_cr_id_file(pid, &cr_id)) continue;
+
         char fd_dir[64];
         snprintf(fd_dir, sizeof(fd_dir), "/proc/%d/fd", pid);
         DIR *fds = opendir(fd_dir);
@@ -740,7 +891,7 @@ static bool build_inode_owners(struct proc_owner **owners_out, size_t *owners_le
             link_target[n] = '\0';
             unsigned long long inode = 0;
             if (sscanf(link_target, "socket:[%llu]", &inode) == 1 && inode > 0) {
-                if (!inode_owner_add(&owners, &owners_len, &owners_cap, inode, pid, comm)) {
+                if (!inode_owner_add(&owners, &owners_len, &owners_cap, inode, pid, uid, cr_id, cr_pid, comm)) {
                     closedir(fds);
                     closedir(proc);
                     free(owners);
@@ -760,6 +911,7 @@ static bool build_inode_owners(struct proc_owner **owners_out, size_t *owners_le
 
 static bool socket_cache_push(struct socket_cache *cache, const struct socket_meta *meta)
 {
+    // 把解析得到的 socket 元数据塞进 cache，后续用于回退匹配。
     if (cache->max_items > 0 && cache->len >= cache->max_items) {
         return true;
     }
@@ -778,6 +930,7 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
                                  const struct proc_owner *owners, size_t owners_len,
                                  struct socket_cache *cache)
 {
+    // 从 /proc/net/tcp* 和 /proc/net/udp* 解析 socket 视图，补齐 address/port/inode 对应关系。
     FILE *fp = fopen(path, "r");
     if (!fp) return false;
 
@@ -823,6 +976,9 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
         const struct proc_owner *owner = owner_find(owners, owners_len, inode);
         if (owner) {
             meta.pid = owner->pid;
+            meta.uid = owner->uid;
+            meta.cr_id = owner->cr_id;
+            meta.cr_pid = owner->cr_pid;
             strncpy(meta.comm, owner->comm, COMM_LEN - 1);
             meta.comm[COMM_LEN - 1] = '\0';
         }
@@ -844,6 +1000,7 @@ static bool parse_proc_net_table(const char *path, int family, int proto,
 
 static bool rebuild_socket_cache(struct socket_cache *cache)
 {
+    // 重新构建 socket cache：先整理 inode owner，再遍历各类 /proc/net 表项。
     struct proc_owner *owners = NULL;
     size_t owners_len = 0;
     if (!build_inode_owners(&owners, &owners_len)) {
@@ -871,6 +1028,7 @@ static bool rebuild_socket_cache(struct socket_cache *cache)
 static const struct socket_meta *socket_cache_lookup(const struct socket_cache *cache,
                                                      const struct event_t *e)
 {
+    // 不看方向，按双向五元组在 cache 里查找 socket。
     for (size_t i = 0; i < cache->len; ++i) {
         const struct socket_meta *m = &cache->items[i];
         if (m->family != e->family || m->proto != e->l4_proto) continue;
@@ -889,6 +1047,7 @@ static const struct socket_meta *socket_cache_lookup(const struct socket_cache *
 static const struct socket_meta *socket_cache_lookup_directional(const struct socket_cache *cache,
                                                                  const struct event_t *e)
 {
+    // 根据 direction 判断是按正向匹配还是反向匹配。
     for (size_t i = 0; i < cache->len; ++i) {
         const struct socket_meta *m = &cache->items[i];
         if (m->family != e->family || m->proto != e->l4_proto) continue;
@@ -911,6 +1070,7 @@ static const struct socket_meta *socket_cache_lookup_directional(const struct so
 static const struct socket_meta *socket_cache_lookup_listener(const struct socket_cache *cache,
                                                               const struct event_t *e)
 {
+    // 查监听 socket：主要用于 accept 场景，把连接归到监听进程。
     if (e->l4_proto != IPPROTO_TCP) return NULL;
 
     uint16_t listen_port = e->direction == 0 ? e->dport : e->sport;
@@ -929,6 +1089,7 @@ static const struct socket_meta *socket_cache_lookup_listener(const struct socke
 static void flow_owner_key_from_event(const struct event_t *e, bool reverse,
                                       struct flow_owner_key *key)
 {
+    // 把 packet 事件转换成 BPF map lookup key，reverse 用来在请求/响应方向之间切换。
     memset(key, 0, sizeof(*key));
     key->family = e->family;
     key->l4_proto = e->l4_proto;
@@ -951,6 +1112,7 @@ static bool flow_owner_map_lookup(const struct monitor_state *state,
                                   const struct event_t *e,
                                   struct socket_meta *meta)
 {
+    // 优先查 BPF 侧 map，失败后再走 userspace 缓存回填。
     if (state->flow_owner_map_fd < 0) return false;
 
     struct flow_owner_key key;
@@ -969,6 +1131,9 @@ static bool flow_owner_map_lookup(const struct monitor_state *state,
     meta->sport = e->sport;
     meta->dport = e->dport;
     meta->pid = (pid_t)(value.pid_tgid >> 32);
+    meta->uid = (uid_t)value.uid;
+    meta->cr_id = value.cr_id;
+    meta->cr_pid = value.cr_pid;
     strncpy(meta->comm, value.comm, COMM_LEN - 1);
     meta->comm[COMM_LEN - 1] = '\0';
     return true;
@@ -978,6 +1143,7 @@ static const struct socket_meta *resolve_packet_meta(const struct monitor_state 
                                                      const struct event_t *e,
                                                      struct socket_meta *scratch)
 {
+    // 元数据解析优先级：BPF map -> 监听 socket -> /proc socket cache。
     if (flow_owner_map_lookup(state, e, scratch)) return scratch;
 
     if (e->l4_proto == IPPROTO_TCP) {
@@ -1020,6 +1186,7 @@ static void flow_reverse_key(const struct event_t *e, struct flow_key *key)
 
 static void json_escape_file(FILE *out, const unsigned char *data, size_t len)
 {
+    // JSON 字符串转义，避免控制字符破坏输出格式。
     for (size_t i = 0; i < len; ++i) {
         unsigned char c = data[i];
         switch (c) {
@@ -1042,6 +1209,7 @@ static void json_escape_file(FILE *out, const unsigned char *data, size_t len)
 
 static bool is_http_request_start(const unsigned char *data, size_t len)
 {
+    // 只做报文起始行识别，不完整时宁可继续缓存，也不要误判。
     if (len < 4) return false;
     return (!memcmp(data, "GET ", 4) || !memcmp(data, "POST", 4) || !memcmp(data, "HEAD", 4) ||
             !memcmp(data, "PUT ", 4) || !memcmp(data, "DELE", 4) || !memcmp(data, "OPTI", 4) ||
@@ -1050,6 +1218,7 @@ static bool is_http_request_start(const unsigned char *data, size_t len)
 
 static bool is_http_response_start(const unsigned char *data, size_t len)
 {
+    // HTTP 响应统一以 HTTP/ 开头。
     return len >= 5 && !memcmp(data, "HTTP/", 5);
 }
 
@@ -1065,6 +1234,7 @@ static const unsigned char *find_bytes(const unsigned char *hay, size_t hay_len,
 
 static size_t find_header_end(const unsigned char *data, size_t len)
 {
+    // HTTP header 和 body 的分隔符是空行，即 \r\n\r\n。
     const unsigned char *p = find_bytes(data, len, "\r\n\r\n", 4);
     if (!p) return 0;
     return (size_t)(p - data) + 4;
@@ -1073,6 +1243,7 @@ static size_t find_header_end(const unsigned char *data, size_t len)
 static void extract_header_value(const unsigned char *headers, size_t len, const char *name,
                                 char *out, size_t out_len)
 {
+    // 从原始 header 块里提取指定头字段，例如 Host 或 Content-Length。
     out[0] = '\0';
     size_t name_len = strlen(name);
     for (size_t off = 0; off + name_len < len; ++off) {
@@ -1091,6 +1262,7 @@ static void extract_header_value(const unsigned char *headers, size_t len, const
 
 static int parse_content_length_header(const unsigned char *headers, size_t len)
 {
+    // 解析 Content-Length，失败则返回 -1。
     const char *needle = "Content-Length:";
     const unsigned char *p = find_bytes(headers, len, needle, strlen(needle));
     if (!p) return -1;
@@ -1109,6 +1281,7 @@ static int parse_content_length_header(const unsigned char *headers, size_t len)
 
 static bool header_has_chunked_encoding(const unsigned char *headers, size_t len)
 {
+    // 判断 Transfer-Encoding 是否包含 chunked。
     const char *needle = "Transfer-Encoding:";
     const unsigned char *p = find_bytes(headers, len, needle, strlen(needle));
     if (!p) return false;
@@ -1125,6 +1298,7 @@ static bool parse_chunked_body(const unsigned char *data, size_t len, long long 
                                unsigned char **body_copy_out, size_t *body_len_out,
                                size_t *consumed_out)
 {
+    // chunked body 解析器：按块读取、按需保留、遇到不完整数据就返回 false。
     *body_copy_out = NULL;
     *body_len_out = 0;
     *consumed_out = 0;
@@ -1236,6 +1410,7 @@ static bool parse_tls_clienthello(const unsigned char *data, uint32_t len,
                                   char *alpn, size_t alpn_len,
                                   uint16_t *tls_version_out)
 {
+    // 解析 TLS ClientHello：提取 SNI、ALPN 和协商版本。
     sni[0] = '\0';
     alpn[0] = '\0';
 
@@ -1325,6 +1500,7 @@ static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
                                   char *alpn, size_t alpn_len,
                                   uint16_t *tls_version_out)
 {
+    // 解析 TLS ServerHello：提取 ALPN 和协商版本。
     alpn[0] = '\0';
     if (len < 5 || data[0] != 0x16) return false;
 
@@ -1384,6 +1560,7 @@ static bool parse_tls_serverhello(const unsigned char *data, uint32_t len,
 
 static const char *tls_version_name(uint16_t v)
 {
+    // 把 TLS 版本号转换成可读字符串。
     switch (v) {
     case 0x0301: return "TLS 1.0";
     case 0x0302: return "TLS 1.1";
@@ -1395,6 +1572,7 @@ static const char *tls_version_name(uint16_t v)
 
 static const char *http_version_from_alpn(const char *alpn)
 {
+    // 根据 ALPN 推断 HTTP 版本描述。
     if (!alpn || !*alpn) return "";
     if (!strcmp(alpn, "h2")) return "HTTP/2";
     if (!strcmp(alpn, "h3")) return "HTTP/3";
@@ -1406,6 +1584,7 @@ static const char *http_version_from_alpn(const char *alpn)
 static int parse_quic_varint(const unsigned char *p, uint32_t len,
                              uint64_t *value, uint32_t *consumed)
 {
+    // QUIC 变长整数解码，用于跳过包头字段。
     if (len < 1) return 0;
     uint8_t lead = p[0] >> 6;
     uint32_t n = 1U << lead;
@@ -1420,6 +1599,7 @@ static int parse_quic_varint(const unsigned char *p, uint32_t len,
 static int find_quic_tls_payload(const unsigned char *data, uint32_t len,
                                  const unsigned char **out, uint32_t *out_len)
 {
+    // 从 QUIC Initial 包里尝试定位 TLS payload，不做完整解密，只做结构跳转。
     if (len < 6) return 0;
     if ((data[0] & 0x80) == 0) return 0;
 
@@ -1471,6 +1651,7 @@ struct http_message {
 
 static void http_message_free(struct http_message *msg)
 {
+    // 释放 chunked body 解析时临时分配的 body_copy。
     free(msg->body_copy);
     msg->body_copy = NULL;
 }
@@ -1478,6 +1659,7 @@ static void http_message_free(struct http_message *msg)
 static bool parse_http_message(const unsigned char *data, size_t len, long long body_limit,
                                struct http_message *msg)
 {
+    // HTTP 报文解析主入口：识别请求/响应、解析头部、再根据 body 规则决定是否截取 body。
     memset(msg, 0, sizeof(*msg));
 
     if (len < 4) return false;
@@ -1545,6 +1727,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
     bool chunked = header_has_chunked_encoding((const unsigned char *)headers, headers_len);
     extract_header_value((const unsigned char *)headers, headers_len, "Host:", msg->host, sizeof(msg->host));
 
+    // 某些响应和请求天然没有 body，提前识别可以减少误判和等待。
     bool no_body_response = msg->response &&
         (strncmp(msg->status, "1", 1) == 0 || strncmp(msg->status, "204", 3) == 0 || strncmp(msg->status, "304", 3) == 0);
     bool no_body_request = !msg->response &&
@@ -1557,6 +1740,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
 
     if (!no_body_request && !no_body_response) {
         if (chunked) {
+            // chunked body 需要先拼接块；如果 body_limit < 0，则只保留协议骨架，不保留 body。
             if (body_limit < 0) {
                 msg->body_len = 0;
                 msg->consumed = header_end;
@@ -1576,6 +1760,7 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
             return false;
         }
 
+        // 非 chunked 时，根据 Content-Length / 已见字节数 / body_limit 决定保留多少。
         size_t body_to_keep = 0;
         if (body_limit < 0) {
             body_to_keep = 0;
@@ -1619,16 +1804,19 @@ static bool parse_http_message(const unsigned char *data, size_t len, long long 
 
 static const char *transport_name(uint8_t proto)
 {
+    // 协议号转字符串。
     return proto == IPPROTO_UDP ? "udp" : "tcp";
 }
 
 static const char *family_name(int family)
 {
+    // 地址族转字符串。
     return family == AF_INET6 ? "ipv6" : "ipv4";
 }
 
 static void ip_to_string(int family, const unsigned char *addr, char *out, size_t out_len)
 {
+    // 把二进制地址转成可读字符串。
     if (!inet_ntop(family, addr, out, out_len)) {
         snprintf(out, out_len, "<invalid>");
     }
@@ -1639,6 +1827,7 @@ static bool emit_json_http(const struct event_t *e, const struct socket_meta *me
                            const unsigned char *headers, size_t headers_len,
                            const unsigned char *body, size_t body_len)
 {
+    // HTTP 事件输出：把事件、元数据、headers/body 组装成一行 JSON。
     char *json = NULL;
     size_t json_len = 0;
     FILE *out = open_memstream(&json, &json_len);
@@ -1671,9 +1860,12 @@ static bool emit_json_http(const struct event_t *e, const struct socket_meta *me
 
     if (meta) {
         fprintf(out, "\"pid\":%d,", meta->pid);
+        fprintf(out, "\"uid\":%u,", (unsigned int)meta->uid);
+        fprintf(out, "\"cr_id\":%llu,", (unsigned long long)meta->cr_id);
+        fprintf(out, "\"cr_pid\":%u,", meta->cr_pid);
         fprintf(out, "\"comm\":\""); json_escape_file(out, (const unsigned char *)meta->comm, strlen(meta->comm)); fprintf(out, "\",");
     } else {
-        fprintf(out, "\"pid\":0,\"comm\":\"\",");
+        fprintf(out, "\"pid\":0,\"uid\":0,\"cr_id\":0,\"cr_pid\":0,\"comm\":\"\",");
     }
 
     fprintf(out, "\"domain\":\"");
@@ -1733,6 +1925,7 @@ static bool emit_json_https(const struct event_t *e, const struct socket_meta *m
                             const unsigned char *payload, size_t payload_len,
                             const char *transport)
 {
+    // HTTPS 事件输出：保留握手元数据，不尝试解密 payload。
     char *json = NULL;
     size_t json_len = 0;
     FILE *out = open_memstream(&json, &json_len);
@@ -1765,9 +1958,12 @@ static bool emit_json_https(const struct event_t *e, const struct socket_meta *m
 
     if (meta) {
         fprintf(out, "\"pid\":%d,", meta->pid);
+        fprintf(out, "\"uid\":%u,", (unsigned int)meta->uid);
+        fprintf(out, "\"cr_id\":%llu,", (unsigned long long)meta->cr_id);
+        fprintf(out, "\"cr_pid\":%u,", meta->cr_pid);
         fprintf(out, "\"comm\":\""); json_escape_file(out, (const unsigned char *)meta->comm, strlen(meta->comm)); fprintf(out, "\",");
     } else {
-        fprintf(out, "\"pid\":0,\"comm\":\"\",");
+        fprintf(out, "\"pid\":0,\"uid\":0,\"cr_id\":0,\"cr_pid\":0,\"comm\":\"\",");
     }
 
     fprintf(out, "\"domain\":\"");
@@ -1811,12 +2007,14 @@ static bool emit_json_https(const struct event_t *e, const struct socket_meta *m
 
 static bool looks_like_tls(const unsigned char *data, size_t len)
 {
+    // 通过 record layer 的 type/version 做轻量 TLS 识别。
     return len >= 5 && data[0] == 0x16 && data[1] == 0x03;
 }
 
 static bool parse_packet(const unsigned char *packet, size_t len, uint8_t direction,
                          struct event_t *e)
 {
+    // 原始二层包解析入口：逐层剥离以太网、VLAN、IP、TCP/UDP 头，只保留 payload。
     memset(e, 0, sizeof(*e));
     e->direction = direction;
 
@@ -1930,6 +2128,7 @@ static bool packet_matches_filters(const struct event_t *e, const struct socket_
 
 static void handle_packet(struct callback_ctx *cb, const unsigned char *packet, size_t len, uint8_t direction)
 {
+    // 单包处理入口：解析 packet -> 回填元数据 -> 过滤 -> 分发到 TCP/UDP 处理器。
     struct event_t e;
     if (!parse_packet(packet, len, direction, &e)) return;
 
@@ -1964,6 +2163,7 @@ static void handle_packet(struct callback_ctx *cb, const unsigned char *packet, 
 
 static void drain_packet_socket(int sock, struct callback_ctx *cb)
 {
+    // 非阻塞循环读 packet socket，直到暂时没有数据可读。
     unsigned char packet[65536];
     struct sockaddr_ll from;
     socklen_t from_len = sizeof(from);
@@ -1987,6 +2187,7 @@ static void drain_packet_socket(int sock, struct callback_ctx *cb)
 static void process_tcp_flow(struct monitor_state *state, struct monitor_config *cfg,
                              const struct event_t *e, const struct socket_meta *meta)
 {
+    // TCP 主处理路径：按 flow 缓冲数据，再尝试 TLS/HTTP 解析，成功后输出 JSON。
     struct flow_key key;
     memset(&key, 0, sizeof(key));
     key.family = e->family;
@@ -2001,8 +2202,12 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
     if (!flow) return;
     flow->last_seen_ms = now_ms();
 
+    // 抓到可用元数据时，先把它写进 flow，后续缺失时可以直接复用。
     if (meta && meta->pid > 0) {
         flow->pid = meta->pid;
+        flow->uid = meta->uid;
+        flow->cr_id = meta->cr_id;
+        flow->cr_pid = meta->cr_pid;
         strncpy(flow->comm, meta->comm, sizeof(flow->comm) - 1);
         flow->comm[sizeof(flow->comm) - 1] = '\0';
     }
@@ -2013,15 +2218,21 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 
     struct socket_meta peer_meta;
     memset(&peer_meta, 0, sizeof(peer_meta));
+    // 当前方向没有拿到归属时，尝试借用对端已经解析到的进程信息。
     if (meta->pid <= 0 && peer && peer->pid > 0) {
         peer_meta.pid = peer->pid;
+        peer_meta.uid = peer->uid;
+        peer_meta.cr_id = peer->cr_id;
+        peer_meta.cr_pid = peer->cr_pid;
         strncpy(peer_meta.comm, peer->comm, sizeof(peer_meta.comm) - 1);
         peer_meta.comm[sizeof(peer_meta.comm) - 1] = '\0';
         meta = &peer_meta;
     }
 
+    // 先把当前包的 payload 拼到流缓冲里，再进行协议识别。
     if (!buffer_append(&flow->tcp_buffer, e->payload, e->cap_len)) return;
 
+    // 先判定是否为 TLS，避免把 HTTPS 流量误按 HTTP 解析。
     if (!flow->tls_emitted && looks_like_tls(flow->tcp_buffer.data, flow->tcp_buffer.len)) {
         char sni[256] = {0};
         char alpn[128] = {0};
@@ -2056,6 +2267,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
         }
     }
 
+    // HTTP 可能跨多个 TCP 包到达，所以这里循环尝试解析；不完整就保留缓冲继续等。
     while (flow->tcp_buffer.len > 0) {
         struct http_message msg;
         if (!parse_http_message(flow->tcp_buffer.data, flow->tcp_buffer.len, cfg->body_limit, &msg)) {
@@ -2064,6 +2276,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 
         if (msg.consumed == 0 || msg.consumed > flow->tcp_buffer.len) break;
 
+        // 当前报文没有 Host 时，尝试继承对端已经识别出的域名。
         if (!msg.host[0] && peer && peer->has_domain) {
             strncpy(msg.host, peer->domain, sizeof(msg.host) - 1);
             msg.host[sizeof(msg.host) - 1] = '\0';
@@ -2083,6 +2296,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
             body = flow->tcp_buffer.data + msg.header_end;
         }
 
+        // 输出 HTTP 事件，然后消费掉已经成功解析的字节。
         emit_json_http(e, meta, &msg, flow->tcp_buffer.data, msg.header_end, body, body_len);
         http_message_free(&msg);
         buffer_consume(&flow->tcp_buffer, msg.consumed);
@@ -2092,6 +2306,7 @@ static void process_tcp_flow(struct monitor_state *state, struct monitor_config 
 
 static void process_udp_packet(const struct event_t *e, const struct socket_meta *meta)
 {
+    // UDP 侧主要看 QUIC Initial 中的 TLS ClientHello，不做完整 QUIC 解密。
     if (e->cap_len < 6) return;
     const unsigned char *payload = e->payload;
     uint32_t payload_len = e->cap_len;
@@ -2111,6 +2326,7 @@ static void process_udp_packet(const struct event_t *e, const struct socket_meta
 static bool packet_matches_filters(const struct event_t *e, const struct socket_meta *meta,
                                    const struct monitor_config *cfg)
 {
+    // 过滤顺序尽量从便宜到昂贵：方向、端口、网段、进程/容器属性。
     if (cfg->direction_filter >= 0 && e->direction != (uint8_t)cfg->direction_filter) return false;
 
     if (cfg->have_sport_filter && e->direction == 0 && e->sport != cfg->sport_filter) return false;
@@ -2119,9 +2335,11 @@ static bool packet_matches_filters(const struct event_t *e, const struct socket_
     if (!cidr_set_accepts(&cfg->src_rules, e->family, e->saddr)) return false;
     if (!cidr_set_accepts(&cfg->dst_rules, e->family, e->daddr)) return false;
 
-    if (cfg->have_pid_filter || cfg->have_comm_filter) {
+    if (cfg->have_pid_filter || cfg->have_cpid_filter || cfg->have_crid_filter || cfg->have_comm_filter) {
         if (!meta) return false;
         if (cfg->have_pid_filter && meta->pid != cfg->pid_filter) return false;
+        if (cfg->have_cpid_filter && meta->cr_pid != cfg->cpid_filter) return false;
+        if (cfg->have_crid_filter && meta->cr_id != cfg->crid_filter) return false;
         if (cfg->have_comm_filter && strncmp(meta->comm, cfg->comm_filter, COMM_LEN) != 0) return false;
     }
 
@@ -2130,11 +2348,14 @@ static bool packet_matches_filters(const struct event_t *e, const struct socket_
 
 static void usage(const char *prog)
 {
+    // 打印命令行帮助。
     fprintf(stderr,
-            "Usage: %s [-interface iface] [-direction ingress|egress] [-pid pid] [-comm comm] [-src spec] [-dst spec] [-sport port] [-dport port] [-max-body-size n]\n"
+            "Usage: %s [-interface iface] [-direction ingress|egress] [-pid pid] [-cpid pid] [-crid id] [-comm comm] [-src spec] [-dst spec] [-sport port] [-dport port] [-max-body-size n]\n"
             "  -interface      monitor interface\n"
             "  -direction      ingress | egress, default both\n"
             "  -pid            process pid filter\n"
+            "  -cpid           container pid filter\n"
+            "  -crid           container namespace id filter\n"
             "  -comm           process name filter (comm)\n"
             "  -src    source IP/CIDR list, !prefix means deny, deny wins\n"
             "  -dst    destination IP/CIDR list, !prefix means deny, deny wins\n"
@@ -2165,6 +2386,7 @@ static bool parse_port(const char *s, uint16_t *out)
 
 static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
 {
+    // 解析命令行参数并填充 monitor_config。
     memset(cfg, 0, sizeof(*cfg));
     cfg->direction_filter = -1;
     cfg->body_limit = -1;
@@ -2192,6 +2414,22 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
             }
             cfg->have_pid_filter = true;
             cfg->pid_filter = (pid_t)pid;
+        } else if (!strcmp(arg, "-cpid") && i + 1 < argc) {
+            long long cpid = 0;
+            if (!parse_long_long(argv[++i], &cpid) || cpid < 0) {
+                fprintf(stderr, "Invalid cpid\n");
+                return false;
+            }
+            cfg->have_cpid_filter = true;
+            cfg->cpid_filter = (uint32_t)cpid;
+        } else if (!strcmp(arg, "-crid") && i + 1 < argc) {
+            long long crid = 0;
+            if (!parse_long_long(argv[++i], &crid) || crid < 0) {
+                fprintf(stderr, "Invalid crid\n");
+                return false;
+            }
+            cfg->have_crid_filter = true;
+            cfg->crid_filter = (uint64_t)crid;
         } else if (!strcmp(arg, "-comm") && i + 1 < argc) {
             strncpy(cfg->comm_filter, argv[++i], COMM_LEN - 1);
             cfg->comm_filter[COMM_LEN - 1] = '\0';
@@ -2233,21 +2471,23 @@ static bool parse_args(int argc, char **argv, struct monitor_config *cfg)
     return true;
 }
 
-static bool open_and_attach_bpf(const char *obj_file, int sock_fd,
+static bool open_and_attach_bpf(int sock_fd,
                                 struct bpf_object **obj_out,
                                 struct bpf_link **tcp_connect_link_out,
                                 struct bpf_link **tcp_accept_link_out,
                                 struct bpf_link **tcp_sendmsg_link_out,
                                 struct bpf_link **udp_sendmsg_link_out)
 {
-    struct bpf_object *obj = bpf_object__open_file(obj_file, NULL);
+    // 直接从内存中的嵌入字节码打开 BPF 对象，避免依赖磁盘上的 ebpf_capture.o 文件。
+    size_t obj_size = (size_t)(_binary_ebpf_capture_o_end - _binary_ebpf_capture_o_start);
+    struct bpf_object *obj = bpf_object__open_mem(_binary_ebpf_capture_o_start, obj_size, NULL);
     if (libbpf_get_error(obj)) {
-        fprintf(stderr, "Failed to open %s\n", obj_file);
+        fprintf(stderr, "Failed to open embedded ebpf_capture.o\n");
         return false;
     }
 
     if (bpf_object__load(obj)) {
-        fprintf(stderr, "Failed to load %s\n", obj_file);
+        fprintf(stderr, "Failed to load embedded ebpf_capture.o\n");
         bpf_object__close(obj);
         return false;
     }
@@ -2326,7 +2566,7 @@ static bool open_and_attach_bpf(const char *obj_file, int sock_fd,
 
 int main(int argc, char **argv)
 {
-    const char *obj_file = "ebpf_capture.o";
+    // 程序主入口：解析参数、初始化 socket、装载 BPF、进入事件循环。
     struct monitor_config cfg;
     if (!parse_args(argc, argv, &cfg)) return 1;
 
@@ -2375,7 +2615,7 @@ int main(int argc, char **argv)
     struct bpf_link *tcp_accept_link = NULL;
     struct bpf_link *tcp_sendmsg_link = NULL;
     struct bpf_link *udp_sendmsg_link = NULL;
-    if (!open_and_attach_bpf(obj_file, sock, &obj,
+    if (!open_and_attach_bpf(sock, &obj,
                              &tcp_connect_link,
                              &tcp_accept_link,
                              &tcp_sendmsg_link,
